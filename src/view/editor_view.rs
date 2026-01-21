@@ -6,6 +6,7 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::domain::{DocumentId, TextOffset, TextPosition};
+use crate::events::DomainEvent;
 use crate::view::{CaretSet, SelectionSet, Viewport};
 
 /// Unique identifier for an editor view.
@@ -156,6 +157,44 @@ impl EditorView {
     /// Returns cursor position as (column, line) for backwards compatibility.
     pub fn cursor_position(&self, position: TextPosition) -> (usize, usize) {
         (position.column, position.line)
+    }
+
+    // =========================================================================
+    // Event creation helpers
+    // =========================================================================
+
+    /// Creates a SelectionChanged event for this view.
+    pub fn event_selection_changed(&self) -> DomainEvent {
+        DomainEvent::SelectionChanged {
+            view_id: self.id,
+            document_id: self.document_id,
+            caret_offset: self.caret_offset(),
+            has_selection: self.has_selection(),
+        }
+    }
+
+    /// Creates a ViewportChanged event for this view.
+    pub fn event_viewport_changed(&self) -> DomainEvent {
+        DomainEvent::ViewportChanged {
+            view_id: self.id,
+            scroll_x: self.viewport.scroll_x,
+            scroll_y: self.viewport.scroll_y,
+            width: self.viewport.width,
+            height: self.viewport.height,
+        }
+    }
+
+    /// Creates a ViewCreated event for this view.
+    pub fn event_created(&self) -> DomainEvent {
+        DomainEvent::ViewCreated {
+            view_id: self.id,
+            document_id: self.document_id,
+        }
+    }
+
+    /// Creates a ViewClosed event for this view.
+    pub fn event_closed(&self) -> DomainEvent {
+        DomainEvent::ViewClosed { view_id: self.id }
     }
 }
 

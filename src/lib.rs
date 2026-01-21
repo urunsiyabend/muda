@@ -4,5 +4,7 @@
 
 pub mod commands;
 pub mod domain;
+pub mod events;
 pub mod syntax;
 pub mod view;
+pub mod view_model;

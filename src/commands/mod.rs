@@ -5,12 +5,15 @@
 //! - `EditOperation`: Low-level reversible text operations
 //! - `UndoTransaction`: Groups of operations for atomic undo/redo
 //! - `CommandHistory`: Transaction-based undo/redo stack
+//! - `CommandDispatcher`: Routes commands to handlers and orchestrates execution
 
+pub mod dispatcher;
 pub mod edit_operation;
 pub mod editor_command;
 pub mod history;
 pub mod transaction;
 
+pub use dispatcher::{CommandContext, CommandDispatcher, DispatchResult};
 pub use edit_operation::EditOperation;
 pub use editor_command::EditorCommand;
 pub use history::CommandHistory;

@@ -65,6 +65,11 @@ pub struct HighlightSpan {
 }
 
 impl SyntaxHighlighter {
+    /// Returns the language this highlighter is configured for.
+    pub fn language(&self) -> SyntaxLanguage {
+        self.language
+    }
+
     pub fn new(language: SyntaxLanguage) -> Self {
         let mut parser = Parser::new();
         let mut query = None;

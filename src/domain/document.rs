@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::domain::text_buffer::{TextBuffer, TextOffset, TextPosition, TextRange, DocumentRevision};
+use crate::events::DomainEvent;
 use crate::syntax::{SyntaxHighlighter, SyntaxLanguage};
 
 /// Unique identifier for a document within a workspace.
@@ -265,6 +266,57 @@ impl Document {
     /// Returns the entire content as a string.
     pub fn content(&self) -> String {
         self.buffer.to_string()
+    }
+
+    // =========================================================================
+    // Event creation helpers
+    // =========================================================================
+
+    /// Creates a DocumentOpened event for this document.
+    pub fn event_opened(&self) -> DomainEvent {
+        DomainEvent::DocumentOpened {
+            document_id: self.id,
+        }
+    }
+
+    /// Creates a DocumentChanged event for this document.
+    ///
+    /// # Arguments
+    /// * `affected_range` - Optional range that was affected by the change.
+    pub fn event_changed(&self, affected_range: Option<TextRange>) -> DomainEvent {
+        DomainEvent::DocumentChanged {
+            document_id: self.id,
+            revision: self.revision(),
+            affected_range,
+        }
+    }
+
+    /// Creates a DocumentSaved event for this document.
+    pub fn event_saved(&self) -> DomainEvent {
+        DomainEvent::DocumentSaved {
+            document_id: self.id,
+        }
+    }
+
+    /// Creates a DocumentClosed event for this document.
+    pub fn event_closed(&self) -> DomainEvent {
+        DomainEvent::DocumentClosed {
+            document_id: self.id,
+        }
+    }
+
+    /// Creates a DocumentMetadataChanged event for this document.
+    pub fn event_metadata_changed(&self) -> DomainEvent {
+        DomainEvent::DocumentMetadataChanged {
+            document_id: self.id,
+        }
+    }
+
+    /// Creates a SyntaxUpdated event for this document.
+    pub fn event_syntax_updated(&self) -> DomainEvent {
+        DomainEvent::SyntaxUpdated {
+            document_id: self.id,
+        }
     }
 }
 

@@ -16,20 +16,21 @@ fn main() -> io::Result<()> {
     let log_file = File::create("editor.log").unwrap();
     WriteLogger::init(LevelFilter::Debug, Config::default(), log_file).unwrap();
 
-    debug!("Editor başlatılıyor...");
+    debug!("Editor starting...");
 
     let args: Vec<String> = env::args().collect();
     let mut app = if args.len() > 1 {
         match App::open_file(&args[1]) {
             Ok(app) => {
-                debug!("Dosya açıldı: {}", &args[1]);
+                debug!("File opened: {}", &args[1]);
                 app
             }
             Err(e) => {
-                debug!("Dosya açılamadı: {}, yeni dosya oluşturuluyor", e);
+                debug!("Could not open file: {}, creating new document", e);
                 let mut app = App::new();
-                app.document
-                    .set_file_path(std::path::PathBuf::from(&args[1]));
+                if let Some(doc) = app.document_mut() {
+                    doc.set_file_path(std::path::PathBuf::from(&args[1]));
+                }
                 app
             }
         }
@@ -53,7 +54,8 @@ fn main() -> io::Result<()> {
     );
 
     while !app.should_quit {
-        terminal.draw(|f| ui(f, &app))?;
+        let render_model = app.build_render_model();
+        terminal.draw(|f| ui(f, &render_model))?;
 
         match event::read()? {
             Event::Key(key) if key.kind == KeyEventKind::Press => {
@@ -71,7 +73,7 @@ fn main() -> io::Result<()> {
                         app.cut_selection();
                     }
                     KeyCode::Char('v') if is_ctrl => {
-                        if app.view.has_selection() {
+                        if app.has_selection() {
                             app.delete_selection();
                         }
                         app.paste();
@@ -99,7 +101,7 @@ fn main() -> io::Result<()> {
 
                     KeyCode::Left | KeyCode::Right | KeyCode::Up | KeyCode::Down => {
                         // Handle selection with shift
-                        if is_shift && !app.view.has_selection() {
+                        if is_shift && !app.has_selection() {
                             app.begin_selection();
                         } else if !is_shift {
                             app.clear_selection();
@@ -136,7 +138,7 @@ fn main() -> io::Result<()> {
                         }
                     }
                     KeyCode::Home | KeyCode::End | KeyCode::PageUp | KeyCode::PageDown => {
-                        if is_shift && !app.view.has_selection() {
+                        if is_shift && !app.has_selection() {
                             app.begin_selection();
                         } else if !is_shift {
                             app.clear_selection();
@@ -176,7 +178,7 @@ fn main() -> io::Result<()> {
                         }
                     }
                     KeyCode::Tab => {
-                        if app.view.has_selection() {
+                        if app.has_selection() {
                             app.delete_selection();
                         }
                         for _ in 0..4 {
@@ -184,26 +186,26 @@ fn main() -> io::Result<()> {
                         }
                     }
                     KeyCode::Char(c) => {
-                        if app.view.has_selection() {
+                        if app.has_selection() {
                             app.delete_selection();
                         }
                         app.insert_char(c);
                     }
                     KeyCode::Enter => {
-                        if app.view.has_selection() {
+                        if app.has_selection() {
                             app.delete_selection();
                         }
                         app.insert_newline();
                     }
                     KeyCode::Backspace => {
-                        if app.view.has_selection() {
+                        if app.has_selection() {
                             app.delete_selection();
                         } else {
                             app.backspace();
                         }
                     }
                     KeyCode::Delete => {
-                        if app.view.has_selection() {
+                        if app.has_selection() {
                             app.delete_selection();
                         } else {
                             app.delete_at_cursor();
@@ -232,7 +234,7 @@ fn main() -> io::Result<()> {
             }
             Event::Paste(text) => {
                 debug!("Paste event: {:?}", text);
-                if app.view.has_selection() {
+                if app.has_selection() {
                     app.delete_selection();
                 }
                 app.insert_string_at_cursor(&text);
@@ -260,7 +262,7 @@ fn main() -> io::Result<()> {
         }
     }
 
-    debug!("Editor kapatılıyor...");
+    debug!("Editor shutting down...");
     crossterm::terminal::disable_raw_mode()?;
     crossterm::execute!(
         terminal.backend_mut(),
