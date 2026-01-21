@@ -1,308 +1,366 @@
-use ropey::Rope;
+//! Application state and editor logic.
+//!
+//! This represents the current editor session, combining document state
+//! with view state via EditorView.
+
 use arboard::Clipboard;
 use log::debug;
 use std::path::PathBuf;
-use std::fs;
-use crate::command::{Command, CommandHistory};
-use crate::syntax::{SyntaxHighlighter, SyntaxLanguage};
 
+use mudatexteditor::commands::{CommandHistory, EditOperation};
+use mudatexteditor::domain::{Document, TextPosition, TextRange};
+use mudatexteditor::syntax::SyntaxHighlighter;
+use mudatexteditor::view::EditorView;
+
+/// The main application state.
+///
+/// Combines a Document with an EditorView for editing.
 pub struct App {
-    pub content: Rope,
-    pub cursor_x: usize,
-    pub cursor_y: usize,
-    pub scroll_x: usize,
-    pub scroll_y: usize,
-    pub should_quit: bool,
-    pub selection_anchor: Option<usize>,
+    /// The document being edited.
+    pub document: Document,
+
+    /// The editor view (cursor, selection, viewport, options).
+    pub view: EditorView,
+
+    /// Command history for undo/redo.
     pub history: CommandHistory,
-    pub show_line_numbers: bool,
-    pub file_path: Option<PathBuf>,
-    pub dirty: bool,
+
+    /// Whether the app should quit.
+    pub should_quit: bool,
+
+    /// Whether to show the exit confirmation dialog.
     pub show_exit_dialog: bool,
-    pub highlighter: SyntaxHighlighter,
+}
+
+// Backwards compatibility shims - these will be removed after draw.rs and main.rs are updated
+impl App {
+    /// Backwards compat: get cursor_x
+    pub fn cursor_x(&self) -> usize {
+        let pos = self.document.offset_to_position(self.view.caret_offset());
+        pos.column
+    }
+
+    /// Backwards compat: get cursor_y
+    pub fn cursor_y(&self) -> usize {
+        let pos = self.document.offset_to_position(self.view.caret_offset());
+        pos.line
+    }
+
+    /// Backwards compat: get scroll_x
+    pub fn scroll_x(&self) -> usize {
+        self.view.viewport.scroll_x
+    }
+
+    /// Backwards compat: get scroll_y
+    pub fn scroll_y(&self) -> usize {
+        self.view.viewport.scroll_y
+    }
+
+    /// Backwards compat: check if selection is active
+    pub fn selection_anchor(&self) -> Option<usize> {
+        self.view.selection_range().map(|(start, _)| start)
+    }
+
+    /// Backwards compat: show line numbers
+    pub fn show_line_numbers(&self) -> bool {
+        self.view.show_line_numbers()
+    }
 }
 
 impl App {
     pub fn new() -> Self {
+        let document = Document::new();
+        let view = EditorView::new(document.id());
+
         Self {
-            content: Rope::from_str(""),
-            cursor_x: 0,
-            cursor_y: 0,
-            scroll_x: 0,
-            scroll_y: 0,
-            should_quit: false,
-            selection_anchor: None,
+            document,
+            view,
             history: CommandHistory::new(),
-            show_line_numbers: true,
-            file_path: None,
-            dirty: false,
+            should_quit: false,
             show_exit_dialog: false,
-            highlighter: SyntaxHighlighter::new(SyntaxLanguage::Plain),
         }
     }
 
     pub fn open_file(path: &str) -> std::io::Result<Self> {
-        let content = fs::read_to_string(path)?;
         let path_buf = PathBuf::from(path);
-        let language = SyntaxLanguage::from_extension(&path_buf);
+        let document = Document::open(&path_buf)?;
         log::debug!("Opened file: {}", path);
-        log::debug!("Detected language: {:?}", language);
-        let mut highlighter = SyntaxHighlighter::new(language);
-        highlighter.parse(&content);
+
+        let view = EditorView::new(document.id());
 
         Ok(Self {
-            content: Rope::from_str(&content),
-            cursor_x: 0,
-            cursor_y: 0,
-            scroll_x: 0,
-            scroll_y: 0,
-            should_quit: false,
-            selection_anchor: None,
+            document,
+            view,
             history: CommandHistory::new(),
-            show_line_numbers: true,
-            file_path: Some(path_buf),
-            dirty: false,
+            should_quit: false,
             show_exit_dialog: false,
-            highlighter,
         })
     }
 
     pub fn save(&mut self) -> std::io::Result<bool> {
-        if let Some(path) = &self.file_path {
-            fs::write(path, self.content.to_string())?;
-            self.dirty = false;
-            debug!("Dosya kaydedildi: {:?}", path);
-            Ok(true)
-        } else {
-            Ok(false)
-        }
+        self.document.save()
     }
 
     pub fn save_as(&mut self, path: &str) -> std::io::Result<()> {
-        fs::write(path, self.content.to_string())?;
-        self.file_path = Some(PathBuf::from(path));
-        self.dirty = false;
-        debug!("Dosya kaydedildi: {}", path);
-        Ok(())
+        self.document.save_as(std::path::Path::new(path))
     }
 
     pub fn get_title(&self) -> String {
-        let name = self.file_path
-            .as_ref()
-            .and_then(|p| p.file_name())
-            .and_then(|n| n.to_str())
-            .unwrap_or("[Yeni Dosya]");
+        self.document.title()
+    }
 
-        if self.dirty {
-            format!("*{}", name)
-        } else {
-            name.to_string()
-        }
+    /// Returns whether the document has unsaved changes.
+    pub fn dirty(&self) -> bool {
+        self.document.is_dirty()
     }
 
     pub fn mark_dirty(&mut self) {
-        self.dirty = true;
-        self.update_syntax();
+        self.document.mark_dirty();
     }
+
+    /// Returns the file path if the document is associated with a file.
+    pub fn file_path(&self) -> Option<&PathBuf> {
+        self.document.file_path()
+    }
+
+    /// Returns the highlighter for syntax highlighting.
+    pub fn highlighter(&self) -> &SyntaxHighlighter {
+        self.document.highlighter()
+    }
+
+    /// Returns the content as a Rope (for draw.rs compatibility).
+    pub fn content(&self) -> &ropey::Rope {
+        self.document.buffer().rope()
+    }
+
+    // =========================================================================
+    // Cursor and coordinate helpers
+    // =========================================================================
 
     fn get_line_len(&self, line_idx: usize) -> usize {
-        let line = self.content.line(line_idx);
-        let len = line.len_chars();
-        if len > 0 && line.char(len - 1) == '\n' {
-            len - 1
-        } else {
-            len
-        }
+        self.document.line_len(line_idx)
     }
 
-    fn cursor_to_char_idx(&self) -> usize {
-        self.content.line_to_char(self.cursor_y) + self.cursor_x
+    /// Returns the current cursor position as a character offset.
+    pub fn cursor_to_char_idx(&self) -> usize {
+        self.view.caret_offset()
     }
 
-    fn char_idx_to_cursor(&self, char_idx: usize) -> (usize, usize) {
-        let y = self.content.char_to_line(char_idx);
-        let x = char_idx - self.content.line_to_char(y);
-        (x, y)
+    fn char_idx_to_position(&self, char_idx: usize) -> TextPosition {
+        self.document.offset_to_position(char_idx)
     }
 
-    fn set_cursor_from_char_idx(&mut self, char_idx: usize) {
-        let clamped = char_idx.min(self.content.len_chars());
-        let (x, y) = self.char_idx_to_cursor(clamped);
-        self.cursor_x = x;
-        self.cursor_y = y;
+    fn set_cursor_from_char_idx(&mut self, char_idx: usize, extend_selection: bool) {
+        let clamped = char_idx.min(self.document.len_chars());
+        self.view.move_caret_to(clamped, extend_selection);
     }
+
+    // =========================================================================
+    // Cursor movement
+    // =========================================================================
 
     pub fn move_cursor_left(&mut self) {
-        if self.cursor_x > 0 {
-            self.cursor_x -= 1;
-        } else if self.cursor_y > 0 {
-            self.cursor_y -= 1;
-            self.cursor_x = self.get_line_len(self.cursor_y);
+        let offset = self.view.caret_offset();
+        if offset > 0 {
+            self.view.move_caret_to(offset - 1, false);
+            self.view.clear_selection();
         }
     }
 
     pub fn move_cursor_right(&mut self) {
-        let line_len = self.get_line_len(self.cursor_y);
+        let offset = self.view.caret_offset();
+        if offset < self.document.len_chars() {
+            self.view.move_caret_to(offset + 1, false);
+            self.view.clear_selection();
+        }
+    }
 
-        if self.cursor_x < line_len {
-            self.cursor_x += 1;
-        } else if self.cursor_y + 1 < self.content.len_lines() {
-            self.cursor_y += 1;
-            self.cursor_x = 0;
+    pub fn move_cursor_up(&mut self) {
+        let pos = self.char_idx_to_position(self.view.caret_offset());
+        if pos.line > 0 {
+            let new_line = pos.line - 1;
+            let new_col = pos.column.min(self.get_line_len(new_line));
+            let new_offset = self
+                .document
+                .position_to_offset(TextPosition::new(new_line, new_col));
+            self.view.move_caret_to(new_offset, false);
+            self.view.clear_selection();
+        }
+    }
+
+    pub fn move_cursor_down(&mut self) {
+        let pos = self.char_idx_to_position(self.view.caret_offset());
+        if pos.line + 1 < self.document.len_lines() {
+            let new_line = pos.line + 1;
+            let new_col = pos.column.min(self.get_line_len(new_line));
+            let new_offset = self
+                .document
+                .position_to_offset(TextPosition::new(new_line, new_col));
+            self.view.move_caret_to(new_offset, false);
+            self.view.clear_selection();
         }
     }
 
     pub fn move_cursor_word_left(&mut self) {
-        while self.cursor_x > 0 || self.cursor_y > 0 {
-            let char_idx = self.cursor_to_char_idx();
-            if char_idx == 0 {
-                break;
+        let mut offset = self.view.caret_offset();
+
+        // Skip whitespace
+        while offset > 0 {
+            if let Some(ch) = self.document.buffer().char_at(offset - 1) {
+                if !ch.is_whitespace() && ch != '\n' {
+                    break;
+                }
             }
-            let ch = self.content.char(char_idx - 1);
-            if !ch.is_whitespace() && ch != '\n' {
-                break;
-            }
-            self.move_cursor_left();
+            offset -= 1;
         }
 
-        while self.cursor_x > 0 || self.cursor_y > 0 {
-            let char_idx = self.cursor_to_char_idx();
-            if char_idx == 0 {
-                break;
+        // Skip word characters
+        while offset > 0 {
+            if let Some(ch) = self.document.buffer().char_at(offset - 1) {
+                if ch.is_whitespace() || ch == '\n' {
+                    break;
+                }
             }
-            let ch = self.content.char(char_idx - 1);
-            if ch.is_whitespace() || ch == '\n' {
-                break;
-            }
-            self.move_cursor_left();
+            offset -= 1;
         }
+
+        self.view.move_caret_to(offset, false);
+        self.view.clear_selection();
     }
 
     pub fn move_cursor_word_right(&mut self) {
-        let total_chars = self.content.len_chars();
+        let total_chars = self.document.len_chars();
+        let mut offset = self.view.caret_offset();
 
-        while self.cursor_to_char_idx() < total_chars {
-            let char_idx = self.cursor_to_char_idx();
-            let ch = self.content.char(char_idx);
-            if ch.is_whitespace() || ch == '\n' {
-                break;
+        // Skip word characters
+        while offset < total_chars {
+            if let Some(ch) = self.document.buffer().char_at(offset) {
+                if ch.is_whitespace() || ch == '\n' {
+                    break;
+                }
             }
-            self.move_cursor_right();
+            offset += 1;
         }
 
-        while self.cursor_to_char_idx() < total_chars {
-            let char_idx = self.cursor_to_char_idx();
-            let ch = self.content.char(char_idx);
-            if !ch.is_whitespace() && ch != '\n' {
-                break;
+        // Skip whitespace
+        while offset < total_chars {
+            if let Some(ch) = self.document.buffer().char_at(offset) {
+                if !ch.is_whitespace() && ch != '\n' {
+                    break;
+                }
             }
-            self.move_cursor_right();
+            offset += 1;
         }
+
+        self.view.move_caret_to(offset, false);
+        self.view.clear_selection();
     }
 
     pub fn check_scrolling(&mut self, width: usize, height: usize) {
-        let scrolloff_x = 5;
-        let scrolloff_y = 2;
-
-        if self.cursor_x < self.scroll_x + scrolloff_x {
-            self.scroll_x = self.cursor_x.saturating_sub(scrolloff_x);
-        } else if self.cursor_x >= self.scroll_x + width - scrolloff_x {
-            self.scroll_x = (self.cursor_x + scrolloff_x + 1).saturating_sub(width);
-        }
-
-        if self.cursor_y < self.scroll_y + scrolloff_y {
-            self.scroll_y = self.cursor_y.saturating_sub(scrolloff_y);
-        } else if self.cursor_y >= self.scroll_y + height - scrolloff_y {
-            self.scroll_y = (self.cursor_y + scrolloff_y + 1).saturating_sub(height);
-        }
+        self.view.viewport.resize(width, height);
+        let pos = self.char_idx_to_position(self.view.caret_offset());
+        self.view.ensure_caret_visible(pos.line, pos.column);
     }
 
+    // =========================================================================
+    // Editing operations
+    // =========================================================================
+
     pub fn insert_char(&mut self, ch: char) {
-        let char_idx = self.cursor_to_char_idx();
-        let cmd = Command::InsertChar { pos: char_idx, ch };
-        self.history.execute(cmd, &mut self.content);
-        self.cursor_x += 1;
-        self.mark_dirty();
+        let char_idx = self.view.caret_offset();
+        let op = EditOperation::insert_char(char_idx, ch);
+        self.history.execute(op, self.document.buffer_mut());
+        self.view.move_caret_to(char_idx + 1, false);
+        self.view.clear_selection();
+        self.document.update_syntax();
     }
 
     pub fn insert_newline(&mut self) {
-        let current_line = self.content.line(self.cursor_y).to_string();
+        let pos = self.char_idx_to_position(self.view.caret_offset());
+        let current_line = self.document.line(pos.line);
         let indent: String = current_line
             .chars()
             .take_while(|c| *c == ' ' || *c == '\t')
             .collect();
 
-        let char_idx = self.cursor_to_char_idx();
+        let char_idx = self.view.caret_offset();
 
-        let newline_cmd = Command::InsertChar { pos: char_idx, ch: '\n' };
-        self.history.execute(newline_cmd, &mut self.content);
+        let newline_op = EditOperation::insert_char(char_idx, '\n');
+        self.history.execute(newline_op, self.document.buffer_mut());
 
-        self.cursor_y += 1;
-        self.cursor_x = 0;
+        let mut new_offset = char_idx + 1;
 
         if !indent.is_empty() {
-            let indent_cmd = Command::InsertString {
-                pos: char_idx + 1,
-                text: indent.clone(),
-            };
-            self.history.execute(indent_cmd, &mut self.content);
-            self.cursor_x = indent.len();
+            let indent_op = EditOperation::insert_string(char_idx + 1, indent.clone());
+            self.history.execute(indent_op, self.document.buffer_mut());
+            new_offset += indent.len();
         }
 
-        self.mark_dirty();
+        self.view.move_caret_to(new_offset, false);
+        self.view.clear_selection();
+        self.document.update_syntax();
     }
 
     pub fn clamp_cursor(&mut self) {
-        let line_len = self.get_line_len(self.cursor_y);
-        if self.cursor_x > line_len {
-            self.cursor_x = line_len;
+        let pos = self.char_idx_to_position(self.view.caret_offset());
+        let line_len = self.get_line_len(pos.line);
+        if pos.column > line_len {
+            let new_offset = self
+                .document
+                .position_to_offset(TextPosition::new(pos.line, line_len));
+            self.view.move_caret_to(new_offset, false);
         }
     }
 
     pub fn backspace(&mut self) {
-        let char_idx = self.cursor_to_char_idx();
+        let char_idx = self.view.caret_offset();
         if char_idx > 0 {
-            let deleted_char = self.content.char(char_idx - 1);
+            let deleted_char = self.document.buffer().char_at(char_idx - 1).unwrap_or(' ');
 
-            if self.cursor_x == 0 {
-                self.cursor_y -= 1;
-                self.cursor_x = self.get_line_len(self.cursor_y);
-            } else {
-                self.cursor_x -= 1;
-            }
-
-            let cmd = Command::Delete {
-                pos: char_idx - 1,
-                deleted_text: deleted_char.to_string(),
-            };
-            self.history.execute(cmd, &mut self.content);
-            self.mark_dirty();
+            let op = EditOperation::delete(char_idx - 1, deleted_char.to_string());
+            self.history.execute(op, self.document.buffer_mut());
+            self.view.move_caret_to(char_idx - 1, false);
+            self.view.clear_selection();
+            self.document.update_syntax();
         }
     }
 
     pub fn delete_at_cursor(&mut self) {
-        let char_idx = self.cursor_to_char_idx();
-        if char_idx < self.content.len_chars() {
-            let deleted_char = self.content.char(char_idx);
-            let cmd = Command::Delete {
-                pos: char_idx,
-                deleted_text: deleted_char.to_string(),
-            };
-            self.history.execute(cmd, &mut self.content);
-            self.mark_dirty();
+        let char_idx = self.view.caret_offset();
+        if char_idx < self.document.len_chars() {
+            let deleted_char = self.document.buffer().char_at(char_idx).unwrap_or(' ');
+            let op = EditOperation::delete(char_idx, deleted_char.to_string());
+            self.history.execute(op, self.document.buffer_mut());
+            self.document.update_syntax();
         }
     }
 
+    // =========================================================================
+    // Selection
+    // =========================================================================
+
+    /// Start selection from current position (for shift+arrow keys)
+    pub fn begin_selection(&mut self) {
+        self.view.begin_selection();
+    }
+
+    /// Extend selection to given offset
+    pub fn extend_selection_to(&mut self, offset: usize) {
+        self.view.move_caret_to(offset, true);
+    }
+
+    /// Clear any active selection
+    pub fn clear_selection(&mut self) {
+        self.view.clear_selection();
+    }
+
     pub fn get_selection_range(&self) -> Option<(usize, usize)> {
-        self.selection_anchor.map(|anchor| {
-            let current_idx = self.cursor_to_char_idx();
-            if anchor < current_idx { (anchor, current_idx) } else { (current_idx, anchor) }
-        })
+        self.view.selection_range()
     }
 
     pub fn copy_selection(&self) {
         if let Some((start, end)) = self.get_selection_range() {
-            let text = self.content.slice(start..end).to_string();
+            let text = self.document.slice(TextRange::new(start, end));
             if let Ok(mut cb) = Clipboard::new() {
                 let _ = cb.set_text(text);
             }
@@ -314,52 +372,43 @@ impl App {
             debug!("=== CUT SELECTION ===");
             debug!("Selection range: start={}, end={}", start, end);
 
-            let text = self.content.slice(start..end).to_string();
+            let text = self.document.slice(TextRange::new(start, end));
 
             if let Ok(mut cb) = Clipboard::new() {
                 let _ = cb.set_text(text.clone());
             }
 
-            let cmd = Command::Delete {
-                pos: start,
-                deleted_text: text,
-            };
-            self.history.execute(cmd, &mut self.content);
+            let op = EditOperation::delete(start, text);
+            self.history.execute(op, self.document.buffer_mut());
 
-            self.set_cursor_from_char_idx(start);
-            self.selection_anchor = None;
-            self.mark_dirty();
+            self.view.move_caret_to(start, false);
+            self.view.clear_selection();
+            self.document.update_syntax();
         }
     }
 
     pub fn delete_selection(&mut self) {
         if let Some((start, end)) = self.get_selection_range() {
-            let text = self.content.slice(start..end).to_string();
+            let text = self.document.slice(TextRange::new(start, end));
 
-            let cmd = Command::Delete {
-                pos: start,
-                deleted_text: text,
-            };
-            self.history.execute(cmd, &mut self.content);
+            let op = EditOperation::delete(start, text);
+            self.history.execute(op, self.document.buffer_mut());
 
-            self.set_cursor_from_char_idx(start);
-            self.selection_anchor = None;
-            self.mark_dirty();
+            self.view.move_caret_to(start, false);
+            self.view.clear_selection();
+            self.document.update_syntax();
         }
     }
 
     pub fn insert_string_at_cursor(&mut self, text: &str) {
-        let char_idx = self.cursor_to_char_idx();
-        let cmd = Command::InsertString {
-            pos: char_idx,
-            text: text.to_string(),
-        };
-        self.history.execute(cmd, &mut self.content);
+        let char_idx = self.view.caret_offset();
+        let op = EditOperation::insert_string(char_idx, text);
+        self.history.execute(op, self.document.buffer_mut());
 
         let new_char_idx = char_idx + text.chars().count();
-        self.set_cursor_from_char_idx(new_char_idx);
-        self.selection_anchor = None;
-        self.mark_dirty();
+        self.view.move_caret_to(new_char_idx, false);
+        self.view.clear_selection();
+        self.document.update_syntax();
     }
 
     pub fn paste(&mut self) {
@@ -370,39 +419,54 @@ impl App {
         }
     }
 
+    // =========================================================================
+    // Undo/Redo
+    // =========================================================================
+
     pub fn undo(&mut self) {
         debug!("=== UNDO ===");
-        if let Some(pos) = self.history.undo(&mut self.content) {
-            self.set_cursor_from_char_idx(pos);
-            self.selection_anchor = None;
-            self.mark_dirty();
-            debug!("Undo complete, cursor at ({}, {})", self.cursor_x, self.cursor_y);
+        if let Some(pos) = self.history.undo(self.document.buffer_mut()) {
+            self.view.move_caret_to(pos, false);
+            self.view.clear_selection();
+            self.document.update_syntax();
+            let cursor = self.char_idx_to_position(pos);
+            debug!(
+                "Undo complete, cursor at ({}, {})",
+                cursor.column, cursor.line
+            );
         }
     }
 
     pub fn redo(&mut self) {
         debug!("=== REDO ===");
-        if let Some(pos) = self.history.redo(&mut self.content) {
-            self.set_cursor_from_char_idx(pos);
-            self.selection_anchor = None;
-            self.mark_dirty();
-            debug!("Redo complete, cursor at ({}, {})", self.cursor_x, self.cursor_y);
+        if let Some(pos) = self.history.redo(self.document.buffer_mut()) {
+            self.view.move_caret_to(pos, false);
+            self.view.clear_selection();
+            self.document.update_syntax();
+            let cursor = self.char_idx_to_position(pos);
+            debug!(
+                "Redo complete, cursor at ({}, {})",
+                cursor.column, cursor.line
+            );
         }
     }
 
+    // =========================================================================
+    // Other operations
+    // =========================================================================
+
     pub fn select_all(&mut self) {
-        self.selection_anchor = Some(0);
-        let total_chars = self.content.len_chars();
-        self.set_cursor_from_char_idx(total_chars);
+        let total_chars = self.document.len_chars();
+        self.view.select_all(total_chars);
     }
 
     pub fn toggle_line_numbers(&mut self) {
-        self.show_line_numbers = !self.show_line_numbers;
+        self.view.toggle_line_numbers();
     }
 
     pub fn line_number_width(&self) -> usize {
-        if self.show_line_numbers {
-            let line_count = self.content.len_lines();
+        if self.view.show_line_numbers() {
+            let line_count = self.document.len_lines();
             let digits = line_count.to_string().len();
             digits + 2
         } else {
@@ -411,35 +475,58 @@ impl App {
     }
 
     pub fn move_cursor_home(&mut self) {
-        self.cursor_x = 0;
+        let pos = self.char_idx_to_position(self.view.caret_offset());
+        let new_offset = self
+            .document
+            .position_to_offset(TextPosition::new(pos.line, 0));
+        self.view.move_caret_to(new_offset, false);
+        self.view.clear_selection();
     }
 
     pub fn move_cursor_end(&mut self) {
-        self.cursor_x = self.get_line_len(self.cursor_y);
+        let pos = self.char_idx_to_position(self.view.caret_offset());
+        let line_len = self.get_line_len(pos.line);
+        let new_offset = self
+            .document
+            .position_to_offset(TextPosition::new(pos.line, line_len));
+        self.view.move_caret_to(new_offset, false);
+        self.view.clear_selection();
     }
 
     pub fn move_cursor_file_start(&mut self) {
-        self.cursor_x = 0;
-        self.cursor_y = 0;
+        self.view.move_caret_to(0, false);
+        self.view.clear_selection();
     }
 
     pub fn move_cursor_file_end(&mut self) {
-        self.cursor_y = self.content.len_lines().saturating_sub(1);
-        self.cursor_x = self.get_line_len(self.cursor_y);
+        let total = self.document.len_chars();
+        self.view.move_caret_to(total, false);
+        self.view.clear_selection();
     }
 
     pub fn page_up(&mut self, page_height: usize) {
-        self.cursor_y = self.cursor_y.saturating_sub(page_height);
-        self.clamp_cursor();
+        let pos = self.char_idx_to_position(self.view.caret_offset());
+        let new_line = pos.line.saturating_sub(page_height);
+        let new_col = pos.column.min(self.get_line_len(new_line));
+        let new_offset = self
+            .document
+            .position_to_offset(TextPosition::new(new_line, new_col));
+        self.view.move_caret_to(new_offset, false);
+        self.view.clear_selection();
     }
 
     pub fn page_down(&mut self, page_height: usize) {
-        self.cursor_y = (self.cursor_y + page_height).min(self.content.len_lines().saturating_sub(1));
-        self.clamp_cursor();
+        let pos = self.char_idx_to_position(self.view.caret_offset());
+        let new_line = (pos.line + page_height).min(self.document.len_lines().saturating_sub(1));
+        let new_col = pos.column.min(self.get_line_len(new_line));
+        let new_offset = self
+            .document
+            .position_to_offset(TextPosition::new(new_line, new_col));
+        self.view.move_caret_to(new_offset, false);
+        self.view.clear_selection();
     }
 
     pub fn update_syntax(&mut self) {
-        let content = self.content.to_string();
-        self.highlighter.parse(&content);
+        self.document.update_syntax();
     }
 }

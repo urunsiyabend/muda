@@ -1,18 +1,16 @@
 mod app;
-mod command;
 mod draw;
-mod syntax;
 
 use app::App;
 use draw::ui;
 
-use std::env;
-use std::io;
-use std::fs::File;
 use crossterm::event::{self, EnableBracketedPaste, Event, KeyCode, KeyEventKind, KeyModifiers};
 use crossterm::terminal::EnterAlternateScreen;
-use simplelog::{WriteLogger, LevelFilter, Config};
 use log::debug;
+use simplelog::{Config, LevelFilter, WriteLogger};
+use std::env;
+use std::fs::File;
+use std::io;
 
 fn main() -> io::Result<()> {
     let log_file = File::create("editor.log").unwrap();
@@ -30,7 +28,8 @@ fn main() -> io::Result<()> {
             Err(e) => {
                 debug!("Dosya açılamadı: {}, yeni dosya oluşturuluyor", e);
                 let mut app = App::new();
-                app.file_path = Some(std::path::PathBuf::from(&args[1]));
+                app.document
+                    .set_file_path(std::path::PathBuf::from(&args[1]));
                 app
             }
         }
@@ -47,7 +46,9 @@ fn main() -> io::Result<()> {
     let size = terminal.size()?;
     let line_num_width = app.line_number_width();
     app.check_scrolling(
-        (size.width as usize).saturating_sub(2).saturating_sub(line_num_width),
+        (size.width as usize)
+            .saturating_sub(2)
+            .saturating_sub(line_num_width),
         (size.height as usize).saturating_sub(2),
     );
 
@@ -55,185 +56,183 @@ fn main() -> io::Result<()> {
         terminal.draw(|f| ui(f, &app))?;
 
         match event::read()? {
-            Event::Key(key) => {
-                if key.kind == KeyEventKind::Press {
-                    debug!("Key: {:?}, Modifiers: {:?}", key.code, key.modifiers);
+            Event::Key(key) if key.kind == KeyEventKind::Press => {
+                let is_ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+                let is_shift = key.modifiers.contains(KeyModifiers::SHIFT);
 
-                    let is_shift = key.modifiers.contains(KeyModifiers::SHIFT);
-                    let is_ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
-
-                    match key.code {
-                        KeyCode::Esc if app.show_exit_dialog => {
-                            app.show_exit_dialog = false;
-                        }
-                        KeyCode::Char('y') | KeyCode::Char('Y') if app.show_exit_dialog => {
-                            let _ = app.save();
-                            app.should_quit = true;
-                        }
-                        KeyCode::Char('n') | KeyCode::Char('N') if app.show_exit_dialog => {
-                            app.should_quit = true;
-                        }
-                        _ if app.show_exit_dialog => {}
-
-                        KeyCode::Left | KeyCode::Right | KeyCode::Up | KeyCode::Down => {
-                            if is_shift && app.selection_anchor.is_none() {
-                                app.selection_anchor = Some(app.content.line_to_char(app.cursor_y) + app.cursor_x);
-                            } else if !is_shift {
-                                app.selection_anchor = None;
-                            }
-
-                            match key.code {
-                                KeyCode::Left => {
-                                    if is_ctrl {
-                                        app.move_cursor_word_left();
-                                    } else {
-                                        app.move_cursor_left();
-                                    }
-                                }
-                                KeyCode::Right => {
-                                    if is_ctrl {
-                                        app.move_cursor_word_right();
-                                    } else {
-                                        app.move_cursor_right();
-                                    }
-                                }
-                                KeyCode::Up => {
-                                    if app.cursor_y > 0 {
-                                        app.cursor_y -= 1;
-                                        app.clamp_cursor();
-                                    }
-                                }
-                                KeyCode::Down => {
-                                    if app.cursor_y + 1 < app.content.len_lines() {
-                                        app.cursor_y += 1;
-                                        app.clamp_cursor();
-                                    }
-                                }
-                                _ => {}
-                            }
-                        }
-                        KeyCode::Home | KeyCode::End | KeyCode::PageUp | KeyCode::PageDown => {
-                            if is_shift && app.selection_anchor.is_none() {
-                                app.selection_anchor = Some(app.content.line_to_char(app.cursor_y) + app.cursor_x);
-                            } else if !is_shift {
-                                app.selection_anchor = None;
-                            }
-
-                            let size = terminal.size()?;
-                            let page_height = (size.height as usize).saturating_sub(4);
-
-                            match key.code {
-                                KeyCode::Home => {
-                                    if is_ctrl {
-                                        app.move_cursor_file_start();
-                                    } else {
-                                        app.move_cursor_home();
-                                    }
-                                }
-                                KeyCode::End => {
-                                    if is_ctrl {
-                                        app.move_cursor_file_end();
-                                    } else {
-                                        app.move_cursor_end();
-                                    }
-                                }
-                                KeyCode::PageUp => {
-                                    app.page_up(page_height);
-                                }
-                                KeyCode::PageDown => {
-                                    app.page_down(page_height);
-                                }
-                                _ => {}
-                            }
-                        }
-                        KeyCode::Char('s') if is_ctrl => {
-                            match app.save() {
-                                Ok(true) => debug!("Dosya kaydedildi"),
-                                Ok(false) => debug!("Dosya yolu yok, save as gerekli"),
-                                Err(e) => debug!("Kaydetme hatası: {}", e),
-                            }
-                        }
-                        KeyCode::Char('z') if is_ctrl && !is_shift => {
-                            app.undo();
-                        }
-                        KeyCode::Char('Z') if is_ctrl && is_shift => {
-                            app.redo();
-                        }
-                        KeyCode::Char('y') if is_ctrl => {
-                            app.redo();
-                        }
-                        KeyCode::Char('a') if is_ctrl => {
-                            app.select_all();
-                        }
-                        KeyCode::Char('l') if is_ctrl => {
-                            app.toggle_line_numbers();
-                        }
-                        KeyCode::Char('k') if is_ctrl => {
-                            app.cut_selection();
-                        }
-                        KeyCode::Char('u') if is_ctrl => {
-                            app.paste();
-                        }
-                        KeyCode::Char('c') if is_ctrl => {
-                            app.copy_selection();
-                        }
-                        KeyCode::Tab => {
-                            if app.selection_anchor.is_some() {
-                                app.delete_selection();
-                            }
-                            for _ in 0..4 {
-                                app.insert_char(' ');
-                            }
-                        }
-                        KeyCode::Char(c) => {
-                            if app.selection_anchor.is_some() {
-                                app.delete_selection();
-                            }
-                            app.insert_char(c);
-                        }
-                        KeyCode::Enter => {
-                            if app.selection_anchor.is_some() {
-                                app.delete_selection();
-                            }
-                            app.insert_newline();
-                        }
-                        KeyCode::Backspace => {
-                            if app.selection_anchor.is_some() {
-                                app.delete_selection();
-                            } else {
-                                app.backspace();
-                            }
-                        }
-                        KeyCode::Delete => {
-                            if app.selection_anchor.is_some() {
-                                app.delete_selection();
-                            } else {
-                                app.delete_at_cursor();
-                            }
-                        }
-                        KeyCode::Esc => {
-                            if app.show_exit_dialog {
-                                app.show_exit_dialog = false;
-                            } else if app.dirty {
-                                app.show_exit_dialog = true;
-                            } else {
-                                app.should_quit = true;
-                            }
-                        }
-                        _ => {}
+                match key.code {
+                    KeyCode::Char('s') if is_ctrl => {
+                        let _ = app.save();
                     }
+                    KeyCode::Char('c') if is_ctrl => {
+                        app.copy_selection();
+                    }
+                    KeyCode::Char('x') if is_ctrl => {
+                        app.cut_selection();
+                    }
+                    KeyCode::Char('v') if is_ctrl => {
+                        if app.view.has_selection() {
+                            app.delete_selection();
+                        }
+                        app.paste();
+                    }
+                    KeyCode::Char('z') if is_ctrl => {
+                        app.undo();
+                    }
+                    KeyCode::Char('y') if is_ctrl => {
+                        app.redo();
+                    }
+                    KeyCode::Char('a') if is_ctrl => {
+                        app.select_all();
+                    }
+                    KeyCode::Char('l') if is_ctrl => {
+                        app.toggle_line_numbers();
+                    }
+                    KeyCode::Char('y') | KeyCode::Char('Y') if app.show_exit_dialog => {
+                        let _ = app.save();
+                        app.should_quit = true;
+                    }
+                    KeyCode::Char('n') | KeyCode::Char('N') if app.show_exit_dialog => {
+                        app.should_quit = true;
+                    }
+                    _ if app.show_exit_dialog => {}
 
-                    let size = terminal.size()?;
-                    let line_num_width = app.line_number_width();
-                    app.check_scrolling(
-                        (size.width as usize).saturating_sub(2).saturating_sub(line_num_width),
-                        (size.height as usize).saturating_sub(2),
-                    );
+                    KeyCode::Left | KeyCode::Right | KeyCode::Up | KeyCode::Down => {
+                        // Handle selection with shift
+                        if is_shift && !app.view.has_selection() {
+                            app.begin_selection();
+                        } else if !is_shift {
+                            app.clear_selection();
+                        }
+
+                        match key.code {
+                            KeyCode::Left => {
+                                if is_ctrl {
+                                    app.move_cursor_word_left();
+                                } else {
+                                    app.move_cursor_left();
+                                }
+                            }
+                            KeyCode::Right => {
+                                if is_ctrl {
+                                    app.move_cursor_word_right();
+                                } else {
+                                    app.move_cursor_right();
+                                }
+                            }
+                            KeyCode::Up => {
+                                app.move_cursor_up();
+                            }
+                            KeyCode::Down => {
+                                app.move_cursor_down();
+                            }
+                            _ => {}
+                        }
+
+                        // Extend selection if shift is held
+                        if is_shift {
+                            let offset = app.cursor_to_char_idx();
+                            app.extend_selection_to(offset);
+                        }
+                    }
+                    KeyCode::Home | KeyCode::End | KeyCode::PageUp | KeyCode::PageDown => {
+                        if is_shift && !app.view.has_selection() {
+                            app.begin_selection();
+                        } else if !is_shift {
+                            app.clear_selection();
+                        }
+
+                        let size = terminal.size()?;
+                        let page_height = (size.height as usize).saturating_sub(4);
+
+                        match key.code {
+                            KeyCode::Home => {
+                                if is_ctrl {
+                                    app.move_cursor_file_start();
+                                } else {
+                                    app.move_cursor_home();
+                                }
+                            }
+                            KeyCode::End => {
+                                if is_ctrl {
+                                    app.move_cursor_file_end();
+                                } else {
+                                    app.move_cursor_end();
+                                }
+                            }
+                            KeyCode::PageUp => {
+                                app.page_up(page_height);
+                            }
+                            KeyCode::PageDown => {
+                                app.page_down(page_height);
+                            }
+                            _ => {}
+                        }
+
+                        // Extend selection if shift is held
+                        if is_shift {
+                            let offset = app.cursor_to_char_idx();
+                            app.extend_selection_to(offset);
+                        }
+                    }
+                    KeyCode::Tab => {
+                        if app.view.has_selection() {
+                            app.delete_selection();
+                        }
+                        for _ in 0..4 {
+                            app.insert_char(' ');
+                        }
+                    }
+                    KeyCode::Char(c) => {
+                        if app.view.has_selection() {
+                            app.delete_selection();
+                        }
+                        app.insert_char(c);
+                    }
+                    KeyCode::Enter => {
+                        if app.view.has_selection() {
+                            app.delete_selection();
+                        }
+                        app.insert_newline();
+                    }
+                    KeyCode::Backspace => {
+                        if app.view.has_selection() {
+                            app.delete_selection();
+                        } else {
+                            app.backspace();
+                        }
+                    }
+                    KeyCode::Delete => {
+                        if app.view.has_selection() {
+                            app.delete_selection();
+                        } else {
+                            app.delete_at_cursor();
+                        }
+                    }
+                    KeyCode::Esc => {
+                        if app.show_exit_dialog {
+                            app.show_exit_dialog = false;
+                        } else if app.dirty() {
+                            app.show_exit_dialog = true;
+                        } else {
+                            app.should_quit = true;
+                        }
+                    }
+                    _ => {}
                 }
+
+                let size = terminal.size()?;
+                let line_num_width = app.line_number_width();
+                app.check_scrolling(
+                    (size.width as usize)
+                        .saturating_sub(2)
+                        .saturating_sub(line_num_width),
+                    (size.height as usize).saturating_sub(2),
+                );
             }
             Event::Paste(text) => {
                 debug!("Paste event: {:?}", text);
-                if app.selection_anchor.is_some() {
+                if app.view.has_selection() {
                     app.delete_selection();
                 }
                 app.insert_string_at_cursor(&text);
@@ -241,7 +240,9 @@ fn main() -> io::Result<()> {
                 let size = terminal.size()?;
                 let line_num_width = app.line_number_width();
                 app.check_scrolling(
-                    (size.width as usize).saturating_sub(2).saturating_sub(line_num_width),
+                    (size.width as usize)
+                        .saturating_sub(2)
+                        .saturating_sub(line_num_width),
                     (size.height as usize).saturating_sub(2),
                 );
             }
@@ -249,7 +250,9 @@ fn main() -> io::Result<()> {
                 let size = terminal.size()?;
                 let line_num_width = app.line_number_width();
                 app.check_scrolling(
-                    (size.width as usize).saturating_sub(2).saturating_sub(line_num_width),
+                    (size.width as usize)
+                        .saturating_sub(2)
+                        .saturating_sub(line_num_width),
                     (size.height as usize).saturating_sub(2),
                 );
             }
@@ -259,6 +262,9 @@ fn main() -> io::Result<()> {
 
     debug!("Editor kapatılıyor...");
     crossterm::terminal::disable_raw_mode()?;
-    crossterm::execute!(terminal.backend_mut(), crossterm::terminal::LeaveAlternateScreen)?;
+    crossterm::execute!(
+        terminal.backend_mut(),
+        crossterm::terminal::LeaveAlternateScreen
+    )?;
     Ok(())
 }

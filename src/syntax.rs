@@ -1,8 +1,8 @@
-use ratatui::style::{Style, Color, Modifier};
-use std::path::Path;
 use log::debug;
-use tree_sitter::{Parser, Tree, Query, QueryCursor};
+use ratatui::style::{Color, Modifier, Style};
+use std::path::Path;
 use tree_sitter::StreamingIterator;
+use tree_sitter::{Parser, Query, QueryCursor, Tree};
 
 pub struct SyntaxHighlighter {
     parser: Parser,
@@ -109,7 +109,11 @@ impl SyntaxHighlighter {
             return;
         }
 
-        let new_tree = self.parser.parse(content, self.tree.as_ref());
+        // Do a fresh parse each time.
+        // Note: Tree-sitter supports incremental parsing by passing the old tree,
+        // but that requires calling tree.edit() with edit info before re-parsing.
+        // For now, we do a full reparse which is simpler and correct.
+        let new_tree = self.parser.parse(content, None);
         if new_tree.is_none() {
             debug!("parse returned None for {:?}", self.language);
         } else {
@@ -125,7 +129,7 @@ impl SyntaxHighlighter {
         line_start_byte: usize,
         line_text: &str,
     ) -> Vec<HighlightSpan> {
-        let mut spans = Vec::new();
+        let spans = Vec::new();
 
         if self.language == SyntaxLanguage::Plain {
             return spans;
@@ -134,12 +138,15 @@ impl SyntaxHighlighter {
         let tree = match &self.tree {
             Some(t) => t,
             None => {
-                debug!("highlight_line: no tree for {:?} (line {})", self.language, line_idx);
+                debug!(
+                    "highlight_line: no tree for {:?} (line {})",
+                    self.language, line_idx
+                );
                 return spans;
             }
         };
 
-        let lang = match self.language.get_language() {
+        let _lang = match self.language.get_language() {
             Some(l) => l,
             None => {
                 debug!("highlight_line: no lang for {:?}", self.language);
@@ -154,82 +161,86 @@ impl SyntaxHighlighter {
             }
         };
 
-        let mut cursor = QueryCursor::new();
-        let line_end_byte = line_start_byte + line_text.len();
-
-        cursor.set_byte_range(line_start_byte..line_end_byte);
-
-        let mut captures = cursor.captures(&query, tree.root_node(), content.as_bytes());
-
-        let mut capture_count = 0usize;
-        while let Some(&(ref m, capture_idx)) = captures.next() {
-            capture_count += 1;
-
-            let capture = m.captures[capture_idx];
-            let node = capture.node;
-            let start_byte = node.start_byte();
-            let end_byte = node.end_byte();
-
-            if start_byte >= line_end_byte || end_byte <= line_start_byte {
-                continue;
-            }
-
-            let start_col = start_byte.saturating_sub(line_start_byte);
-            let end_col = (end_byte - line_start_byte).min(line_text.len());
-
-            let capture_name = &query.capture_names()[capture.index as usize];
-            let style = capture_to_style(capture_name);
-
-            spans.push(HighlightSpan {
-                start_col,
-                end_col,
-                style,
-            });
+        // Bounds check: ensure byte ranges are valid for current content
+        let content_len = content.len();
+        if line_start_byte >= content_len {
+            return spans;
         }
 
-        spans.sort_by_key(|s| s.start_col);
-        spans
+        let line_end_byte = (line_start_byte + line_text.len()).min(content_len);
+
+        let mut cursor = QueryCursor::new();
+        cursor.set_byte_range(line_start_byte..line_end_byte);
+
+        // Use catch_unwind to prevent panics from tree-sitter when tree is stale
+        let captures_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let mut result = Vec::new();
+            let mut captures = cursor.captures(&query, tree.root_node(), content.as_bytes());
+
+            while let Some(&(ref m, capture_idx)) = captures.next() {
+                let capture = m.captures[capture_idx];
+                let node = capture.node;
+                let start_byte = node.start_byte();
+                let end_byte = node.end_byte();
+
+                // Skip nodes outside our line or with invalid ranges
+                if start_byte >= content_len || end_byte > content_len {
+                    continue;
+                }
+                if start_byte >= line_end_byte || end_byte <= line_start_byte {
+                    continue;
+                }
+
+                let start_col = start_byte.saturating_sub(line_start_byte);
+                let end_col = (end_byte - line_start_byte).min(line_text.len());
+
+                let capture_name = &query.capture_names()[capture.index as usize];
+                let style = capture_to_style(capture_name);
+
+                result.push(HighlightSpan {
+                    start_col,
+                    end_col,
+                    style,
+                });
+            }
+            result
+        }));
+
+        match captures_result {
+            Ok(mut result) => {
+                result.sort_by_key(|s| s.start_col);
+                result
+            }
+            Err(_) => {
+                // Tree was stale, return no highlights
+                debug!("highlight_line: tree-sitter panic caught, tree is stale");
+                spans
+            }
+        }
     }
 }
 
 fn capture_to_style(capture_name: &str) -> Style {
     match capture_name {
-        "keyword" | "keyword.control" | "keyword.function" | "keyword.operator" | "keyword.return" => {
-            Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)
-        }
-        "type" | "type.builtin" | "constructor" => {
-            Style::default().fg(Color::Yellow)
-        }
-        "function" | "function.method" | "function.builtin" => {
-            Style::default().fg(Color::Blue)
-        }
-        "string" | "string.special" => {
-            Style::default().fg(Color::Green)
-        }
-        "number" | "float" => {
-            Style::default().fg(Color::Cyan)
-        }
-        "comment" | "comment.line" | "comment.block" => {
-            Style::default().fg(Color::DarkGray)
-        }
-        "operator" => {
-            Style::default().fg(Color::Red)
-        }
-        "variable" | "variable.builtin" | "variable.parameter" => {
-            Style::default().fg(Color::White)
-        }
-        "constant" | "constant.builtin" => {
-            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
-        }
-        "attribute" | "label" => {
-            Style::default().fg(Color::Yellow)
-        }
+        "keyword" | "keyword.control" | "keyword.function" | "keyword.operator"
+        | "keyword.return" => Style::default()
+            .fg(Color::Magenta)
+            .add_modifier(Modifier::BOLD),
+        "type" | "type.builtin" | "constructor" => Style::default().fg(Color::Yellow),
+        "function" | "function.method" | "function.builtin" => Style::default().fg(Color::Blue),
+        "string" | "string.special" => Style::default().fg(Color::Green),
+        "number" | "float" => Style::default().fg(Color::Cyan),
+        "comment" | "comment.line" | "comment.block" => Style::default().fg(Color::DarkGray),
+        "operator" => Style::default().fg(Color::Red),
+        "variable" | "variable.builtin" | "variable.parameter" => Style::default().fg(Color::White),
+        "constant" | "constant.builtin" => Style::default()
+            .fg(Color::Cyan)
+            .add_modifier(Modifier::BOLD),
+        "attribute" | "label" => Style::default().fg(Color::Yellow),
         "punctuation" | "punctuation.bracket" | "punctuation.delimiter" => {
             Style::default().fg(Color::White)
         }
-        "property" | "field" => {
-            Style::default().fg(Color::LightBlue)
-        }
+        "property" | "field" => Style::default().fg(Color::LightBlue),
         _ => Style::default(),
     }
 }
@@ -348,7 +359,6 @@ const PYTHON_HIGHLIGHTS: &str = r#"
 (identifier) @variable
 (attribute attribute: (identifier) @property)
 "#;
-
 
 const JS_HIGHLIGHTS: &str = r#"
 (comment) @comment
