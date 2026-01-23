@@ -8,10 +8,11 @@
 
 use std::path::PathBuf;
 
-use mudatexteditor::commands::{CommandContext, CommandDispatcher, DispatchResult, EditorCommand};
 use mudatexteditor::commands::editor_command::{Direction, MoveScope};
-use mudatexteditor::domain::Workspace;
-use mudatexteditor::view_model::{builder::ViewModelBuilder, RenderModel};
+use mudatexteditor::commands::{CommandContext, CommandDispatcher, DispatchResult, EditorCommand};
+use mudatexteditor::domain::{DiscardAcknowledgment, ProtectionError, Workspace};
+use mudatexteditor::view::{FocusState, Sidebar};
+use mudatexteditor::view_model::{PendingAction, RenderModel, builder::ViewModelBuilder};
 
 /// The main application state.
 ///
@@ -29,8 +30,20 @@ pub struct App {
     /// Whether the app should quit.
     pub should_quit: bool,
 
-    /// Whether to show the exit confirmation dialog.
-    pub show_exit_dialog: bool,
+    /// Pending action that requires user confirmation (e.g., exit with unsaved changes).
+    pub pending_action: Option<PendingAction>,
+
+    /// Protection error associated with the pending action.
+    pub pending_error: Option<ProtectionError>,
+
+    /// File explorer sidebar state.
+    pub sidebar: Sidebar,
+
+    /// Current focus state (Editor or Sidebar).
+    pub focus: FocusState,
+
+    /// Optional status message for user feedback (errors, confirmations, etc.).
+    pub status_message: Option<String>,
 }
 
 impl App {
@@ -42,7 +55,11 @@ impl App {
             dispatcher: CommandDispatcher::new(),
             needs_render: true,
             should_quit: false,
-            show_exit_dialog: false,
+            pending_action: None,
+            pending_error: None,
+            sidebar: Sidebar::default(),
+            focus: FocusState::Editor,
+            status_message: None,
         }
     }
 
@@ -71,7 +88,32 @@ impl App {
             dispatcher: CommandDispatcher::new(),
             needs_render: true,
             should_quit: false,
-            show_exit_dialog: false,
+            pending_action: None,
+            pending_error: None,
+            sidebar: Sidebar::default(),
+            focus: FocusState::Editor,
+            status_message: None,
+        })
+    }
+
+    /// Creates an App by opening a directory (shows sidebar).
+    pub fn open_directory(path: &str) -> std::io::Result<Self> {
+        let path_buf = PathBuf::from(path);
+        let canonical_path = std::fs::canonicalize(&path_buf)?;
+
+        let workspace = Workspace::with_new_document();
+        let sidebar = Sidebar::new(Some(canonical_path));
+
+        Ok(Self {
+            workspace,
+            dispatcher: CommandDispatcher::new(),
+            needs_render: true,
+            should_quit: false,
+            pending_action: None,
+            pending_error: None,
+            sidebar,
+            focus: FocusState::Sidebar,
+            status_message: None,
         })
     }
 
@@ -86,15 +128,17 @@ impl App {
     pub fn dispatch(&mut self, cmd: EditorCommand) -> bool {
         let dispatcher = &mut self.dispatcher;
 
-        let result = self.workspace.with_active_context(|view, document, history, event_bus| {
-            let mut ctx = CommandContext {
-                view,
-                document,
-                history,
-                event_bus,
-            };
-            dispatcher.dispatch(cmd, &mut ctx)
-        });
+        let result = self
+            .workspace
+            .with_active_context(|view, document, history, event_bus| {
+                let mut ctx = CommandContext {
+                    view,
+                    document,
+                    history,
+                    event_bus,
+                };
+                dispatcher.dispatch(cmd, &mut ctx)
+            });
 
         match result {
             Some(DispatchResult::Executed) => {
@@ -111,9 +155,39 @@ impl App {
     // Application-Level Command Handlers
     // =========================================================================
 
-    /// Saves the active document.
+    /// Saves the active document, updating status message on success or failure.
     pub fn save(&mut self) -> std::io::Result<bool> {
-        self.workspace.save_active_document()
+        match self.workspace.save_active_document() {
+            Ok(true) => {
+                self.set_status_message("File saved successfully");
+                self.needs_render = true;
+                Ok(true)
+            }
+            Ok(false) => {
+                self.set_status_message("No file path set - use Save As");
+                self.needs_render = true;
+                Ok(false)
+            }
+            Err(e) => {
+                self.set_status_message(format!("Save failed: {}", e));
+                self.needs_render = true;
+                Err(e)
+            }
+        }
+    }
+
+    // =========================================================================
+    // Status Message Management
+    // =========================================================================
+
+    /// Sets a status message to display to the user.
+    pub fn set_status_message(&mut self, message: impl Into<String>) {
+        self.status_message = Some(message.into());
+    }
+
+    /// Clears the current status message.
+    pub fn clear_status_message(&mut self) {
+        self.status_message = None;
     }
 
     /// Saves the active document to a new path.
@@ -125,14 +199,105 @@ impl App {
         }
     }
 
-    /// Returns whether the active document has unsaved changes.
+    /// Returns whether any document in the workspace has unsaved changes.
     pub fn dirty(&self) -> bool {
-        self.workspace.active_document_dirty()
+        self.workspace.has_unsaved_documents()
     }
 
     /// Returns the file path of the active document.
+    #[allow(dead_code)]
     pub fn file_path(&self) -> Option<&PathBuf> {
         self.workspace.active_document().and_then(|d| d.file_path())
+    }
+
+    /// Sets the file path for the active document.
+    ///
+    /// This is typically used when creating a new document that will be
+    /// saved to a specific path.
+    pub fn set_file_path(&mut self, path: PathBuf) {
+        if let Some(doc) = self.workspace.active_document_mut() {
+            doc.set_file_path(path);
+        }
+    }
+
+    // =========================================================================
+    // Protected Operations (Unsaved File Protection)
+    // =========================================================================
+
+    /// Requests application exit.
+    ///
+    /// If there are unsaved changes, sets `pending_action` to `Exit` and
+    /// returns the protection error. Otherwise, sets `should_quit` to true.
+    pub fn request_exit(&mut self) -> Result<(), ProtectionError> {
+        match self.workspace.can_exit() {
+            Ok(()) => {
+                self.should_quit = true;
+                Ok(())
+            }
+            Err(error) => {
+                self.pending_action = Some(PendingAction::Exit);
+                self.pending_error = Some(error.clone());
+                self.needs_render = true;
+                Err(error)
+            }
+        }
+    }
+
+    /// Requests opening a file from the sidebar.
+    ///
+    /// If the current active document has unsaved changes, sets `pending_action`
+    /// to `OpenFile` and returns the protection error. Otherwise, opens the file.
+    pub fn request_open_file(&mut self, path: PathBuf) -> Result<(), ProtectionError> {
+        match self.workspace.can_switch_active() {
+            Ok(()) => {
+                self.open_file_from_sidebar(&path);
+                self.focus_editor();
+                Ok(())
+            }
+            Err(error) => {
+                self.pending_action = Some(PendingAction::OpenFile(path));
+                self.pending_error = Some(error.clone());
+                self.needs_render = true;
+                Err(error)
+            }
+        }
+    }
+
+    /// Confirms the pending action, discarding unsaved changes.
+    ///
+    /// This should only be called after the user has explicitly acknowledged
+    /// the potential loss of data.
+    pub fn confirm_pending_action(&mut self) {
+        if let Some(action) = self.pending_action.take() {
+            self.pending_error = None;
+            let _ack = DiscardAcknowledgment::confirmed();
+
+            match action {
+                PendingAction::Exit => {
+                    self.should_quit = true;
+                }
+                PendingAction::CloseDocument(doc_id) => {
+                    self.workspace.close_document_acknowledged(doc_id, _ack);
+                }
+                PendingAction::OpenFile(path) => {
+                    self.open_file_from_sidebar(&path);
+                    self.focus_editor();
+                }
+            }
+            self.needs_render = true;
+        }
+    }
+
+    /// Cancels the pending action.
+    pub fn cancel_pending_action(&mut self) {
+        self.pending_action = None;
+        self.pending_error = None;
+        self.needs_render = true;
+    }
+
+    /// Returns whether there is a pending action requiring confirmation.
+    pub fn has_pending_action(&self) -> bool {
+        self.pending_action.is_some()
     }
 
     // =========================================================================
@@ -311,7 +476,9 @@ impl App {
     }
 
     pub fn get_selection_range(&self) -> Option<(usize, usize)> {
-        self.workspace.active_view().and_then(|v| v.selection_range())
+        self.workspace
+            .active_view()
+            .and_then(|v| v.selection_range())
     }
 
     // =========================================================================
@@ -374,17 +541,119 @@ impl App {
     }
 
     // =========================================================================
+    // Sidebar Methods
+    // =========================================================================
+
+    /// Toggles sidebar visibility.
+    pub fn toggle_sidebar(&mut self) {
+        self.sidebar.toggle();
+        self.needs_render = true;
+    }
+
+    /// Focuses the sidebar (only if visible).
+    pub fn focus_sidebar(&mut self) {
+        if self.sidebar.visible {
+            self.focus = FocusState::Sidebar;
+            self.needs_render = true;
+        }
+    }
+
+    /// Focuses the editor.
+    pub fn focus_editor(&mut self) {
+        self.focus = FocusState::Editor;
+        self.needs_render = true;
+    }
+
+    /// Returns whether the sidebar is focused.
+    pub fn is_sidebar_focused(&self) -> bool {
+        self.focus == FocusState::Sidebar
+    }
+
+    /// Moves sidebar selection up.
+    pub fn sidebar_move_up(&mut self) {
+        self.sidebar.move_up();
+        self.needs_render = true;
+    }
+
+    /// Moves sidebar selection down.
+    pub fn sidebar_move_down(&mut self) {
+        self.sidebar.move_down();
+        self.needs_render = true;
+    }
+
+    /// Opens the selected file from the sidebar.
+    pub fn sidebar_open_selected(&mut self) {
+        if let Some(entry) = self.sidebar.selected_entry() {
+            if entry.is_dir {
+                // Navigate into directory
+                let new_path = entry.path.clone();
+                self.sidebar.set_base_directory(new_path);
+            } else {
+                // Open the file
+                let path = entry.path.clone();
+                self.open_file_from_sidebar(&path);
+                self.focus_editor();
+            }
+            self.needs_render = true;
+        }
+    }
+
+    /// Opens a file from the sidebar into the workspace.
+    fn open_file_from_sidebar(&mut self, path: &PathBuf) {
+        match self.workspace.open_document(path) {
+            Ok(doc_id) => {
+                self.workspace.create_view(doc_id);
+                log::debug!("Opened file from sidebar: {:?}", path);
+            }
+            Err(e) => {
+                log::debug!("Could not open file from sidebar: {:?}, error: {}", path, e);
+            }
+        }
+    }
+
+    /// Navigates the sidebar to the parent directory.
+    pub fn sidebar_go_back(&mut self) {
+        self.sidebar.go_to_parent_directory();
+        self.needs_render = true;
+    }
+
+    /// Adjusts sidebar scroll for viewport height.
+    pub fn adjust_sidebar_scroll(&mut self, viewport_height: usize) {
+        self.sidebar.adjust_scroll_for_height(viewport_height);
+    }
+
+    // =========================================================================
     // Render Model
     // =========================================================================
 
     /// Builds a render-ready model for the UI.
-    pub fn build_render_model(&self) -> RenderModel {
-        match (self.workspace.active_document(), self.workspace.active_view()) {
-            (Some(doc), Some(view)) => {
-                ViewModelBuilder::build(doc, view, self.show_exit_dialog)
+    pub fn build_render_model(&mut self, viewport_height: usize) -> RenderModel {
+        let status_message = self.status_message.as_deref();
+
+        let model = match (
+            self.workspace.active_document(),
+            self.workspace.active_view(),
+        ) {
+            (Some(doc), Some(view)) => ViewModelBuilder::build(
+                doc,
+                view,
+                self.pending_action.as_ref(),
+                self.pending_error.as_ref(),
+                &self.sidebar,
+                self.focus,
+                viewport_height,
+                status_message,
+            ),
+            _ => {
+                // Even without a document, we might want to show the sidebar
+                ViewModelBuilder::build_sidebar_only(&self.sidebar, self.focus, viewport_height)
             }
-            _ => RenderModel::default(),
-        }
+        };
+
+        // Clear the status message after building the model (one-shot display)
+        self.status_message = None;
+
+        model
     }
 }
 
@@ -395,29 +664,52 @@ impl Default for App {
 }
 
 // =========================================================================
-// Expose view for direct access in main.rs (backwards compatibility)
+// Legacy accessors - DEPRECATED
 // =========================================================================
+//
+// These methods provide direct mutable access to domain objects, bypassing
+// the command system. They are retained for backwards compatibility but
+// should NOT be used for new code.
+//
+// Instead, use:
+// - EditorCommand + dispatch() for all editing operations
+// - Higher-level App methods (insert_char, move_cursor_*, etc.)
+//
+// Direct mutations bypass undo/redo history and can leak domain logic
+// into UI code. Plan to remove these once all usages are migrated.
 
 impl App {
     /// Returns a reference to the active view.
     ///
-    /// This is provided for backwards compatibility with main.rs.
-    pub fn view(&self) -> Option<&mudatexteditor::view::EditorView> {
+    /// Prefer using App's higher-level methods for read access.
+    #[allow(dead_code)]
+    pub(crate) fn view(&self) -> Option<&mudatexteditor::view::EditorView> {
         self.workspace.active_view()
     }
 
     /// Returns a mutable reference to the active view.
-    pub fn view_mut(&mut self) -> Option<&mut mudatexteditor::view::EditorView> {
+    ///
+    /// **DEPRECATED**: Direct view mutations bypass the command system.
+    /// Use EditorCommand + dispatch() instead for operations that modify state.
+    #[allow(dead_code)]
+    pub(crate) fn view_mut(&mut self) -> Option<&mut mudatexteditor::view::EditorView> {
         self.workspace.active_view_mut()
     }
 
     /// Returns a reference to the active document.
-    pub fn document(&self) -> Option<&mudatexteditor::domain::Document> {
+    ///
+    /// Prefer using App's higher-level methods for read access.
+    #[allow(dead_code)]
+    pub(crate) fn document(&self) -> Option<&mudatexteditor::domain::Document> {
         self.workspace.active_document()
     }
 
     /// Returns a mutable reference to the active document.
-    pub fn document_mut(&mut self) -> Option<&mut mudatexteditor::domain::Document> {
+    ///
+    /// **DEPRECATED**: Direct document mutations bypass the command system
+    /// and undo/redo history. Use EditorCommand + dispatch() instead.
+    #[allow(dead_code)]
+    pub(crate) fn document_mut(&mut self) -> Option<&mut mudatexteditor::domain::Document> {
         self.workspace.active_document_mut()
     }
 }

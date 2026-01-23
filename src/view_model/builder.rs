@@ -4,14 +4,37 @@
 //! Document + EditorView state into a render-ready RenderModel.
 
 use ratatui::style::{Color, Style};
+use std::path::PathBuf;
 
-use crate::domain::{Document, TextPosition};
+use crate::domain::{Document, DocumentId, ProtectionError, TextPosition};
 use crate::syntax::{HighlightSpan, SyntaxHighlighter};
-use crate::view::EditorView;
+use crate::view::{EditorView, FocusState, Sidebar};
 use crate::view_model::{
-    CaretPresentation, DialogPresentation, GutterModel, LinePresentation, RenderModel,
-    StatusPresentation, StyledSpan, VisualPosition,
+    CaretPresentation, DialogPresentation, FileEntryPresentation, GutterModel, LinePresentation,
+    RenderModel, SidebarPresentation, StatusPresentation, StyledSpan, VisualPosition,
 };
+
+/// Represents a pending action that requires user confirmation.
+#[derive(Clone, Debug)]
+pub enum PendingAction {
+    /// Exit the application.
+    Exit,
+    /// Close a specific document.
+    CloseDocument(DocumentId),
+    /// Open a file (potentially switching away from unsaved document).
+    OpenFile(PathBuf),
+}
+
+impl PendingAction {
+    /// Returns a human-readable description of the action.
+    pub fn description(&self) -> &'static str {
+        match self {
+            PendingAction::Exit => "Exit",
+            PendingAction::CloseDocument(_) => "Close file",
+            PendingAction::OpenFile(_) => "Open file",
+        }
+    }
+}
 
 /// Builder for constructing RenderModel from domain state.
 pub struct ViewModelBuilder;
@@ -22,11 +45,21 @@ impl ViewModelBuilder {
     /// # Arguments
     /// * `document` - The document containing text and syntax state
     /// * `view` - The editor view with viewport, caret, and selection
-    /// * `show_exit_dialog` - Whether to show the exit confirmation dialog
+    /// * `pending_action` - Optional pending action that needs confirmation
+    /// * `protection_error` - Optional protection error for the pending action
+    /// * `sidebar` - The sidebar state
+    /// * `focus` - The current focus state
+    /// * `viewport_height` - The available viewport height for sidebar
+    /// * `status_message` - Optional status message to display
     pub fn build(
         document: &Document,
         view: &EditorView,
-        show_exit_dialog: bool,
+        pending_action: Option<&PendingAction>,
+        protection_error: Option<&ProtectionError>,
+        sidebar: &Sidebar,
+        focus: FocusState,
+        viewport_height: usize,
+        status_message: Option<&str>,
     ) -> RenderModel {
         let viewport = &view.viewport;
         let selection = view.selection_range();
@@ -59,14 +92,13 @@ impl ViewModelBuilder {
         );
 
         // Build status line
-        let status = Self::build_status_presentation(document, caret_pos);
+        let status = Self::build_status_presentation(document, caret_pos, status_message);
 
-        // Build dialog state
-        let dialog = if show_exit_dialog {
-            DialogPresentation::ExitConfirmation
-        } else {
-            DialogPresentation::None
-        };
+        // Build dialog state from pending action and protection error
+        let dialog = Self::build_dialog_presentation(pending_action, protection_error);
+
+        // Build sidebar presentation
+        let sidebar_pres = Self::build_sidebar_presentation(sidebar, focus, viewport_height);
 
         RenderModel {
             visible_lines,
@@ -74,8 +106,84 @@ impl ViewModelBuilder {
             caret,
             status,
             dialog,
+            sidebar: sidebar_pres,
             scroll_x: viewport.scroll_x,
             scroll_y: viewport.scroll_y,
+        }
+    }
+
+    /// Builds the dialog presentation from pending action and protection error.
+    fn build_dialog_presentation(
+        pending_action: Option<&PendingAction>,
+        protection_error: Option<&ProtectionError>,
+    ) -> DialogPresentation {
+        match (pending_action, protection_error) {
+            (Some(action), Some(error)) => {
+                let action_desc = action.description().to_string();
+                let unsaved_docs = error.document_titles()
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect();
+                DialogPresentation::UnsavedChangesConfirmation {
+                    action_description: action_desc,
+                    unsaved_documents: unsaved_docs,
+                }
+            }
+            _ => DialogPresentation::None,
+        }
+    }
+
+    /// Builds a RenderModel when only the sidebar should be shown (no document).
+    pub fn build_sidebar_only(
+        sidebar: &Sidebar,
+        focus: FocusState,
+        viewport_height: usize,
+    ) -> RenderModel {
+        let sidebar_pres = Self::build_sidebar_presentation(sidebar, focus, viewport_height);
+        RenderModel {
+            sidebar: sidebar_pres,
+            ..Default::default()
+        }
+    }
+
+    /// Builds the sidebar presentation from sidebar state.
+    fn build_sidebar_presentation(
+        sidebar: &Sidebar,
+        focus: FocusState,
+        viewport_height: usize,
+    ) -> SidebarPresentation {
+        if !sidebar.visible {
+            return SidebarPresentation::default();
+        }
+
+        let directory_name = sidebar
+            .base_directory
+            .as_ref()
+            .and_then(|p| p.file_name())
+            .and_then(|n| n.to_str())
+            .unwrap_or("Files")
+            .to_string();
+
+        let visible_entries = sidebar.visible_entries(viewport_height);
+        let entries: Vec<FileEntryPresentation> = visible_entries
+            .iter()
+            .enumerate()
+            .map(|(i, entry)| {
+                let actual_index = sidebar.scroll_offset + i;
+                FileEntryPresentation::new(
+                    entry.name.clone(),
+                    entry.is_dir,
+                    actual_index == sidebar.selected_index,
+                )
+            })
+            .collect();
+
+        SidebarPresentation {
+            visible: true,
+            focused: focus == FocusState::Sidebar,
+            directory_name,
+            entries,
+            width: sidebar.width(),
         }
     }
 
@@ -317,7 +425,11 @@ impl ViewModelBuilder {
     }
 
     /// Builds the status line presentation.
-    fn build_status_presentation(document: &Document, caret_pos: TextPosition) -> StatusPresentation {
+    fn build_status_presentation(
+        document: &Document,
+        caret_pos: TextPosition,
+        status_message: Option<&str>,
+    ) -> StatusPresentation {
         let title = document.file_path()
             .and_then(|p| p.file_name())
             .and_then(|n| n.to_str())
@@ -333,6 +445,7 @@ impl ViewModelBuilder {
             cursor_column: caret_pos.column + 1, // 1-indexed
             language,
             total_lines: document.len_lines(),
+            message: status_message.map(|s| s.to_string()),
         }
     }
 }
@@ -348,8 +461,9 @@ mod tests {
         let doc = Document::from_str("Hello\nWorld", None);
         let mut view = EditorView::new(doc.id());
         view.viewport.resize(80, 24); // Set viewport dimensions
+        let sidebar = Sidebar::default();
 
-        let model = ViewModelBuilder::build(&doc, &view, false);
+        let model = ViewModelBuilder::build(&doc, &view, None, None, &sidebar, FocusState::Editor, 24, None);
 
         assert_eq!(model.visible_lines.len(), 2);
         assert_eq!(model.visible_lines[0].line_number, 1);
@@ -364,8 +478,9 @@ mod tests {
         let mut view = EditorView::new(doc.id());
         view.viewport.resize(80, 24); // Set viewport dimensions
         view.move_caret_to(7, false); // "W" in "World"
+        let sidebar = Sidebar::default();
 
-        let model = ViewModelBuilder::build(&doc, &view, false);
+        let model = ViewModelBuilder::build(&doc, &view, None, None, &sidebar, FocusState::Editor, 24, None);
 
         assert_eq!(model.caret.position.row, 1); // Second line
         assert_eq!(model.caret.position.column, 1); // Second char
@@ -374,15 +489,29 @@ mod tests {
 
     #[test]
     fn test_dialog_state() {
+        use crate::domain::{DocumentId, ProtectionError, UnsavedDocument};
+
         let doc = Document::from_str("test", None);
         let mut view = EditorView::new(doc.id());
         view.viewport.resize(80, 24);
+        let sidebar = Sidebar::default();
 
-        let model_no_dialog = ViewModelBuilder::build(&doc, &view, false);
+        // No dialog when no pending action
+        let model_no_dialog = ViewModelBuilder::build(&doc, &view, None, None, &sidebar, FocusState::Editor, 24, None);
         assert!(matches!(model_no_dialog.dialog, DialogPresentation::None));
 
-        let model_with_dialog = ViewModelBuilder::build(&doc, &view, true);
-        assert!(matches!(model_with_dialog.dialog, DialogPresentation::ExitConfirmation));
+        // Dialog shown when pending action + protection error
+        let pending = PendingAction::Exit;
+        let unsaved = UnsavedDocument::new(DocumentId::new(), "test.txt");
+        let error = ProtectionError::UnsavedChanges(unsaved);
+        let model_with_dialog = ViewModelBuilder::build(&doc, &view, Some(&pending), Some(&error), &sidebar, FocusState::Editor, 24, None);
+
+        if let DialogPresentation::UnsavedChangesConfirmation { action_description, unsaved_documents } = model_with_dialog.dialog {
+            assert_eq!(action_description, "Exit");
+            assert_eq!(unsaved_documents, vec!["test.txt"]);
+        } else {
+            panic!("Expected UnsavedChangesConfirmation dialog");
+        }
     }
 
     #[test]
@@ -390,12 +519,45 @@ mod tests {
         let doc = Document::from_str("Line 1\nLine 2\nLine 3", None);
         let mut view = EditorView::new(doc.id());
         view.viewport.resize(80, 24);
+        let sidebar = Sidebar::default();
 
-        let model = ViewModelBuilder::build(&doc, &view, false);
+        let model = ViewModelBuilder::build(&doc, &view, None, None, &sidebar, FocusState::Editor, 24, None);
 
         assert_eq!(model.status.cursor_line, 1);
         assert_eq!(model.status.cursor_column, 1);
         assert_eq!(model.status.total_lines, 3);
         assert!(!model.status.dirty);
+        assert!(model.status.message.is_none());
+    }
+
+    #[test]
+    fn test_status_message() {
+        let doc = Document::from_str("test", None);
+        let mut view = EditorView::new(doc.id());
+        view.viewport.resize(80, 24);
+        let sidebar = Sidebar::default();
+
+        let model = ViewModelBuilder::build(&doc, &view, None, None, &sidebar, FocusState::Editor, 24, Some("File saved"));
+
+        assert_eq!(model.status.message, Some("File saved".to_string()));
+    }
+
+    #[test]
+    fn test_sidebar_presentation() {
+        let doc = Document::from_str("test", None);
+        let mut view = EditorView::new(doc.id());
+        view.viewport.resize(80, 24);
+
+        // Test hidden sidebar
+        let sidebar = Sidebar::default();
+        let model = ViewModelBuilder::build(&doc, &view, None, None, &sidebar, FocusState::Editor, 24, None);
+        assert!(!model.sidebar.visible);
+
+        // Test visible sidebar
+        let mut sidebar = Sidebar::default();
+        sidebar.visible = true;
+        let model = ViewModelBuilder::build(&doc, &view, None, None, &sidebar, FocusState::Sidebar, 24, None);
+        assert!(model.sidebar.visible);
+        assert!(model.sidebar.focused);
     }
 }

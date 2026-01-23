@@ -10,9 +10,11 @@
 //! - `workspace`: Top-level container for multi-document editing sessions
 
 pub mod document;
+pub mod protection;
 pub mod text_buffer;
 pub mod workspace;
 
 pub use document::{Document, DocumentId, DocumentMetadata, LineEnding};
+pub use protection::{DiscardAcknowledgment, ProtectedResult, ProtectionError, UnsavedDocument};
 pub use text_buffer::{DocumentRevision, TextBuffer, TextOffset, TextPosition, TextRange};
 pub use workspace::Workspace;

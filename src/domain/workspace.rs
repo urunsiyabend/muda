@@ -20,6 +20,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use crate::commands::CommandHistory;
+use crate::domain::protection::{DiscardAcknowledgment, ProtectedResult, ProtectionError, UnsavedDocument};
 use crate::domain::{Document, DocumentId, TextPosition};
 use crate::events::{DomainEvent, EventBus};
 use crate::view::{EditorView, ViewId};
@@ -99,10 +100,13 @@ impl Workspace {
         Ok(doc_id)
     }
 
-    /// Closes a document and all views associated with it.
+    /// Closes a document and all views associated with it (force close).
     ///
     /// Returns `true` if the document was found and closed.
-    pub fn close_document(&mut self, doc_id: DocumentId) -> bool {
+    ///
+    /// **Note**: This method does not check for unsaved changes.
+    /// Use `close_document_protected()` for safe closing with protection.
+    pub(crate) fn close_document_force(&mut self, doc_id: DocumentId) -> bool {
         if let Some(document) = self.documents.remove(&doc_id) {
             // Emit close event
             self.event_bus.publish(document.event_closed());
@@ -390,6 +394,81 @@ impl Workspace {
     pub fn unsaved_documents(&self) -> impl Iterator<Item = &Document> {
         self.documents.values().filter(|d| d.is_dirty())
     }
+
+    // =========================================================================
+    // Protected Operations (Unsaved File Protection)
+    // =========================================================================
+
+    /// Returns the display title for a document.
+    fn document_title(&self, doc_id: DocumentId) -> String {
+        self.documents
+            .get(&doc_id)
+            .and_then(|doc| doc.file_path())
+            .and_then(|p| p.file_name())
+            .and_then(|n| n.to_str())
+            .unwrap_or("[New File]")
+            .to_string()
+    }
+
+    /// Attempts to close a document, returning an error if it has unsaved changes.
+    ///
+    /// This is the protected version that enforces acknowledgment of unsaved changes.
+    pub fn close_document_protected(&mut self, doc_id: DocumentId) -> ProtectedResult<bool> {
+        if let Some(doc) = self.documents.get(&doc_id) {
+            if doc.is_dirty() {
+                let unsaved = UnsavedDocument::new(doc_id, self.document_title(doc_id));
+                return Err(ProtectionError::UnsavedChanges(unsaved));
+            }
+        }
+        Ok(self.close_document_force(doc_id))
+    }
+
+    /// Closes a document after explicit acknowledgment of unsaved changes.
+    ///
+    /// The `_ack` parameter proves the caller confirmed the discard.
+    pub fn close_document_acknowledged(
+        &mut self,
+        doc_id: DocumentId,
+        _ack: DiscardAcknowledgment,
+    ) -> bool {
+        self.close_document_force(doc_id)
+    }
+
+    /// Checks if the application can exit safely.
+    ///
+    /// Returns `Ok(())` if all documents are saved, or an error listing
+    /// all documents with unsaved changes.
+    pub fn can_exit(&self) -> ProtectedResult<()> {
+        let unsaved: Vec<UnsavedDocument> = self
+            .documents
+            .iter()
+            .filter(|(_, doc)| doc.is_dirty())
+            .map(|(id, _)| UnsavedDocument::new(*id, self.document_title(*id)))
+            .collect();
+
+        match unsaved.len() {
+            0 => Ok(()),
+            1 => Err(ProtectionError::UnsavedChanges(unsaved.into_iter().next().unwrap())),
+            _ => Err(ProtectionError::MultipleUnsavedChanges(unsaved)),
+        }
+    }
+
+    /// Checks if switching to a different active document is safe.
+    ///
+    /// Returns `Ok(())` if the active document is saved, or an error
+    /// if it has unsaved changes.
+    pub fn can_switch_active(&self) -> ProtectedResult<()> {
+        if let Some(view) = self.active_view() {
+            let doc_id = view.document_id();
+            if let Some(doc) = self.documents.get(&doc_id) {
+                if doc.is_dirty() {
+                    let unsaved = UnsavedDocument::new(doc_id, self.document_title(doc_id));
+                    return Err(ProtectionError::UnsavedChanges(unsaved));
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 impl Default for Workspace {
@@ -465,7 +544,7 @@ mod tests {
 
         assert_eq!(workspace.view_count(), 2);
 
-        workspace.close_document(doc_id);
+        workspace.close_document_force(doc_id);
 
         assert_eq!(workspace.document_count(), 0);
         assert_eq!(workspace.view_count(), 0);
@@ -508,5 +587,163 @@ mod tests {
 
         // Should fall back to view1
         assert_eq!(workspace.active_view_id(), Some(view1_id));
+    }
+
+    // =========================================================================
+    // Protected Operations Tests
+    // =========================================================================
+
+    #[test]
+    fn test_close_document_protected_clean() {
+        let mut workspace = Workspace::new();
+        let doc_id = workspace.create_document();
+        workspace.create_view(doc_id);
+
+        // Clean document should close without error
+        let result = workspace.close_document_protected(doc_id);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), true);
+        assert_eq!(workspace.document_count(), 0);
+    }
+
+    #[test]
+    fn test_close_document_protected_dirty() {
+        use crate::domain::ProtectionError;
+
+        let mut workspace = Workspace::new();
+        let doc_id = workspace.create_document();
+        workspace.create_view(doc_id);
+
+        // Make the document dirty
+        if let Some(doc) = workspace.document_mut(doc_id) {
+            doc.mark_dirty();
+        }
+
+        // Dirty document should return error
+        let result = workspace.close_document_protected(doc_id);
+        assert!(result.is_err());
+
+        if let Err(ProtectionError::UnsavedChanges(unsaved)) = result {
+            assert_eq!(unsaved.id, doc_id);
+        } else {
+            panic!("Expected UnsavedChanges error");
+        }
+
+        // Document should still be open
+        assert_eq!(workspace.document_count(), 1);
+    }
+
+    #[test]
+    fn test_close_document_acknowledged() {
+        use crate::domain::DiscardAcknowledgment;
+
+        let mut workspace = Workspace::new();
+        let doc_id = workspace.create_document();
+        workspace.create_view(doc_id);
+
+        // Make the document dirty
+        if let Some(doc) = workspace.document_mut(doc_id) {
+            doc.mark_dirty();
+        }
+
+        // With acknowledgment, close should succeed
+        let ack = DiscardAcknowledgment::confirmed();
+        let result = workspace.close_document_acknowledged(doc_id, ack);
+        assert!(result);
+        assert_eq!(workspace.document_count(), 0);
+    }
+
+    #[test]
+    fn test_can_exit_all_clean() {
+        let mut workspace = Workspace::new();
+        workspace.create_document();
+        workspace.create_document();
+
+        // All clean documents - can exit
+        let result = workspace.can_exit();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_can_exit_one_dirty() {
+        use crate::domain::ProtectionError;
+
+        let mut workspace = Workspace::new();
+        let doc1_id = workspace.create_document();
+        let _doc2_id = workspace.create_document();
+
+        // Make one document dirty
+        if let Some(doc) = workspace.document_mut(doc1_id) {
+            doc.mark_dirty();
+        }
+
+        let result = workspace.can_exit();
+        assert!(result.is_err());
+
+        if let Err(ProtectionError::UnsavedChanges(unsaved)) = result {
+            assert_eq!(unsaved.id, doc1_id);
+        } else {
+            panic!("Expected UnsavedChanges error");
+        }
+    }
+
+    #[test]
+    fn test_can_exit_multiple_dirty() {
+        use crate::domain::ProtectionError;
+
+        let mut workspace = Workspace::new();
+        let doc1_id = workspace.create_document();
+        let doc2_id = workspace.create_document();
+
+        // Make both documents dirty
+        if let Some(doc) = workspace.document_mut(doc1_id) {
+            doc.mark_dirty();
+        }
+        if let Some(doc) = workspace.document_mut(doc2_id) {
+            doc.mark_dirty();
+        }
+
+        let result = workspace.can_exit();
+        assert!(result.is_err());
+
+        if let Err(ProtectionError::MultipleUnsavedChanges(unsaved)) = result {
+            assert_eq!(unsaved.len(), 2);
+        } else {
+            panic!("Expected MultipleUnsavedChanges error");
+        }
+    }
+
+    #[test]
+    fn test_can_switch_active_clean() {
+        let mut workspace = Workspace::new();
+        let doc_id = workspace.create_document();
+        workspace.create_view(doc_id);
+
+        // Clean document - can switch
+        let result = workspace.can_switch_active();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_can_switch_active_dirty() {
+        use crate::domain::ProtectionError;
+
+        let mut workspace = Workspace::new();
+        let doc_id = workspace.create_document();
+        workspace.create_view(doc_id);
+
+        // Make the document dirty
+        if let Some(doc) = workspace.document_mut(doc_id) {
+            doc.mark_dirty();
+        }
+
+        let result = workspace.can_switch_active();
+        assert!(result.is_err());
+
+        if let Err(ProtectionError::UnsavedChanges(unsaved)) = result {
+            assert_eq!(unsaved.id, doc_id);
+        } else {
+            panic!("Expected UnsavedChanges error");
+        }
     }
 }

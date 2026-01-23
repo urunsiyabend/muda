@@ -11,6 +11,7 @@ use simplelog::{Config, LevelFilter, WriteLogger};
 use std::env;
 use std::fs::File;
 use std::io;
+use std::path::Path;
 
 fn main() -> io::Result<()> {
     let log_file = File::create("editor.log").unwrap();
@@ -20,18 +21,36 @@ fn main() -> io::Result<()> {
 
     let args: Vec<String> = env::args().collect();
     let mut app = if args.len() > 1 {
-        match App::open_file(&args[1]) {
-            Ok(app) => {
-                debug!("File opened: {}", &args[1]);
-                app
-            }
-            Err(e) => {
-                debug!("Could not open file: {}, creating new document", e);
-                let mut app = App::new();
-                if let Some(doc) = app.document_mut() {
-                    doc.set_file_path(std::path::PathBuf::from(&args[1]));
+        let path = Path::new(&args[1]);
+
+        if path.is_dir() {
+            // Launched with a directory - show sidebar
+            match App::open_directory(&args[1]) {
+                Ok(app) => {
+                    debug!("Opened directory: {}", &args[1]);
+                    app
                 }
-                app
+                Err(e) => {
+                    debug!(
+                        "Could not open directory: {}, starting with new document",
+                        e
+                    );
+                    App::new()
+                }
+            }
+        } else {
+            // Launched with a file - hide sidebar by default
+            match App::open_file(&args[1]) {
+                Ok(app) => {
+                    debug!("File opened: {}", &args[1]);
+                    app
+                }
+                Err(e) => {
+                    debug!("Could not open file: {}, creating new document", e);
+                    let mut app = App::new();
+                    app.set_file_path(std::path::PathBuf::from(&args[1]));
+                    app
+                }
             }
         }
     } else {
@@ -45,16 +64,15 @@ fn main() -> io::Result<()> {
     let mut terminal = ratatui::Terminal::new(backend)?;
 
     let size = terminal.size()?;
-    let line_num_width = app.line_number_width();
-    app.check_scrolling(
-        (size.width as usize)
-            .saturating_sub(2)
-            .saturating_sub(line_num_width),
-        (size.height as usize).saturating_sub(2),
-    );
+    let (editor_width, editor_height) = calculate_editor_dimensions(&app, size.width, size.height);
+    app.check_scrolling(editor_width, editor_height);
 
     while !app.should_quit {
-        let render_model = app.build_render_model();
+        let size = terminal.size()?;
+        let viewport_height = (size.height as usize).saturating_sub(2);
+        app.adjust_sidebar_scroll(viewport_height);
+
+        let render_model = app.build_render_model(viewport_height);
         terminal.draw(|f| ui(f, &render_model))?;
 
         match event::read()? {
@@ -62,10 +80,102 @@ fn main() -> io::Result<()> {
                 let is_ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
                 let is_shift = key.modifiers.contains(KeyModifiers::SHIFT);
 
+                // Handle dialog state first (pending action confirmation)
+                if app.has_pending_action() {
+                    match key.code {
+                        KeyCode::Char('y') | KeyCode::Char('Y') => {
+                            // Save first, then confirm
+                            if let Err(e) = app.save() {
+                                log::error!("Save on confirmation failed: {}", e);
+                            }
+                            app.confirm_pending_action();
+                        }
+                        KeyCode::Char('n') | KeyCode::Char('N') => {
+                            // Discard changes and confirm
+                            app.confirm_pending_action();
+                        }
+                        KeyCode::Esc => {
+                            // Cancel the pending action
+                            app.cancel_pending_action();
+                        }
+                        _ => {}
+                    }
+                    continue;
+                }
+
+                // Global keybindings (work in both editor and sidebar focus)
                 match key.code {
                     KeyCode::Char('s') if is_ctrl => {
-                        let _ = app.save();
+                        // Save now handles its own status message (success/failure)
+                        if let Err(e) = app.save() {
+                            log::error!("Save failed: {}", e);
+                        }
+                        continue;
                     }
+                    KeyCode::Char('b') if is_ctrl => {
+                        // Toggle sidebar visibility
+                        app.toggle_sidebar();
+                        // Recalculate scrolling for new layout
+                        let (editor_width, editor_height) =
+                            calculate_editor_dimensions(&app, size.width, size.height);
+                        app.check_scrolling(editor_width, editor_height);
+                        continue;
+                    }
+                    KeyCode::Char('h') if is_ctrl => {
+                        // Focus sidebar (only if visible)
+                        app.focus_sidebar();
+                        continue;
+                    }
+                    KeyCode::Char('l') if is_ctrl && !is_shift => {
+                        // Focus editor
+                        app.focus_editor();
+                        continue;
+                    }
+                    KeyCode::Esc => {
+                        // Request exit - will show confirmation dialog if unsaved changes
+                        let _ = app.request_exit();
+                        continue;
+                    }
+                    _ => {}
+                }
+
+                // Handle sidebar-specific keybindings
+                if app.is_sidebar_focused() {
+                    match key.code {
+                        KeyCode::Up | KeyCode::Char('k') => {
+                            app.sidebar_move_up();
+                        }
+                        KeyCode::Down | KeyCode::Char('j') => {
+                            app.sidebar_move_down();
+                        }
+                        KeyCode::Left | KeyCode::Char('h') | KeyCode::Backspace => {
+                            app.sidebar_go_back();
+                        }
+                        KeyCode::Enter => {
+                            if let Some(entry) = app.sidebar.selected_entry() {
+                                if entry.is_dir {
+                                    // Navigate into directory
+                                    let new_path = entry.path.clone();
+                                    app.sidebar.set_base_directory(new_path);
+                                    app.needs_render = true;
+                                } else {
+                                    // Request to open the file (may trigger confirmation dialog)
+                                    let path = entry.path.clone();
+                                    let _ = app.request_open_file(path);
+                                }
+                            }
+                            // Recalculate scrolling after opening a file
+                            let (editor_width, editor_height) =
+                                calculate_editor_dimensions(&app, size.width, size.height);
+                            app.check_scrolling(editor_width, editor_height);
+                        }
+                        _ => {}
+                    }
+                    continue;
+                }
+
+                // Editor-specific keybindings
+                match key.code {
                     KeyCode::Char('c') if is_ctrl => {
                         app.copy_selection();
                     }
@@ -90,14 +200,6 @@ fn main() -> io::Result<()> {
                     KeyCode::Char('l') if is_ctrl => {
                         app.toggle_line_numbers();
                     }
-                    KeyCode::Char('y') | KeyCode::Char('Y') if app.show_exit_dialog => {
-                        let _ = app.save();
-                        app.should_quit = true;
-                    }
-                    KeyCode::Char('n') | KeyCode::Char('N') if app.show_exit_dialog => {
-                        app.should_quit = true;
-                    }
-                    _ if app.show_exit_dialog => {}
 
                     KeyCode::Left | KeyCode::Right | KeyCode::Up | KeyCode::Down => {
                         // Handle selection with shift
@@ -144,7 +246,6 @@ fn main() -> io::Result<()> {
                             app.clear_selection();
                         }
 
-                        let size = terminal.size()?;
                         let page_height = (size.height as usize).saturating_sub(4);
 
                         match key.code {
@@ -211,26 +312,12 @@ fn main() -> io::Result<()> {
                             app.delete_at_cursor();
                         }
                     }
-                    KeyCode::Esc => {
-                        if app.show_exit_dialog {
-                            app.show_exit_dialog = false;
-                        } else if app.dirty() {
-                            app.show_exit_dialog = true;
-                        } else {
-                            app.should_quit = true;
-                        }
-                    }
                     _ => {}
                 }
 
-                let size = terminal.size()?;
-                let line_num_width = app.line_number_width();
-                app.check_scrolling(
-                    (size.width as usize)
-                        .saturating_sub(2)
-                        .saturating_sub(line_num_width),
-                    (size.height as usize).saturating_sub(2),
-                );
+                let (editor_width, editor_height) =
+                    calculate_editor_dimensions(&app, size.width, size.height);
+                app.check_scrolling(editor_width, editor_height);
             }
             Event::Paste(text) => {
                 debug!("Paste event: {:?}", text);
@@ -239,24 +326,15 @@ fn main() -> io::Result<()> {
                 }
                 app.insert_string_at_cursor(&text);
 
-                let size = terminal.size()?;
-                let line_num_width = app.line_number_width();
-                app.check_scrolling(
-                    (size.width as usize)
-                        .saturating_sub(2)
-                        .saturating_sub(line_num_width),
-                    (size.height as usize).saturating_sub(2),
-                );
+                let (editor_width, editor_height) =
+                    calculate_editor_dimensions(&app, size.width, size.height);
+                app.check_scrolling(editor_width, editor_height);
             }
             Event::Resize(_, _) => {
                 let size = terminal.size()?;
-                let line_num_width = app.line_number_width();
-                app.check_scrolling(
-                    (size.width as usize)
-                        .saturating_sub(2)
-                        .saturating_sub(line_num_width),
-                    (size.height as usize).saturating_sub(2),
-                );
+                let (editor_width, editor_height) =
+                    calculate_editor_dimensions(&app, size.width, size.height);
+                app.check_scrolling(editor_width, editor_height);
             }
             _ => {}
         }
@@ -269,4 +347,30 @@ fn main() -> io::Result<()> {
         crossterm::terminal::LeaveAlternateScreen
     )?;
     Ok(())
+}
+
+/// Calculates the editor dimensions accounting for sidebar width.
+fn calculate_editor_dimensions(
+    app: &App,
+    terminal_width: u16,
+    terminal_height: u16,
+) -> (usize, usize) {
+    let sidebar_width = if app.sidebar.visible {
+        app.sidebar.width()
+    } else {
+        0
+    };
+
+    let line_num_width = app.line_number_width();
+
+    // Width: terminal - sidebar - borders (2) - line numbers
+    let editor_width = (terminal_width as usize)
+        .saturating_sub(sidebar_width)
+        .saturating_sub(2)
+        .saturating_sub(line_num_width);
+
+    // Height: terminal - borders (2)
+    let editor_height = (terminal_height as usize).saturating_sub(2);
+
+    (editor_width, editor_height)
 }

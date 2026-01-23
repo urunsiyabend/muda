@@ -3,10 +3,89 @@
 //! The ViewModel layer decouples rendering from domain internals.
 //! It provides a clean interface for the UI to draw without directly
 //! accessing Document or EditorView internals.
+//!
+//! # Styling Architecture
+//!
+//! This module uses a two-layer styling approach:
+//!
+//! 1. **Domain-level styles** ([`TextStyle`]): Semantic token types that describe
+//!    *what* something is (keyword, comment, selection, etc.) without specifying
+//!    *how* it should look.
+//!
+//! 2. **Backend-specific styles**: The rendering layer (e.g., `draw.rs` for ratatui)
+//!    maps domain styles to concrete visual styles (colors, modifiers, etc.).
+//!
+//! This separation allows the ViewModel to remain backend-agnostic, making it
+//! easier to support alternative rendering backends (GUI, web, etc.) in the future.
 
 pub mod builder;
 
+pub use builder::PendingAction;
+
 use ratatui::style::Style;
+
+// =============================================================================
+// Domain-Level Styling (UI-Agnostic)
+// =============================================================================
+
+/// Semantic text style tokens.
+///
+/// These represent *what* the text is, not *how* it should look.
+/// The rendering layer maps these to concrete visual styles.
+///
+/// # Future-Proofing
+///
+/// When adding a non-TUI frontend, create a style mapper that converts
+/// `TextStyle` to the appropriate backend representation (e.g., CSS classes
+/// for web, or NSAttributedString attributes for macOS).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum TextStyle {
+    /// Normal text with no special styling.
+    #[default]
+    Normal,
+
+    // === Selection & Cursor ===
+    /// Selected text (highlighted region).
+    Selection,
+
+    // === Syntax Highlighting ===
+    /// Language keyword (if, else, fn, struct, etc.).
+    Keyword,
+    /// String literal.
+    String,
+    /// Numeric literal.
+    Number,
+    /// Comment (single-line or multi-line).
+    Comment,
+    /// Type name or annotation.
+    Type,
+    /// Function or method name.
+    Function,
+    /// Variable or identifier.
+    Variable,
+    /// Operator (+, -, *, /, etc.).
+    Operator,
+    /// Punctuation (braces, parentheses, semicolons, etc.).
+    Punctuation,
+    /// Constant or enum variant.
+    Constant,
+    /// Module or namespace.
+    Module,
+    /// Attribute or annotation.
+    Attribute,
+    /// Macro invocation.
+    Macro,
+
+    // === UI Elements ===
+    /// Line number in the gutter.
+    LineNumber,
+    /// Current line's line number (highlighted).
+    CurrentLineNumber,
+    /// Error or warning indicator.
+    Error,
+    /// Warning indicator.
+    Warning,
+}
 
 /// Position on screen (after viewport transformation).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -24,27 +103,61 @@ impl VisualPosition {
 }
 
 /// A styled span of text within a line.
+///
+/// # Styling Approach
+///
+/// Currently uses `ratatui::Style` directly for backwards compatibility.
+/// The `semantic_style` field provides a domain-level alternative that
+/// rendering backends can use instead.
+///
+/// **Migration path**: New code should populate `semantic_style` where possible.
+/// Once all syntax highlighting uses semantic styles, the rendering layer can
+/// map `TextStyle` → backend style, and the `style` field can be removed.
 #[derive(Clone, Debug)]
 pub struct StyledSpan {
     /// The text content.
     pub text: String,
-    /// The style to apply.
+
+    /// Legacy: Direct ratatui style (for current rendering compatibility).
+    /// Will be deprecated once semantic_style migration is complete.
     pub style: Style,
+
+    /// Domain-level semantic style (UI-agnostic).
+    /// Rendering backends map this to their native style representation.
+    pub semantic_style: TextStyle,
 }
 
 impl StyledSpan {
+    /// Creates a styled span with a ratatui style (legacy approach).
     pub fn new(text: impl Into<String>, style: Style) -> Self {
         Self {
             text: text.into(),
             style,
+            semantic_style: TextStyle::Normal,
         }
     }
 
+    /// Creates a styled span with a semantic style (preferred approach).
+    pub fn with_semantic(text: impl Into<String>, semantic_style: TextStyle) -> Self {
+        Self {
+            text: text.into(),
+            style: Style::default(),
+            semantic_style,
+        }
+    }
+
+    /// Creates an unstyled (normal) span.
     pub fn raw(text: impl Into<String>) -> Self {
         Self {
             text: text.into(),
             style: Style::default(),
+            semantic_style: TextStyle::Normal,
         }
+    }
+
+    /// Creates a selection-highlighted span.
+    pub fn selection(text: impl Into<String>) -> Self {
+        Self::with_semantic(text, TextStyle::Selection)
     }
 }
 
@@ -128,6 +241,8 @@ pub struct StatusPresentation {
     pub language: String,
     /// Total number of lines.
     pub total_lines: usize,
+    /// Optional status message (for feedback like save errors, confirmations).
+    pub message: Option<String>,
 }
 
 /// Visual representation of the cursor/caret.
@@ -144,14 +259,68 @@ pub struct CaretPresentation {
 pub enum DialogPresentation {
     /// No dialog shown.
     None,
-    /// Exit confirmation dialog for unsaved changes.
-    ExitConfirmation,
+    /// Confirmation dialog for unsaved changes.
+    ///
+    /// Contains information about the action being confirmed and
+    /// which documents have unsaved changes.
+    UnsavedChangesConfirmation {
+        /// Description of the action (e.g., "Exit", "Close file", "Open file").
+        action_description: String,
+        /// Titles of documents with unsaved changes.
+        unsaved_documents: Vec<String>,
+    },
 }
 
 impl Default for DialogPresentation {
     fn default() -> Self {
         Self::None
     }
+}
+
+impl DialogPresentation {
+    /// Creates an unsaved changes confirmation dialog.
+    pub fn unsaved_changes(action: impl Into<String>, documents: Vec<String>) -> Self {
+        Self::UnsavedChangesConfirmation {
+            action_description: action.into(),
+            unsaved_documents: documents,
+        }
+    }
+}
+
+/// Presentation data for a single file entry in the sidebar.
+#[derive(Clone, Debug)]
+pub struct FileEntryPresentation {
+    /// The display name of the file/directory.
+    pub name: String,
+    /// Whether this is a directory.
+    pub is_dir: bool,
+    /// Whether this entry is currently selected.
+    pub is_selected: bool,
+}
+
+impl FileEntryPresentation {
+    pub fn new(name: String, is_dir: bool, is_selected: bool) -> Self {
+        Self {
+            name,
+            is_dir,
+            is_selected,
+        }
+    }
+}
+
+/// Presentation data for the sidebar file explorer.
+#[derive(Clone, Debug, Default)]
+pub struct SidebarPresentation {
+    /// Whether the sidebar is visible.
+    pub visible: bool,
+    /// Whether the sidebar is focused.
+    pub focused: bool,
+    /// The base directory name (for title).
+    pub directory_name: String,
+    /// The visible file entries.
+    pub entries: Vec<FileEntryPresentation>,
+    /// Width of the sidebar in characters.
+    pub width: usize,
 }
 
 /// The complete render-ready model for the editor UI.
@@ -170,6 +339,8 @@ pub struct RenderModel {
     pub status: StatusPresentation,
     /// Active dialog (if any).
     pub dialog: DialogPresentation,
+    /// Sidebar presentation data.
+    pub sidebar: SidebarPresentation,
     /// Viewport scroll offset (for reference).
     pub scroll_x: usize,
     pub scroll_y: usize,
@@ -209,6 +380,17 @@ mod tests {
         let span = StyledSpan::raw("hello");
         assert_eq!(span.text, "hello");
         assert_eq!(span.style, Style::default());
+        assert_eq!(span.semantic_style, TextStyle::Normal);
+    }
+
+    #[test]
+    fn test_styled_span_semantic() {
+        let span = StyledSpan::with_semantic("selected", TextStyle::Selection);
+        assert_eq!(span.text, "selected");
+        assert_eq!(span.semantic_style, TextStyle::Selection);
+
+        let span = StyledSpan::selection("also selected");
+        assert_eq!(span.semantic_style, TextStyle::Selection);
     }
 
     #[test]
@@ -228,5 +410,16 @@ mod tests {
 
         model.status.dirty = true;
         assert_eq!(model.display_title(), "*test.rs");
+    }
+
+    #[test]
+    fn test_dialog_presentation_unsaved_changes() {
+        let dialog = DialogPresentation::unsaved_changes("Exit", vec!["file.txt".to_string()]);
+        if let DialogPresentation::UnsavedChangesConfirmation { action_description, unsaved_documents } = dialog {
+            assert_eq!(action_description, "Exit");
+            assert_eq!(unsaved_documents, vec!["file.txt"]);
+        } else {
+            panic!("Expected UnsavedChangesConfirmation");
+        }
     }
 }
