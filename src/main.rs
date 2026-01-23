@@ -132,8 +132,13 @@ fn main() -> io::Result<()> {
                         continue;
                     }
                     KeyCode::Esc => {
-                        // Request exit - will show confirmation dialog if unsaved changes
-                        let _ = app.request_exit();
+                        if app.is_sidebar_focused() {
+                            // Esc exits sidebar focus back to editor.
+                            app.focus_editor();
+                        } else {
+                            // Request exit - will show confirmation dialog if unsaved changes
+                            let _ = app.request_exit();
+                        }
                         continue;
                     }
                     _ => {}
