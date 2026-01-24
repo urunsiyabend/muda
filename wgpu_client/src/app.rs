@@ -4,11 +4,12 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use winit::application::ApplicationHandler;
-use winit::event::{StartCause, WindowEvent};
+use winit::event::{ElementState, MouseButton, StartCause, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
-use winit::window::{Window, WindowAttributes, WindowId};
+use winit::window::{CursorIcon, Window, WindowAttributes, WindowId};
 
 use core_editor::app::App as EditorApp;
+use core_editor::domain::TextPosition;
 
 use crate::input::{translate_app_action, translate_key, AppAction};
 use crate::renderer::GpuRenderer;
@@ -27,6 +28,18 @@ pub struct WgpuApp {
     last_frame: Instant,
     /// Whether a redraw is pending.
     redraw_pending: bool,
+    /// Current cursor position (logical pixels).
+    cursor_position: Option<(f64, f64)>,
+    /// Last click time for double-click detection.
+    last_click_time: Option<Instant>,
+    /// Last click position for double-click detection.
+    last_click_pos: Option<(f64, f64)>,
+    /// Cached viewport dimensions to avoid recalculating every frame.
+    cached_viewport: Option<(usize, usize)>,
+    /// Current cursor icon.
+    current_cursor: CursorIcon,
+    /// Whether we're currently dragging to select text.
+    is_dragging: bool,
 }
 
 impl WgpuApp {
@@ -39,6 +52,12 @@ impl WgpuApp {
             modifiers: winit::event::Modifiers::default(),
             last_frame: Instant::now(),
             redraw_pending: true,
+            cursor_position: None,
+            last_click_time: None,
+            last_click_pos: None,
+            cached_viewport: None,
+            current_cursor: CursorIcon::Default,
+            is_dragging: false,
         }
     }
 
@@ -51,6 +70,12 @@ impl WgpuApp {
             modifiers: winit::event::Modifiers::default(),
             last_frame: Instant::now(),
             redraw_pending: true,
+            cursor_position: None,
+            last_click_time: None,
+            last_click_pos: None,
+            cached_viewport: None,
+            current_cursor: CursorIcon::Default,
+            is_dragging: false,
         })
     }
 
@@ -63,6 +88,12 @@ impl WgpuApp {
             modifiers: winit::event::Modifiers::default(),
             last_frame: Instant::now(),
             redraw_pending: true,
+            cursor_position: None,
+            last_click_time: None,
+            last_click_pos: None,
+            cached_viewport: None,
+            current_cursor: CursorIcon::Default,
+            is_dragging: false,
         })
     }
 
@@ -80,10 +111,29 @@ impl WgpuApp {
         let Some(renderer) = &mut self.renderer else { return };
 
         let scale_factor = window.scale_factor() as f32;
-        let viewport_height = (window.inner_size().height as f32 / scale_factor
-            / renderer.theme().line_height_px()) as usize;
+        let theme = renderer.theme();
+        let line_height = theme.line_height_px();
+        let char_width = renderer.char_width();
 
-        let model = self.editor.build_render_model(viewport_height);
+        // Calculate viewport dimensions in characters/lines
+        let inner_size = window.inner_size();
+        let logical_width = inner_size.width as f32 / scale_factor;
+        let logical_height = inner_size.height as f32 / scale_factor;
+
+        // Account for sidebar, gutter, and status bar
+        let sidebar_width = self.editor.sidebar.width() as f32;
+        let status_height = 24.0;
+        let editor_width = ((logical_width - sidebar_width) / char_width) as usize;
+        let editor_height = ((logical_height - status_height) / line_height) as usize;
+
+        // Only update viewport if dimensions changed (performance optimization)
+        let new_viewport = (editor_width, editor_height);
+        if self.cached_viewport != Some(new_viewport) {
+            self.editor.check_scrolling(editor_width, editor_height);
+            self.cached_viewport = Some(new_viewport);
+        }
+
+        let model = self.editor.build_render_model(editor_height);
 
         match renderer.render(&model, scale_factor) {
             Ok(()) => {}
@@ -143,11 +193,284 @@ impl WgpuApp {
                     } else {
                         let path = entry.path.clone();
                         let _ = self.editor.request_open_file(path);
+                        // Invalidate cached viewport so the new view gets proper dimensions
+                        self.cached_viewport = None;
                     }
                 }
             }
         }
         self.request_redraw();
+    }
+
+    /// Handles mouse click at the given position (logical pixels).
+    fn handle_mouse_click(&mut self, x: f64, y: f64, is_double_click: bool) {
+        let Some(window) = &self.window else { return };
+        let Some(renderer) = &self.renderer else { return };
+
+        let scale_factor = window.scale_factor() as f32;
+        let theme = renderer.theme();
+        let sidebar_width = self.editor.sidebar.width() as f32;
+        let status_height = 24.0; // Status bar height
+        let tab_bar_height = renderer.tab_bar_height();
+        let screen_height = window.inner_size().height as f32 / scale_factor;
+
+        let x = x as f32;
+        let y = y as f32;
+
+        // Check if click is in status bar (ignore)
+        if y > screen_height - status_height {
+            return;
+        }
+
+        // Check if click is in sidebar
+        if self.editor.sidebar.visible && x < sidebar_width {
+            self.handle_sidebar_click(x, y, is_double_click, theme.font_size);
+            return;
+        }
+
+        // Check if click is in tab bar (ignore for now, TODO: handle tab clicks)
+        if y < tab_bar_height {
+            return;
+        }
+
+        // Click is in editor area - adjust y for tab bar
+        let char_width = renderer.char_width();
+        self.handle_editor_click(x, y - tab_bar_height, sidebar_width, char_width, theme.line_height_px());
+    }
+
+    /// Handles click in the sidebar.
+    fn handle_sidebar_click(&mut self, _x: f32, y: f32, is_double_click: bool, font_size: f32) {
+        let line_height = font_size * 0.9 * 1.4;
+        let top_padding = 8.0;
+
+        // Calculate which entry was clicked
+        let click_y = y - top_padding;
+        if click_y < 0.0 {
+            return;
+        }
+
+        let entry_index = (click_y / line_height) as usize + self.editor.sidebar.scroll_offset;
+
+        if entry_index < self.editor.sidebar.entries.len() {
+            // Select the entry
+            self.editor.sidebar.select_index(entry_index);
+            self.editor.focus_sidebar();
+            self.request_redraw();
+
+            // On double-click, open the entry
+            if is_double_click {
+                if let Some(entry) = self.editor.sidebar.selected_entry() {
+                    if entry.is_dir {
+                        let path = entry.path.clone();
+                        self.editor.sidebar.set_base_directory(path);
+                    } else {
+                        let path = entry.path.clone();
+                        let _ = self.editor.request_open_file(path);
+                        // Invalidate cached viewport so the new view gets proper dimensions
+                        self.cached_viewport = None;
+                    }
+                }
+                self.request_redraw();
+            }
+        }
+    }
+
+    /// Handles drag selection - extends selection as mouse moves.
+    fn handle_drag_selection(&mut self, x: f64, y: f64) {
+        let Some(window) = &self.window else { return };
+        let Some(renderer) = &self.renderer else { return };
+
+        let scale_factor = window.scale_factor() as f32;
+        let theme = renderer.theme();
+        let sidebar_width = self.editor.sidebar.width() as f32;
+        let status_height = 24.0;
+        let tab_bar_height = renderer.tab_bar_height();
+        let screen_height = window.inner_size().height as f32 / scale_factor;
+
+        let x = x as f32;
+        let y = y as f32;
+
+        // Only handle drag in editor area
+        if y > screen_height - status_height {
+            return;
+        }
+        if y < tab_bar_height {
+            return;
+        }
+        if self.editor.sidebar.visible && x < sidebar_width {
+            return;
+        }
+
+        // Calculate position in editor (adjust for tab bar)
+        let char_width = renderer.char_width();
+        let line_height = theme.line_height_px();
+        let y = y - tab_bar_height;
+
+        let show_line_numbers = self.editor.workspace.active_view()
+            .map(|v| v.options.show_line_numbers)
+            .unwrap_or(true);
+        let gutter_width = if show_line_numbers {
+            let total_lines = self.editor.workspace.active_document()
+                .map(|d| d.len_lines())
+                .unwrap_or(1);
+            let digit_count = total_lines.to_string().len();
+            8.0 + (digit_count + 2) as f32 * char_width // Include gutter padding
+        } else {
+            0.0
+        };
+
+        let text_x = (x - sidebar_width - gutter_width).max(0.0);
+
+        let row = (y.max(0.0) / line_height) as usize;
+        let col = (text_x / char_width) as usize;
+
+        let scroll_y = self.editor.workspace.active_view()
+            .map(|v| v.viewport.scroll_y)
+            .unwrap_or(0);
+
+        let document_row = row + scroll_y;
+
+        // Calculate offset and extend selection
+        let offset = if let Some(doc) = self.editor.workspace.active_document() {
+            let max_row = doc.len_lines().saturating_sub(1);
+            let actual_row = document_row.min(max_row);
+            let line_len = doc.line_len(actual_row);
+            let actual_col = col.min(line_len);
+            let pos = TextPosition::new(actual_row, actual_col);
+            doc.position_to_offset(pos)
+        } else {
+            return;
+        };
+
+        // Start selection if not already started
+        if !self.editor.has_selection() {
+            self.editor.begin_selection();
+        }
+
+        // Extend selection to new position
+        self.editor.extend_selection_to(offset);
+        self.request_redraw();
+
+        // Notify renderer of activity
+        if let Some(renderer) = &mut self.renderer {
+            renderer.on_activity();
+        }
+    }
+
+    /// Handles click in the editor area.
+    fn handle_editor_click(&mut self, x: f32, y: f32, sidebar_width: f32, char_width: f32, line_height: f32) {
+        // Adjust x for sidebar and gutter
+        let show_line_numbers = self.editor.workspace.active_view()
+            .map(|v| v.options.show_line_numbers)
+            .unwrap_or(true);
+        let gutter_width = if show_line_numbers {
+            let total_lines = self.editor.workspace.active_document()
+                .map(|d| d.len_lines())
+                .unwrap_or(1);
+            let digit_count = total_lines.to_string().len();
+            8.0 + (digit_count + 2) as f32 * char_width // Include gutter left padding
+        } else {
+            0.0
+        };
+
+        let text_x = x - sidebar_width - gutter_width;
+        let text_y = y;
+
+        if text_x < 0.0 || text_y < 0.0 {
+            return;
+        }
+
+        // Calculate row and column
+        let row = (text_y / line_height) as usize;
+        let col = (text_x / char_width) as usize;
+
+        // Get scroll offset
+        let scroll_y = self.editor.workspace.active_view()
+            .map(|v| v.viewport.scroll_y)
+            .unwrap_or(0);
+
+        // Move cursor to clicked position
+        let document_row = row + scroll_y;
+
+        // Get document info and calculate offset
+        let offset = if let Some(doc) = self.editor.workspace.active_document() {
+            let max_row = doc.len_lines().saturating_sub(1);
+            let actual_row = document_row.min(max_row);
+            let line_len = doc.line_len(actual_row);
+            let actual_col = col.min(line_len);
+            let pos = TextPosition::new(actual_row, actual_col);
+            doc.position_to_offset(pos)
+        } else {
+            return;
+        };
+
+        // Clear any existing selection and set the caret position
+        self.editor.clear_selection();
+        if let Some(view) = self.editor.workspace.active_view_mut() {
+            view.carets.move_to(offset);
+        }
+
+        // Start selection anchor at this position (for drag selection)
+        self.editor.begin_selection();
+
+        self.editor.focus_editor();
+        self.request_redraw();
+
+        // Notify renderer of activity
+        if let Some(renderer) = &mut self.renderer {
+            renderer.on_activity();
+        }
+    }
+
+    /// Updates the cursor icon based on mouse position.
+    fn update_cursor_icon(&mut self, x: f64, y: f64) {
+        let Some(window) = &self.window else { return };
+        let Some(renderer) = &self.renderer else { return };
+
+        let scale_factor = window.scale_factor() as f32;
+        let sidebar_width = self.editor.sidebar.width() as f32;
+        let status_height = 24.0;
+        let screen_height = window.inner_size().height as f32 / scale_factor;
+
+        let x = x as f32;
+        let y = y as f32;
+
+        let new_cursor = if y > screen_height - status_height {
+            // Status bar
+            CursorIcon::Default
+        } else if self.editor.sidebar.visible && x < sidebar_width {
+            // Sidebar
+            CursorIcon::Default
+        } else {
+            // Editor area - use text cursor
+            CursorIcon::Text
+        };
+
+        if new_cursor != self.current_cursor {
+            self.current_cursor = new_cursor;
+            window.set_cursor(new_cursor);
+        }
+    }
+
+    /// Checks if a click is a double-click.
+    fn is_double_click(&mut self, x: f64, y: f64) -> bool {
+        const DOUBLE_CLICK_TIME_MS: u128 = 500;
+        const DOUBLE_CLICK_DISTANCE: f64 = 5.0;
+
+        let now = Instant::now();
+
+        let is_double = if let (Some(last_time), Some(last_pos)) = (self.last_click_time, self.last_click_pos) {
+            let elapsed = now.duration_since(last_time).as_millis();
+            let distance = ((x - last_pos.0).powi(2) + (y - last_pos.1).powi(2)).sqrt();
+            elapsed < DOUBLE_CLICK_TIME_MS && distance < DOUBLE_CLICK_DISTANCE
+        } else {
+            false
+        };
+
+        self.last_click_time = Some(now);
+        self.last_click_pos = Some((x, y));
+
+        is_double
     }
 }
 
@@ -213,6 +536,8 @@ impl ApplicationHandler for WgpuApp {
             WindowEvent::Resized(size) => {
                 if let Some(renderer) = &mut self.renderer {
                     renderer.resize(size);
+                    // Invalidate cached viewport to force recalculation on next render
+                    self.cached_viewport = None;
                 }
                 self.request_redraw();
             }
@@ -225,10 +550,127 @@ impl ApplicationHandler for WgpuApp {
                 self.modifiers = mods;
             }
 
+            WindowEvent::CursorMoved { position, .. } => {
+                self.cursor_position = Some((position.x, position.y));
+                self.update_cursor_icon(position.x, position.y);
+
+                // Block drag selection when dialog is open
+                if self.editor.has_pending_action() {
+                    return;
+                }
+
+                // Handle drag selection
+                if self.is_dragging {
+                    self.handle_drag_selection(position.x, position.y);
+                }
+            }
+
+            WindowEvent::MouseInput { state, button, .. } => {
+                // Block mouse input when dialog is open
+                if self.editor.has_pending_action() {
+                    return;
+                }
+
+                if button == MouseButton::Left {
+                    if state == ElementState::Pressed {
+                        if let Some((x, y)) = self.cursor_position {
+                            let is_double = self.is_double_click(x, y);
+                            self.handle_mouse_click(x, y, is_double);
+                            // Start dragging for selection (only in editor area)
+                            if !is_double {
+                                self.is_dragging = true;
+                            }
+                        }
+                    } else {
+                        // Mouse released - stop dragging
+                        self.is_dragging = false;
+                    }
+                }
+            }
+
+            WindowEvent::MouseWheel { delta, .. } => {
+                // Block mouse wheel when dialog is open
+                if self.editor.has_pending_action() {
+                    return;
+                }
+
+                let scroll_lines = match delta {
+                    winit::event::MouseScrollDelta::LineDelta(_, y) => {
+                        -(y as isize * 3) // 3 lines per scroll notch
+                    }
+                    winit::event::MouseScrollDelta::PixelDelta(pos) => {
+                        let line_height = self.renderer.as_ref()
+                            .map(|r| r.theme().line_height_px())
+                            .unwrap_or(21.0);
+                        -(pos.y / line_height as f64) as isize
+                    }
+                };
+
+                if scroll_lines != 0 {
+                    // Get max_scroll first to avoid borrow conflict
+                    let max_scroll = self.editor.workspace.active_document()
+                        .map(|d| d.len_lines().saturating_sub(1))
+                        .unwrap_or(0);
+
+                    if let Some(view) = self.editor.workspace.active_view_mut() {
+                        let current_scroll = view.viewport.scroll_y as isize;
+                        let new_scroll = (current_scroll + scroll_lines).max(0) as usize;
+                        view.viewport.scroll_y = new_scroll.min(max_scroll);
+                    }
+                    self.request_redraw();
+                }
+            }
+
             WindowEvent::KeyboardInput { event, .. } => {
                 // Notify renderer of activity (for caret blinking)
                 if let Some(renderer) = &mut self.renderer {
                     renderer.on_activity();
+                }
+
+                // Handle dialog input first - block all other input when dialog is open
+                if self.editor.has_pending_action() {
+                    if event.state == ElementState::Pressed {
+                        use winit::keyboard::{Key, NamedKey};
+                        match &event.logical_key {
+                            // Enter = Save and proceed
+                            Key::Named(NamedKey::Enter) => {
+                                if let Err(e) = self.editor.save() {
+                                    log::error!("Save failed: {}", e);
+                                }
+                                self.editor.confirm_pending_action();
+                                if self.editor.should_quit {
+                                    event_loop.exit();
+                                }
+                                self.request_redraw();
+                            }
+                            // Y = Save and proceed
+                            Key::Character(c) if c == "y" || c == "Y" => {
+                                if let Err(e) = self.editor.save() {
+                                    log::error!("Save failed: {}", e);
+                                }
+                                self.editor.confirm_pending_action();
+                                if self.editor.should_quit {
+                                    event_loop.exit();
+                                }
+                                self.request_redraw();
+                            }
+                            // N = Don't save, proceed anyway
+                            Key::Character(c) if c == "n" || c == "N" => {
+                                self.editor.confirm_pending_action();
+                                if self.editor.should_quit {
+                                    event_loop.exit();
+                                }
+                                self.request_redraw();
+                            }
+                            // Escape = Cancel
+                            Key::Named(NamedKey::Escape) => {
+                                self.editor.cancel_pending_action();
+                                self.request_redraw();
+                            }
+                            _ => {}
+                        }
+                    }
+                    return; // Block all other input when dialog is open
                 }
 
                 // Try app-level action first
@@ -249,44 +691,33 @@ impl ApplicationHandler for WgpuApp {
                 // Try editor command
                 if !self.editor.is_sidebar_focused() {
                     if let Some(cmd) = translate_key(&event, &self.modifiers) {
-                        // Handle selection state for navigation commands
                         use core_editor::commands::EditorCommand;
-                        match &cmd {
-                            EditorCommand::MoveCursor { extend_selection, .. } => {
-                                if *extend_selection && !self.editor.has_selection() {
-                                    self.editor.begin_selection();
-                                } else if !extend_selection {
-                                    self.editor.clear_selection();
-                                }
-                            }
-                            _ => {}
-                        }
 
-                        // Handle delete selection for editing commands
+                        // Handle delete selection for editing commands (before dispatch)
                         match &cmd {
                             EditorCommand::InsertChar(_)
                             | EditorCommand::InsertText(_)
-                            | EditorCommand::InsertNewline
-                            | EditorCommand::Backspace
-                            | EditorCommand::Delete => {
-                                if self.editor.has_selection()
-                                    && !matches!(cmd, EditorCommand::Backspace | EditorCommand::Delete)
-                                {
+                            | EditorCommand::InsertNewline => {
+                                if self.editor.has_selection() {
                                     self.editor.delete_selection();
                                 }
                             }
                             _ => {}
                         }
 
-                        // Dispatch the command
-                        let handled = self.editor.dispatch(cmd);
+                        // Dispatch the command - dispatcher handles selection for MoveCursor
+                        let handled = self.editor.dispatch(cmd.clone());
 
-                        // Update selection for move commands
-                        if let Some(EditorCommand::MoveCursor { extend_selection: true, .. }) =
-                            translate_key(&event, &self.modifiers)
-                        {
-                            let offset = self.editor.cursor_to_char_idx();
-                            self.editor.extend_selection_to(offset);
+                        // After cursor movement or editing, ensure cursor is visible
+                        match &cmd {
+                            EditorCommand::MoveCursor { .. }
+                            | EditorCommand::InsertChar(_)
+                            | EditorCommand::InsertText(_)
+                            | EditorCommand::InsertNewline
+                            | EditorCommand::Paste => {
+                                self.cached_viewport = None;
+                            }
+                            _ => {}
                         }
 
                         if handled {

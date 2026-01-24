@@ -205,9 +205,17 @@ impl Sidebar {
         &self.entries[start..end]
     }
 
-    /// Returns the width of the sidebar in characters.
+    /// Returns the width of the sidebar in pixels.
     pub fn width(&self) -> usize {
-        if self.visible { 25 } else { 0 }
+        if self.visible { 220 } else { 0 }
+    }
+
+    /// Selects entry at the given index.
+    pub fn select_index(&mut self, index: usize) {
+        if index < self.entries.len() {
+            self.selected_index = index;
+            self.ensure_visible();
+        }
     }
 
     /// Sets a new base directory and refreshes the file list.

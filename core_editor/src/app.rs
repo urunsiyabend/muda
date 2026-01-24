@@ -626,9 +626,26 @@ impl App {
     // Render Model
     // =========================================================================
 
+    /// Returns information about all open documents for the tab bar.
+    /// Returns a list of (title, is_active, is_dirty) tuples.
+    fn get_open_documents_info(&self) -> Vec<(String, bool, bool)> {
+        let active_doc_id = self.workspace.active_view()
+            .map(|v| v.document_id());
+
+        self.workspace.documents()
+            .map(|(doc_id, doc)| {
+                let title = doc.title();
+                let is_active = Some(*doc_id) == active_doc_id;
+                let is_dirty = doc.is_dirty();
+                (title, is_active, is_dirty)
+            })
+            .collect()
+    }
+
     /// Builds a render-ready model for the UI.
     pub fn build_render_model(&mut self, viewport_height: usize) -> RenderModel {
         let status_message = self.status_message.as_deref();
+        let open_documents = self.get_open_documents_info();
 
         let model = match (
             self.workspace.active_document(),
@@ -643,6 +660,7 @@ impl App {
                 self.focus,
                 viewport_height,
                 status_message,
+                &open_documents,
             ),
             _ => {
                 // Even without a document, we might want to show the sidebar

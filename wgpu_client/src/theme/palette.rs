@@ -95,6 +95,11 @@ pub struct Theme {
 }
 
 impl Theme {
+    /// Monospace character width ratio (em-width / font-size).
+    /// This is tuned for common monospace fonts. The default system monospace font
+    /// typically has a ratio around 0.55. Adjust if using a different font.
+    pub const CHAR_WIDTH_RATIO: f32 = 0.55;
+
     /// Creates the default dark theme (VS Code-inspired).
     pub fn dark() -> Self {
         Self {
@@ -104,6 +109,11 @@ impl Theme {
             font_size: 14.0,
             line_height: 1.5,
         }
+    }
+
+    /// Returns the character width in pixels for monospace text.
+    pub fn char_width(&self) -> f32 {
+        self.font_size * Self::CHAR_WIDTH_RATIO
     }
 
     /// Creates a light theme.

@@ -1,6 +1,6 @@
 //! GPU renderer orchestrating all components.
 
-use crate::components::{Bounds, Caret, Gutter, SidebarComponent, StatusBar, TextArea};
+use crate::components::{Bounds, Caret, Dialog, Gutter, SidebarComponent, StatusBar, TabBar, TextArea};
 use crate::theme::Theme;
 use core_editor::view_model::RenderModel;
 
@@ -12,6 +12,8 @@ pub struct GpuRenderer {
     caret: Caret,
     status_bar: StatusBar,
     sidebar: SidebarComponent,
+    tab_bar: TabBar,
+    dialog: Dialog,
 
     // State
     surface: wgpu::Surface<'static>,
@@ -19,6 +21,8 @@ pub struct GpuRenderer {
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
     theme: Theme,
+    /// Cached measured character width for accurate positioning.
+    measured_char_width: f32,
 }
 
 impl GpuRenderer {
@@ -83,11 +87,16 @@ impl GpuRenderer {
         let theme = Theme::dark();
 
         // Create components
-        let text_area = TextArea::new(&device, &queue, surface_format);
+        let mut text_area = TextArea::new(&device, &queue, surface_format);
         let gutter = Gutter::new(&device, &queue, surface_format);
         let caret = Caret::new(&device, surface_format);
         let status_bar = StatusBar::new(&device, &queue, surface_format);
         let sidebar = SidebarComponent::new(&device, &queue, surface_format);
+        let tab_bar = TabBar::new(&device, &queue, surface_format);
+        let dialog = Dialog::new(&device, &queue, surface_format);
+
+        // Measure actual character width from the font
+        let measured_char_width = text_area.measure_char_width(theme.font_size);
 
         Ok(Self {
             text_area,
@@ -95,17 +104,30 @@ impl GpuRenderer {
             caret,
             status_bar,
             sidebar,
+            tab_bar,
+            dialog,
             surface,
             device,
             queue,
             config,
             theme,
+            measured_char_width,
         })
     }
 
     /// Returns a reference to the theme.
     pub fn theme(&self) -> &Theme {
         &self.theme
+    }
+
+    /// Returns the measured character width in pixels.
+    pub fn char_width(&self) -> f32 {
+        self.measured_char_width
+    }
+
+    /// Returns the tab bar height in logical pixels.
+    pub fn tab_bar_height(&self) -> f32 {
+        self.tab_bar.height()
     }
 
     /// Sets the theme.
@@ -148,7 +170,7 @@ impl GpuRenderer {
         // Calculate layout
         let layout = self.calculate_layout(model, scale_factor);
 
-        // Prepare all components
+        // Prepare all components (pass full screen resolution for glyphon viewport)
         self.sidebar.prepare(
             &self.device,
             &self.queue,
@@ -156,6 +178,8 @@ impl GpuRenderer {
             layout.sidebar,
             &self.theme,
             scale_factor,
+            self.config.width,
+            self.config.height,
         );
 
         self.gutter.prepare(
@@ -165,6 +189,8 @@ impl GpuRenderer {
             layout.gutter,
             &self.theme,
             scale_factor,
+            self.config.width,
+            self.config.height,
         );
 
         self.text_area.prepare(
@@ -174,6 +200,8 @@ impl GpuRenderer {
             layout.text_area,
             &self.theme,
             scale_factor,
+            self.config.width,
+            self.config.height,
         );
 
         self.status_bar.prepare(
@@ -183,6 +211,19 @@ impl GpuRenderer {
             layout.status_bar,
             &self.theme,
             scale_factor,
+            self.config.width,
+            self.config.height,
+        );
+
+        self.tab_bar.prepare(
+            &self.device,
+            &self.queue,
+            &model.tab_bar,
+            layout.tab_bar,
+            &self.theme,
+            scale_factor,
+            self.config.width,
+            self.config.height,
         );
 
         // Build all rectangles
@@ -211,20 +252,29 @@ impl GpuRenderer {
         // Render sidebar backgrounds
         if model.sidebar.visible {
             let sidebar_rects = self.sidebar.build_rects(&model.sidebar, layout.sidebar, &self.theme);
-            self.sidebar.render_background(&mut encoder, &view, &self.queue, &sidebar_rects, screen_width, screen_height);
+            self.sidebar.render_background(&mut encoder, &view, &self.queue, &sidebar_rects, screen_width, screen_height, scale_factor);
+        }
+
+        // Render tab bar background
+        if model.tab_bar.visible {
+            let tab_bar_rects = self.tab_bar.build_rects(&model.tab_bar, layout.tab_bar, &self.theme, self.measured_char_width);
+            self.tab_bar.render_background(&mut encoder, &view, &self.queue, &tab_bar_rects, screen_width, screen_height, scale_factor);
         }
 
         // Render gutter background
         if model.gutter.visible {
-            self.gutter.render_background(&mut encoder, &view, &self.queue, layout.gutter, &self.theme, screen_width, screen_height);
+            self.gutter.render_background(&mut encoder, &view, &self.queue, layout.gutter, &self.theme, screen_width, screen_height, scale_factor);
         }
 
-        // Render selection backgrounds
-        let selection_rects = self.text_area.build_selection_rects(model, layout.text_area, &self.theme);
-        self.text_area.render_selections(&mut encoder, &view, &self.queue, &selection_rects, screen_width, screen_height);
+        // Render current line highlight first (below selection)
+        let (current_line_rects, selection_rects) = self.text_area.build_selection_rects(model, layout.text_area, &self.theme, self.measured_char_width);
+        self.text_area.render_selections(&mut encoder, &view, &self.queue, &current_line_rects, screen_width, screen_height, scale_factor);
+
+        // Render selection backgrounds on top
+        self.text_area.render_selections(&mut encoder, &view, &self.queue, &selection_rects, screen_width, screen_height, scale_factor);
 
         // Render status bar background
-        self.status_bar.render_background(&mut encoder, &view, &self.queue, layout.status_bar, &self.theme, screen_width, screen_height);
+        self.status_bar.render_background(&mut encoder, &view, &self.queue, layout.status_bar, &self.theme, screen_width, screen_height, scale_factor);
 
         // Render caret
         self.caret.render(
@@ -234,8 +284,10 @@ impl GpuRenderer {
             &model.caret,
             layout.text_area,
             &self.theme,
+            self.measured_char_width,
             screen_width,
             screen_height,
+            scale_factor,
         );
 
         // Render text (requires a render pass)
@@ -258,11 +310,53 @@ impl GpuRenderer {
             if model.sidebar.visible {
                 self.sidebar.render(&mut pass);
             }
+            if model.tab_bar.visible {
+                self.tab_bar.render(&mut pass);
+            }
             if model.gutter.visible {
                 self.gutter.render(&mut pass);
             }
             self.text_area.render(&mut pass);
             self.status_bar.render(&mut pass);
+        }
+
+        // Render dialog overlay (on top of everything)
+        if Dialog::is_visible(&model.dialog) {
+            let logical_width = screen_width / scale_factor;
+            let logical_height = screen_height / scale_factor;
+
+            self.dialog.prepare(
+                &self.device,
+                &self.queue,
+                &model.dialog,
+                logical_width,
+                logical_height,
+                &self.theme,
+                scale_factor,
+            );
+
+            let dialog_rects = self.dialog.build_rects(&model.dialog, logical_width, logical_height, &self.theme);
+            self.dialog.render_background(&mut encoder, &view, &self.queue, &dialog_rects, screen_width, screen_height, scale_factor);
+
+            // Dialog text pass
+            {
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("dialog_text_pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Load,
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                });
+
+                self.dialog.render(&mut pass);
+            }
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
@@ -276,6 +370,7 @@ impl GpuRenderer {
         let screen_width = self.config.width as f32 / scale_factor;
         let screen_height = self.config.height as f32 / scale_factor;
         let status_height = self.status_bar.height();
+        let tab_bar_height = if model.tab_bar.visible { self.tab_bar.height() } else { 0.0 };
 
         // Total bounds
         let total = Bounds::new(0.0, 0.0, screen_width, screen_height);
@@ -284,15 +379,22 @@ impl GpuRenderer {
         let (main_area, status_bar) = total.split_vertical(screen_height - status_height);
 
         // Split sidebar if visible
-        let (sidebar, editor_area) = if model.sidebar.visible {
+        let (sidebar, right_area) = if model.sidebar.visible {
             main_area.split_horizontal(self.sidebar.width(&model.sidebar))
         } else {
             (Bounds::default(), main_area)
         };
 
+        // Split tab bar at top of editor area
+        let (tab_bar, editor_area) = if model.tab_bar.visible {
+            right_area.split_vertical(tab_bar_height)
+        } else {
+            (Bounds::default(), right_area)
+        };
+
         // Split gutter if visible
         let (gutter, text_area) = if model.gutter.visible {
-            let gutter_width = self.gutter.width(&model.gutter, &self.theme);
+            let gutter_width = self.gutter.width(&model.gutter, self.measured_char_width);
             editor_area.split_horizontal(gutter_width)
         } else {
             (Bounds::default(), editor_area)
@@ -300,6 +402,7 @@ impl GpuRenderer {
 
         Layout {
             sidebar,
+            tab_bar,
             gutter,
             text_area,
             status_bar,
@@ -310,6 +413,7 @@ impl GpuRenderer {
 /// Layout bounds for all components.
 struct Layout {
     sidebar: Bounds,
+    tab_bar: Bounds,
     gutter: Bounds,
     text_area: Bounds,
     status_bar: Bounds,

@@ -26,6 +26,8 @@ mod caret;
 mod gutter;
 mod status_bar;
 mod sidebar;
+mod tab_bar;
+mod dialog;
 
 pub use rect::{Rect, RectRenderer};
 pub use text_area::TextArea;
@@ -33,6 +35,8 @@ pub use caret::Caret;
 pub use gutter::Gutter;
 pub use status_bar::StatusBar;
 pub use sidebar::SidebarComponent;
+pub use tab_bar::TabBar;
+pub use dialog::Dialog;
 
 use crate::theme::Theme;
 

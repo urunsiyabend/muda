@@ -302,6 +302,32 @@ pub struct SidebarPresentation {
     pub width: usize,
 }
 
+/// Presentation data for a single tab in the tab bar.
+#[derive(Clone, Debug)]
+pub struct TabPresentation {
+    /// The display title (filename or "[New File]").
+    pub title: String,
+    /// Whether this tab is currently active.
+    pub is_active: bool,
+    /// Whether the document has unsaved changes.
+    pub is_dirty: bool,
+}
+
+impl TabPresentation {
+    pub fn new(title: String, is_active: bool, is_dirty: bool) -> Self {
+        Self { title, is_active, is_dirty }
+    }
+}
+
+/// Presentation data for the tab bar showing open documents.
+#[derive(Clone, Debug, Default)]
+pub struct TabBarPresentation {
+    /// The list of open document tabs.
+    pub tabs: Vec<TabPresentation>,
+    /// Whether the tab bar should be shown (true if more than one document or always).
+    pub visible: bool,
+}
+
 /// The complete render-ready model for the editor UI.
 ///
 /// This struct contains everything the UI needs to draw a frame,
@@ -316,6 +342,8 @@ pub struct RenderModel {
     pub caret: CaretPresentation,
     /// Status line data.
     pub status: StatusPresentation,
+    /// Tab bar data for open documents.
+    pub tab_bar: TabBarPresentation,
     /// Active dialog (if any).
     pub dialog: DialogPresentation,
     /// Sidebar presentation data.

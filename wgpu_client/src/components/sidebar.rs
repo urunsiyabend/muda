@@ -66,6 +66,8 @@ impl SidebarComponent {
         bounds: Bounds,
         theme: &Theme,
         scale_factor: f32,
+        screen_width: u32,
+        screen_height: u32,
     ) {
         if !sidebar.visible {
             self.prepared = false;
@@ -78,11 +80,12 @@ impl SidebarComponent {
         let physical_width = bounds.width * scale_factor;
         let physical_height = bounds.height * scale_factor;
 
+        // Update viewport with full screen resolution (required by glyphon)
         self.viewport.update(
             queue,
             glyphon::Resolution {
-                width: physical_width as u32,
-                height: physical_height as u32,
+                width: screen_width,
+                height: screen_height,
             },
         );
 
@@ -208,8 +211,19 @@ impl SidebarComponent {
         rects: &[Rect],
         screen_width: f32,
         screen_height: f32,
+        scale_factor: f32,
     ) {
-        self.rect_renderer.render(encoder, view, queue, rects, screen_width, screen_height);
+        // Convert from logical to physical pixels
+        let physical_rects: Vec<Rect> = rects.iter().map(|r| {
+            Rect::new(
+                r.x * scale_factor,
+                r.y * scale_factor,
+                r.width * scale_factor,
+                r.height * scale_factor,
+                r.color,
+            )
+        }).collect();
+        self.rect_renderer.render(encoder, view, queue, &physical_rects, screen_width, screen_height);
     }
 
     /// Renders the sidebar text.

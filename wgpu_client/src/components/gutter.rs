@@ -49,17 +49,19 @@ impl Gutter {
         }
     }
 
+    /// Left padding in pixels for the gutter.
+    const LEFT_PADDING: f32 = 8.0;
+
     /// Calculates the gutter width in pixels.
-    pub fn width(&self, gutter: &GutterModel, theme: &Theme) -> f32 {
+    pub fn width(&self, gutter: &GutterModel, char_width: f32) -> f32 {
         if !gutter.visible {
             return 0.0;
         }
 
-        let char_width = theme.font_size * 0.6;
         let digit_count = gutter.line_number_width();
-        let padding = 2;
+        let padding = 2; // space + separator
 
-        (digit_count + padding) as f32 * char_width
+        Self::LEFT_PADDING + (digit_count + padding) as f32 * char_width
     }
 
     /// Prepares the gutter for rendering.
@@ -71,6 +73,8 @@ impl Gutter {
         bounds: Bounds,
         theme: &Theme,
         scale_factor: f32,
+        screen_width: u32,
+        screen_height: u32,
     ) {
         if !model.gutter.visible {
             self.prepared = false;
@@ -81,11 +85,12 @@ impl Gutter {
         let physical_width = bounds.width * scale_factor;
         let physical_height = bounds.height * scale_factor;
 
+        // Update viewport with full screen resolution (required by glyphon)
         self.viewport.update(
             queue,
             glyphon::Resolution {
-                width: physical_width as u32,
-                height: physical_height as u32,
+                width: screen_width,
+                height: screen_height,
             },
         );
 
@@ -117,7 +122,7 @@ impl Gutter {
 
         let text_areas = [glyphon::TextArea {
             buffer: &self.buffer,
-            left: bounds.x * scale_factor,
+            left: (bounds.x + Self::LEFT_PADDING) * scale_factor,
             top: bounds.y * scale_factor,
             scale: scale_factor,
             bounds: TextBounds {
@@ -155,12 +160,14 @@ impl Gutter {
         theme: &Theme,
         screen_width: f32,
         screen_height: f32,
+        scale_factor: f32,
     ) {
+        // Convert from logical to physical pixels
         let rect = Rect::new(
-            bounds.x,
-            bounds.y,
-            bounds.width,
-            bounds.height,
+            bounds.x * scale_factor,
+            bounds.y * scale_factor,
+            bounds.width * scale_factor,
+            bounds.height * scale_factor,
             theme.palette.gutter_bg,
         );
         self.rect_renderer

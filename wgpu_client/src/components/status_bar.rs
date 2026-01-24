@@ -67,17 +67,20 @@ impl StatusBar {
         bounds: Bounds,
         theme: &Theme,
         scale_factor: f32,
+        screen_width: u32,
+        screen_height: u32,
     ) {
         let font_size = theme.font_size * 0.9;
         let metrics = Metrics::new(font_size, font_size * 1.2);
         let physical_width = bounds.width * scale_factor;
         let physical_height = bounds.height * scale_factor;
 
+        // Update viewport with full screen resolution (required by glyphon)
         self.viewport.update(
             queue,
             glyphon::Resolution {
-                width: physical_width as u32,
-                height: physical_height as u32,
+                width: screen_width,
+                height: screen_height,
             },
         );
 
@@ -149,12 +152,14 @@ impl StatusBar {
         theme: &Theme,
         screen_width: f32,
         screen_height: f32,
+        scale_factor: f32,
     ) {
+        // Convert from logical to physical pixels
         let rect = Rect::new(
-            bounds.x,
-            bounds.y,
-            bounds.width,
-            bounds.height,
+            bounds.x * scale_factor,
+            bounds.y * scale_factor,
+            bounds.width * scale_factor,
+            bounds.height * scale_factor,
             theme.palette.status_bar_bg,
         );
         self.rect_renderer

@@ -82,13 +82,13 @@ impl Caret {
         caret: &CaretPresentation,
         bounds: Bounds,
         theme: &Theme,
+        char_width: f32,
     ) -> Option<Rect> {
         if !caret.visible || !self.blink_visible {
             return None;
         }
 
         let line_height = theme.line_height_px();
-        let char_width = theme.font_size * 0.6; // Approximate monospace width
 
         let x = bounds.x + (caret.position.column as f32 * char_width);
         let y = bounds.y + (caret.position.row as f32 * line_height);
@@ -105,11 +105,21 @@ impl Caret {
         caret: &CaretPresentation,
         bounds: Bounds,
         theme: &Theme,
+        char_width: f32,
         screen_width: f32,
         screen_height: f32,
+        scale_factor: f32,
     ) {
-        if let Some(rect) = self.calculate_rect(caret, bounds, theme) {
-            self.rect_renderer.render(encoder, view, queue, &[rect], screen_width, screen_height);
+        if let Some(rect) = self.calculate_rect(caret, bounds, theme, char_width) {
+            // Convert from logical to physical pixels
+            let physical_rect = Rect::new(
+                rect.x * scale_factor,
+                rect.y * scale_factor,
+                rect.width * scale_factor,
+                rect.height * scale_factor,
+                rect.color,
+            );
+            self.rect_renderer.render(encoder, view, queue, &[physical_rect], screen_width, screen_height);
         }
     }
 

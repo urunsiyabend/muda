@@ -10,7 +10,8 @@ use crate::syntax::{HighlightSpan, SyntaxHighlighter};
 use crate::view::{EditorView, FocusState, Sidebar};
 use crate::view_model::{
     CaretPresentation, DialogPresentation, FileEntryPresentation, GutterModel, LinePresentation,
-    RenderModel, SidebarPresentation, StatusPresentation, StyledSpan, VisualPosition,
+    RenderModel, SidebarPresentation, StatusPresentation, StyledSpan, TabBarPresentation,
+    TabPresentation, VisualPosition,
 };
 
 /// Represents a pending action that requires user confirmation.
@@ -50,6 +51,7 @@ impl ViewModelBuilder {
     /// * `focus` - The current focus state
     /// * `viewport_height` - The available viewport height for sidebar
     /// * `status_message` - Optional status message to display
+    /// * `open_documents` - List of (title, is_active, is_dirty) for all open documents
     pub fn build(
         document: &Document,
         view: &EditorView,
@@ -59,6 +61,7 @@ impl ViewModelBuilder {
         focus: FocusState,
         viewport_height: usize,
         status_message: Option<&str>,
+        open_documents: &[(String, bool, bool)],
     ) -> RenderModel {
         let viewport = &view.viewport;
         let selection = view.selection_range();
@@ -105,6 +108,9 @@ impl ViewModelBuilder {
         // Build status line
         let status = Self::build_status_presentation(document, caret_pos, status_message);
 
+        // Build tab bar
+        let tab_bar = Self::build_tab_bar_presentation(open_documents);
+
         // Build dialog state from pending action and protection error
         let dialog = Self::build_dialog_presentation(pending_action, protection_error);
 
@@ -116,10 +122,26 @@ impl ViewModelBuilder {
             gutter,
             caret,
             status,
+            tab_bar,
             dialog,
             sidebar: sidebar_pres,
             scroll_x: viewport.scroll_x,
             scroll_y: viewport.scroll_y,
+        }
+    }
+
+    /// Builds the tab bar presentation from open documents info.
+    fn build_tab_bar_presentation(open_documents: &[(String, bool, bool)]) -> TabBarPresentation {
+        let tabs: Vec<TabPresentation> = open_documents
+            .iter()
+            .map(|(title, is_active, is_dirty)| {
+                TabPresentation::new(title.clone(), *is_active, *is_dirty)
+            })
+            .collect();
+
+        TabBarPresentation {
+            visible: true, // Always show tab bar
+            tabs,
         }
     }
 
