@@ -1,11 +1,11 @@
-MUDA Unacceptably Does Anything
+# MUDA
 
 MUDA is an extensible IDE.
 MUDA does anything.
 MUDA does things it probably shouldn’t.
 MUDA is unacceptably extensible.
 
-MUDA Unacceptably Does Anything
+*MUDA Unacceptably Does Anything*
 
 ## About
 
