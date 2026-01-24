@@ -36,7 +36,6 @@ use mudatexteditor::view_model::{DialogPresentation, RenderModel, SidebarPresent
 /// Other rendering backends would implement their own mappers:
 /// - Web: `fn map_semantic_style(style: TextStyle) -> CssClass`
 /// - GUI: `fn map_semantic_style(style: TextStyle) -> NativeStyle`
-#[allow(dead_code)]
 fn map_semantic_style(style: TextStyle) -> Style {
     match style {
         TextStyle::Normal => Style::default(),
@@ -181,9 +180,12 @@ fn render_editor(f: &mut Frame, area: Rect, model: &RenderModel) {
                 spans.push(Span::styled(line_num, num_style));
             }
 
-            // Add content spans
+            // Add content spans (map semantic style to ratatui style)
             for styled_span in &line_pres.spans {
-                spans.push(Span::styled(styled_span.text.clone(), styled_span.style));
+                spans.push(Span::styled(
+                    styled_span.text.clone(),
+                    map_semantic_style(styled_span.style),
+                ));
             }
 
             Line::from(spans)

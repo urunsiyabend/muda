@@ -22,8 +22,6 @@ pub mod builder;
 
 pub use builder::PendingAction;
 
-use ratatui::style::Style;
-
 // =============================================================================
 // Domain-Level Styling (UI-Agnostic)
 // =============================================================================
@@ -106,43 +104,25 @@ impl VisualPosition {
 ///
 /// # Styling Approach
 ///
-/// Currently uses `ratatui::Style` directly for backwards compatibility.
-/// The `semantic_style` field provides a domain-level alternative that
-/// rendering backends can use instead.
-///
-/// **Migration path**: New code should populate `semantic_style` where possible.
-/// Once all syntax highlighting uses semantic styles, the rendering layer can
-/// map `TextStyle` → backend style, and the `style` field can be removed.
+/// Uses semantic `TextStyle` tokens that describe *what* the text is
+/// (keyword, comment, selection, etc.) without specifying visual details.
+/// The rendering backend maps these to concrete styles.
 #[derive(Clone, Debug)]
 pub struct StyledSpan {
     /// The text content.
     pub text: String,
 
-    /// Legacy: Direct ratatui style (for current rendering compatibility).
-    /// Will be deprecated once semantic_style migration is complete.
-    pub style: Style,
-
-    /// Domain-level semantic style (UI-agnostic).
+    /// Semantic style token (UI-agnostic).
     /// Rendering backends map this to their native style representation.
-    pub semantic_style: TextStyle,
+    pub style: TextStyle,
 }
 
 impl StyledSpan {
-    /// Creates a styled span with a ratatui style (legacy approach).
-    pub fn new(text: impl Into<String>, style: Style) -> Self {
+    /// Creates a styled span with a semantic style.
+    pub fn new(text: impl Into<String>, style: TextStyle) -> Self {
         Self {
             text: text.into(),
             style,
-            semantic_style: TextStyle::Normal,
-        }
-    }
-
-    /// Creates a styled span with a semantic style (preferred approach).
-    pub fn with_semantic(text: impl Into<String>, semantic_style: TextStyle) -> Self {
-        Self {
-            text: text.into(),
-            style: Style::default(),
-            semantic_style,
         }
     }
 
@@ -150,14 +130,13 @@ impl StyledSpan {
     pub fn raw(text: impl Into<String>) -> Self {
         Self {
             text: text.into(),
-            style: Style::default(),
-            semantic_style: TextStyle::Normal,
+            style: TextStyle::Normal,
         }
     }
 
     /// Creates a selection-highlighted span.
     pub fn selection(text: impl Into<String>) -> Self {
-        Self::with_semantic(text, TextStyle::Selection)
+        Self::new(text, TextStyle::Selection)
     }
 }
 
@@ -379,18 +358,17 @@ mod tests {
     fn test_styled_span() {
         let span = StyledSpan::raw("hello");
         assert_eq!(span.text, "hello");
-        assert_eq!(span.style, Style::default());
-        assert_eq!(span.semantic_style, TextStyle::Normal);
+        assert_eq!(span.style, TextStyle::Normal);
     }
 
     #[test]
     fn test_styled_span_semantic() {
-        let span = StyledSpan::with_semantic("selected", TextStyle::Selection);
+        let span = StyledSpan::new("selected", TextStyle::Selection);
         assert_eq!(span.text, "selected");
-        assert_eq!(span.semantic_style, TextStyle::Selection);
+        assert_eq!(span.style, TextStyle::Selection);
 
         let span = StyledSpan::selection("also selected");
-        assert_eq!(span.semantic_style, TextStyle::Selection);
+        assert_eq!(span.style, TextStyle::Selection);
     }
 
     #[test]

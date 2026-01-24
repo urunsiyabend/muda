@@ -379,7 +379,9 @@ impl CommandDispatcher {
         ctx.history.execute(op, ctx.document.buffer_mut());
         ctx.view.move_caret_to(offset + 1, false);
         ctx.view.clear_selection();
-        ctx.document.update_syntax();
+
+        // Use incremental parsing for single character inserts
+        ctx.document.update_syntax_incremental(offset, 0, 1);
 
         let affected = TextRange::new(offset, offset + 1);
         self.emit_document_changed(ctx, Some(affected));
@@ -395,7 +397,9 @@ impl CommandDispatcher {
         let new_offset = offset + text_len;
         ctx.view.move_caret_to(new_offset, false);
         ctx.view.clear_selection();
-        ctx.document.update_syntax();
+
+        // Use incremental parsing for text inserts
+        ctx.document.update_syntax_incremental(offset, 0, text_len);
 
         let affected = TextRange::new(offset, new_offset);
         self.emit_document_changed(ctx, Some(affected));
@@ -418,17 +422,22 @@ impl CommandDispatcher {
         ctx.history.execute(newline_op, ctx.document.buffer_mut());
 
         let mut new_offset = offset + 1;
+        let mut total_inserted = 1;
 
         // Insert indentation if any
         if !indent.is_empty() {
+            let indent_len = indent.chars().count();
             let indent_op = EditOperation::insert_string(offset + 1, indent.clone());
             ctx.history.execute(indent_op, ctx.document.buffer_mut());
-            new_offset += indent.len();
+            new_offset += indent_len;
+            total_inserted += indent_len;
         }
 
         ctx.view.move_caret_to(new_offset, false);
         ctx.view.clear_selection();
-        ctx.document.update_syntax();
+
+        // Use incremental parsing
+        ctx.document.update_syntax_incremental(offset, 0, total_inserted);
 
         let affected = TextRange::new(offset, new_offset);
         self.emit_document_changed(ctx, Some(affected));
@@ -448,7 +457,9 @@ impl CommandDispatcher {
             ctx.history.execute(op, ctx.document.buffer_mut());
             ctx.view.move_caret_to(offset - 1, false);
             ctx.view.clear_selection();
-            ctx.document.update_syntax();
+
+            // Use incremental parsing for single character delete
+            ctx.document.update_syntax_incremental(offset - 1, 1, 0);
 
             let affected = TextRange::new(offset - 1, offset);
             self.emit_document_changed(ctx, Some(affected));
@@ -467,7 +478,9 @@ impl CommandDispatcher {
             let deleted_char = ctx.document.buffer().char_at(offset).unwrap_or(' ');
             let op = EditOperation::delete(offset, deleted_char.to_string());
             ctx.history.execute(op, ctx.document.buffer_mut());
-            ctx.document.update_syntax();
+
+            // Use incremental parsing for single character delete
+            ctx.document.update_syntax_incremental(offset, 1, 0);
 
             let affected = TextRange::new(offset, offset + 1);
             self.emit_document_changed(ctx, Some(affected));
@@ -476,13 +489,16 @@ impl CommandDispatcher {
 
     fn handle_delete_selection(&self, ctx: &mut CommandContext) {
         if let Some((start, end)) = ctx.view.selection_range() {
+            let deleted_len = end - start;
             let text = ctx.document.slice(TextRange::new(start, end));
             let op = EditOperation::delete(start, text);
             ctx.history.execute(op, ctx.document.buffer_mut());
 
             ctx.view.move_caret_to(start, false);
             ctx.view.clear_selection();
-            ctx.document.update_syntax();
+
+            // Use incremental parsing for selection delete
+            ctx.document.update_syntax_incremental(start, deleted_len, 0);
 
             let affected = TextRange::new(start, end);
             self.emit_document_changed(ctx, Some(affected));
@@ -518,6 +534,7 @@ impl CommandDispatcher {
             debug!("=== CUT SELECTION ===");
             debug!("Selection range: start={}, end={}", start, end);
 
+            let deleted_len = end - start;
             let text = ctx.document.slice(TextRange::new(start, end));
 
             if let Some(ref mut cb) = self.clipboard {
@@ -529,7 +546,9 @@ impl CommandDispatcher {
 
             ctx.view.move_caret_to(start, false);
             ctx.view.clear_selection();
-            ctx.document.update_syntax();
+
+            // Use incremental parsing
+            ctx.document.update_syntax_incremental(start, deleted_len, 0);
 
             let affected = TextRange::new(start, end);
             self.emit_document_changed(ctx, Some(affected));

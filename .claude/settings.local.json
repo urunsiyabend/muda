@@ -5,7 +5,10 @@
       "Bash(cargo build:*)",
       "Bash(cargo test:*)",
       "Bash(wc:*)",
-      "Bash(cargo bench:*)"
+      "Bash(cargo bench:*)",
+      "WebSearch",
+      "Bash(cargo doc:*)",
+      "WebFetch(domain:docs.rs)"
     ]
   }
 }

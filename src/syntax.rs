@@ -1,14 +1,24 @@
 use log::debug;
-use ratatui::style::{Color, Modifier, Style};
 use std::path::Path;
 use tree_sitter::StreamingIterator;
 use tree_sitter::{Parser, Query, QueryCursor, Tree};
+
+use crate::view_model::TextStyle;
+
+/// Maximum file size (in bytes) for real-time incremental syntax parsing.
+/// Files larger than this will defer syntax updates to avoid blocking the UI.
+/// This is a pragmatic tradeoff used by many professional editors.
+const MAX_INCREMENTAL_PARSE_SIZE: usize = 500_000; // 500KB
 
 pub struct SyntaxHighlighter {
     parser: Parser,
     tree: Option<Tree>,
     language: SyntaxLanguage,
     query: Option<Query>,
+    /// Cached content length for incremental parsing validation
+    last_content_len: usize,
+    /// Whether syntax is currently invalidated (needs reparse)
+    needs_reparse: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Default, Debug)]
@@ -61,7 +71,7 @@ impl SyntaxLanguage {
 pub struct HighlightSpan {
     pub start_col: usize,
     pub end_col: usize,
-    pub style: Style,
+    pub style: TextStyle,
 }
 
 impl SyntaxHighlighter {
@@ -105,19 +115,37 @@ impl SyntaxHighlighter {
             tree: None,
             language,
             query,
+            last_content_len: 0,
+            needs_reparse: false,
         }
+    }
+
+    /// Clears the cached tree, forcing a full reparse on next call.
+    pub fn invalidate(&mut self) {
+        self.tree = None;
+        self.last_content_len = 0;
+        self.needs_reparse = true;
+    }
+
+    /// Returns true if syntax highlighting needs a reparse (was deferred due to large file).
+    pub fn needs_reparse(&self) -> bool {
+        self.needs_reparse
+    }
+
+    /// Marks the highlighter as up-to-date after a background reparse.
+    pub fn mark_reparsed(&mut self) {
+        self.needs_reparse = false;
     }
 
     pub fn parse(&mut self, content: &str) {
         if self.language == SyntaxLanguage::Plain {
             self.tree = None;
+            self.last_content_len = 0;
+            self.needs_reparse = false;
             return;
         }
 
-        // Do a fresh parse each time.
-        // Note: Tree-sitter supports incremental parsing by passing the old tree,
-        // but that requires calling tree.edit() with edit info before re-parsing.
-        // For now, we do a full reparse which is simpler and correct.
+        // Do a fresh parse each time (for initial load or when no tree exists).
         let new_tree = self.parser.parse(content, None);
         if new_tree.is_none() {
             debug!("parse returned None for {:?}", self.language);
@@ -125,6 +153,222 @@ impl SyntaxHighlighter {
             debug!("parse OK for {:?}", self.language);
         }
         self.tree = new_tree;
+        self.last_content_len = content.len();
+        self.needs_reparse = false;
+    }
+
+    /// Parses content from a rope using a callback, avoiding full content clone.
+    /// This is more efficient for large files.
+    pub fn parse_from_rope(&mut self, rope: &ropey::Rope, old_tree: Option<&Tree>) {
+        if self.language == SyntaxLanguage::Plain {
+            self.tree = None;
+            self.last_content_len = 0;
+            return;
+        }
+
+        // Tree-sitter's parse_with_options callback needs to return byte slices.
+        // Ropey stores text in chunks, so we can return chunk slices directly.
+        let new_tree = self.parser.parse_with_options(
+            &mut |byte_offset, _position| {
+                // Get the chunk at this byte offset
+                if byte_offset >= rope.len_bytes() {
+                    return "";
+                }
+                // get_chunk_at_byte returns (&str, char_start, byte_start, byte_end)
+                if let Some((chunk_str, _char_start, chunk_byte_start, _chunk_byte_end)) =
+                    rope.get_chunk_at_byte(byte_offset)
+                {
+                    // Calculate offset within the chunk
+                    let offset_in_chunk = byte_offset - chunk_byte_start;
+                    // Return the remaining part of the chunk from this position
+                    return &chunk_str[offset_in_chunk..];
+                }
+                ""
+            },
+            old_tree,
+            None, // No options
+        );
+
+        if new_tree.is_none() {
+            debug!("parse_from_rope returned None for {:?}", self.language);
+        } else {
+            debug!("parse_from_rope OK for {:?}", self.language);
+        }
+        self.tree = new_tree;
+        self.last_content_len = rope.len_bytes();
+        self.needs_reparse = false;
+    }
+
+    /// Performs an incremental parse after an edit.
+    /// This is much faster than full parse for single-character edits.
+    ///
+    /// # Arguments
+    /// * `content` - The new content after the edit
+    /// * `edit_start_byte` - Byte offset where the edit started
+    /// * `old_end_byte` - Byte offset where the old content ended (for deletions)
+    /// * `new_end_byte` - Byte offset where the new content ends (for insertions)
+    /// * `start_position` - (row, column) of edit start
+    /// * `old_end_position` - (row, column) of old content end
+    /// * `new_end_position` - (row, column) of new content end
+    pub fn parse_incremental(
+        &mut self,
+        content: &str,
+        edit_start_byte: usize,
+        old_end_byte: usize,
+        new_end_byte: usize,
+        start_position: (usize, usize),
+        old_end_position: (usize, usize),
+        new_end_position: (usize, usize),
+    ) {
+        if self.language == SyntaxLanguage::Plain {
+            self.tree = None;
+            self.last_content_len = 0;
+            return;
+        }
+
+        if let Some(ref mut tree) = self.tree {
+            // Apply the edit to the tree
+            let input_edit = tree_sitter::InputEdit {
+                start_byte: edit_start_byte,
+                old_end_byte,
+                new_end_byte,
+                start_position: tree_sitter::Point {
+                    row: start_position.0,
+                    column: start_position.1,
+                },
+                old_end_position: tree_sitter::Point {
+                    row: old_end_position.0,
+                    column: old_end_position.1,
+                },
+                new_end_position: tree_sitter::Point {
+                    row: new_end_position.0,
+                    column: new_end_position.1,
+                },
+            };
+            tree.edit(&input_edit);
+
+            // Re-parse with the old tree for incremental parsing
+            let new_tree = self.parser.parse(content, Some(tree));
+            if new_tree.is_none() {
+                debug!("incremental parse returned None for {:?}", self.language);
+            } else {
+                debug!("incremental parse OK for {:?}", self.language);
+            }
+            self.tree = new_tree;
+        } else {
+            // No existing tree, do a full parse
+            self.parse(content);
+        }
+        self.last_content_len = content.len();
+    }
+
+    /// Performs an incremental parse from a rope, avoiding full content clone.
+    /// For files larger than MAX_INCREMENTAL_PARSE_SIZE, this defers parsing
+    /// to avoid blocking the UI (marks needs_reparse for later background update).
+    pub fn parse_incremental_from_rope(
+        &mut self,
+        rope: &ropey::Rope,
+        edit_start_byte: usize,
+        old_end_byte: usize,
+        new_end_byte: usize,
+        start_position: (usize, usize),
+        old_end_position: (usize, usize),
+        new_end_position: (usize, usize),
+    ) {
+        if self.language == SyntaxLanguage::Plain {
+            self.tree = None;
+            self.last_content_len = 0;
+            self.needs_reparse = false;
+            return;
+        }
+
+        // For large files, defer syntax update to avoid blocking UI
+        // The existing tree/highlights remain valid until a background reparse
+        if rope.len_bytes() > MAX_INCREMENTAL_PARSE_SIZE {
+            // Just update the tree with the edit info, but skip the expensive reparse
+            if let Some(ref mut tree) = self.tree {
+                let input_edit = tree_sitter::InputEdit {
+                    start_byte: edit_start_byte,
+                    old_end_byte,
+                    new_end_byte,
+                    start_position: tree_sitter::Point {
+                        row: start_position.0,
+                        column: start_position.1,
+                    },
+                    old_end_position: tree_sitter::Point {
+                        row: old_end_position.0,
+                        column: old_end_position.1,
+                    },
+                    new_end_position: tree_sitter::Point {
+                        row: new_end_position.0,
+                        column: new_end_position.1,
+                    },
+                };
+                tree.edit(&input_edit);
+            }
+            self.needs_reparse = true;
+            self.last_content_len = rope.len_bytes();
+            debug!("Deferred syntax update for large file ({} bytes)", rope.len_bytes());
+            return;
+        }
+
+        if let Some(ref mut tree) = self.tree {
+            // Apply the edit to the tree
+            let input_edit = tree_sitter::InputEdit {
+                start_byte: edit_start_byte,
+                old_end_byte,
+                new_end_byte,
+                start_position: tree_sitter::Point {
+                    row: start_position.0,
+                    column: start_position.1,
+                },
+                old_end_position: tree_sitter::Point {
+                    row: old_end_position.0,
+                    column: old_end_position.1,
+                },
+                new_end_position: tree_sitter::Point {
+                    row: new_end_position.0,
+                    column: new_end_position.1,
+                },
+            };
+            tree.edit(&input_edit);
+
+            // Re-parse using rope callback with the edited tree
+            let new_tree = self.parser.parse_with_options(
+                &mut |byte_offset, _position| {
+                    if byte_offset >= rope.len_bytes() {
+                        return "";
+                    }
+                    // get_chunk_at_byte returns (&str, char_start, byte_start, byte_end)
+                    if let Some((chunk_str, _char_start, chunk_byte_start, _chunk_byte_end)) =
+                        rope.get_chunk_at_byte(byte_offset)
+                    {
+                        let offset_in_chunk = byte_offset - chunk_byte_start;
+                        return &chunk_str[offset_in_chunk..];
+                    }
+                    ""
+                },
+                Some(tree),
+                None, // No options
+            );
+
+            if new_tree.is_none() {
+                debug!("incremental parse from rope returned None for {:?}", self.language);
+            } else {
+                debug!("incremental parse from rope OK for {:?}", self.language);
+            }
+            self.tree = new_tree;
+        } else {
+            // No existing tree, do a full parse from rope
+            self.parse_from_rope(rope, None);
+        }
+        self.last_content_len = rope.len_bytes();
+        self.needs_reparse = false;
+    }
+
+    /// Quick check if we have a valid tree for this content.
+    pub fn has_tree(&self) -> bool {
+        self.tree.is_some()
     }
 
     pub fn highlight_line(
@@ -225,28 +469,22 @@ impl SyntaxHighlighter {
     }
 }
 
-fn capture_to_style(capture_name: &str) -> Style {
+fn capture_to_style(capture_name: &str) -> TextStyle {
     match capture_name {
         "keyword" | "keyword.control" | "keyword.function" | "keyword.operator"
-        | "keyword.return" => Style::default()
-            .fg(Color::Magenta)
-            .add_modifier(Modifier::BOLD),
-        "type" | "type.builtin" | "constructor" => Style::default().fg(Color::Yellow),
-        "function" | "function.method" | "function.builtin" => Style::default().fg(Color::Blue),
-        "string" | "string.special" => Style::default().fg(Color::Green),
-        "number" | "float" => Style::default().fg(Color::Cyan),
-        "comment" | "comment.line" | "comment.block" => Style::default().fg(Color::DarkGray),
-        "operator" => Style::default().fg(Color::Red),
-        "variable" | "variable.builtin" | "variable.parameter" => Style::default().fg(Color::White),
-        "constant" | "constant.builtin" => Style::default()
-            .fg(Color::Cyan)
-            .add_modifier(Modifier::BOLD),
-        "attribute" | "label" => Style::default().fg(Color::Yellow),
-        "punctuation" | "punctuation.bracket" | "punctuation.delimiter" => {
-            Style::default().fg(Color::White)
-        }
-        "property" | "field" => Style::default().fg(Color::LightBlue),
-        _ => Style::default(),
+        | "keyword.return" => TextStyle::Keyword,
+        "type" | "type.builtin" | "constructor" => TextStyle::Type,
+        "function" | "function.method" | "function.builtin" => TextStyle::Function,
+        "string" | "string.special" => TextStyle::String,
+        "number" | "float" => TextStyle::Number,
+        "comment" | "comment.line" | "comment.block" => TextStyle::Comment,
+        "operator" => TextStyle::Operator,
+        "variable" | "variable.builtin" | "variable.parameter" => TextStyle::Variable,
+        "constant" | "constant.builtin" => TextStyle::Constant,
+        "attribute" | "label" => TextStyle::Attribute,
+        "punctuation" | "punctuation.bracket" | "punctuation.delimiter" => TextStyle::Punctuation,
+        "property" | "field" => TextStyle::Variable, // Map to Variable (no separate Property style)
+        _ => TextStyle::Normal,
     }
 }
 

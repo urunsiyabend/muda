@@ -80,6 +80,11 @@ pub struct Document {
     metadata: DocumentMetadata,
     /// Syntax highlighter for this document.
     highlighter: SyntaxHighlighter,
+    /// Cached content string for syntax highlighting (avoids repeated cloning).
+    /// This is kept in sync with buffer on edits.
+    cached_content: String,
+    /// Revision when cached_content was last updated.
+    cached_content_revision: DocumentRevision,
 }
 
 impl Document {
@@ -90,6 +95,8 @@ impl Document {
             buffer: TextBuffer::new(),
             metadata: DocumentMetadata::default(),
             highlighter: SyntaxHighlighter::new(SyntaxLanguage::Plain),
+            cached_content: String::new(),
+            cached_content_revision: 0,
         }
     }
 
@@ -100,19 +107,24 @@ impl Document {
             .as_ref()
             .map(|p| SyntaxLanguage::from_extension(p))
             .unwrap_or(SyntaxLanguage::Plain);
-        
+
         let mut highlighter = SyntaxHighlighter::new(language);
         highlighter.parse(content);
 
+        let buffer = TextBuffer::from_str(content);
+        let revision = buffer.revision();
+
         Self {
             id: DocumentId::new(),
-            buffer: TextBuffer::from_str(content),
+            buffer,
             metadata: DocumentMetadata {
                 uri: path,
                 line_ending,
                 dirty: false,
             },
             highlighter,
+            cached_content: content.to_string(),
+            cached_content_revision: revision,
         }
     }
 
@@ -170,10 +182,79 @@ impl Document {
         self.update_syntax();
     }
 
-    /// Updates syntax highlighting for the current content.
+    /// Updates syntax highlighting for the current content (full reparse).
     pub fn update_syntax(&mut self) {
-        let content = self.buffer.to_string();
-        self.highlighter.parse(&content);
+        // Refresh the content cache and use it for parsing
+        self.cached_content = self.buffer.to_string();
+        self.cached_content_revision = self.buffer.revision();
+        self.highlighter.parse(&self.cached_content);
+    }
+
+    /// Updates syntax highlighting incrementally after an edit.
+    /// This is much faster than full reparse for single-character edits.
+    /// Uses rope-based parsing to avoid O(n) content clone.
+    ///
+    /// # Arguments
+    /// * `edit_start_char` - Character offset where the edit started
+    /// * `old_len_chars` - Number of characters that were deleted (0 for pure insertion)
+    /// * `new_len_chars` - Number of characters that were inserted (0 for pure deletion)
+    pub fn update_syntax_incremental(
+        &mut self,
+        edit_start_char: usize,
+        old_len_chars: usize,
+        new_len_chars: usize,
+    ) {
+        // Convert char offsets to byte offsets
+        let edit_start_byte = self.buffer.char_to_byte(edit_start_char);
+        let new_end_char = edit_start_char + new_len_chars;
+        let new_end_byte = self.buffer.char_to_byte(new_end_char.min(self.buffer.len_chars()));
+
+        // Calculate old end byte (before the edit, so we estimate based on typical char size)
+        // For ASCII/simple edits, this is usually 1 byte per char
+        let old_end_byte = edit_start_byte + old_len_chars; // Approximation
+
+        // Get positions
+        let start_pos = self.buffer.offset_to_position(edit_start_char);
+        let new_end_pos = self.buffer.offset_to_position(new_end_char.min(self.buffer.len_chars()));
+
+        // For old_end_position, we need the position before the edit
+        // Since we're after the edit, approximate using the start position + deleted lines
+        let old_end_pos = if old_len_chars == 0 {
+            start_pos
+        } else {
+            // Approximate: assume deletion was on same line
+            crate::domain::TextPosition::new(start_pos.line, start_pos.column + old_len_chars)
+        };
+
+        // Use rope-based incremental parsing to avoid O(n) content clone
+        self.highlighter.parse_incremental_from_rope(
+            self.buffer.rope(),
+            edit_start_byte,
+            old_end_byte,
+            new_end_byte,
+            (start_pos.line, start_pos.column),
+            (old_end_pos.line, old_end_pos.column),
+            (new_end_pos.line, new_end_pos.column),
+        );
+
+        // Invalidate content cache (will be refreshed lazily when needed)
+        // We don't refresh it here to avoid the O(n) clone during edits
+        self.cached_content_revision = 0; // Mark as stale
+    }
+
+    /// Returns a reference to the cached content for highlighting.
+    /// Returns None if the cache is stale.
+    pub fn cached_content(&self) -> Option<&str> {
+        if self.cached_content_revision == self.buffer.revision() {
+            Some(&self.cached_content)
+        } else {
+            None
+        }
+    }
+
+    /// Provides read access to the rope for efficient content access.
+    pub fn rope(&self) -> &ropey::Rope {
+        self.buffer.rope()
     }
 
     /// Returns the file path if the document is associated with a file.
@@ -264,8 +345,32 @@ impl Document {
     }
 
     /// Returns the entire content as a string.
+    /// Uses cached content when available for O(1) access on unchanged documents.
     pub fn content(&self) -> String {
-        self.buffer.to_string()
+        if self.cached_content_revision == self.buffer.revision() {
+            self.cached_content.clone()
+        } else {
+            self.buffer.to_string()
+        }
+    }
+
+    /// Returns a reference to the cached content string.
+    /// The cache is refreshed if stale. This avoids cloning for read-only access.
+    pub fn content_ref(&mut self) -> &str {
+        if self.cached_content_revision != self.buffer.revision() {
+            self.cached_content = self.buffer.to_string();
+            self.cached_content_revision = self.buffer.revision();
+        }
+        &self.cached_content
+    }
+
+    /// Ensures the content cache is up to date and returns a reference.
+    /// Call this after edits to refresh the cache for highlighting.
+    pub fn refresh_content_cache(&mut self) {
+        if self.cached_content_revision != self.buffer.revision() {
+            self.cached_content = self.buffer.to_string();
+            self.cached_content_revision = self.buffer.revision();
+        }
     }
 
     // =========================================================================

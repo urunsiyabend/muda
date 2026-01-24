@@ -3,7 +3,6 @@
 //! This module contains the projection logic that transforms
 //! Document + EditorView state into a render-ready RenderModel.
 
-use ratatui::style::{Color, Style};
 use std::path::PathBuf;
 
 use crate::domain::{Document, DocumentId, ProtectionError, TextPosition};
@@ -71,9 +70,21 @@ impl ViewModelBuilder {
         // Build gutter model
         let gutter = GutterModel::new(view.show_line_numbers(), document.len_lines());
 
+        // Get content for highlighting - use cache if available, otherwise fetch once
+        // Note: After an edit, the cache may be stale. We refresh it lazily here.
+        let content_for_highlighting = match document.cached_content() {
+            Some(s) => std::borrow::Cow::Borrowed(s),
+            None => {
+                // Cache is stale, we need to get fresh content.
+                // This is O(n) but happens once per edit, not per navigation.
+                std::borrow::Cow::Owned(document.content())
+            }
+        };
+
         // Build visible lines
         let visible_lines = Self::build_visible_lines(
             document,
+            &content_for_highlighting,
             viewport.scroll_x,
             viewport.scroll_y,
             viewport.width,
@@ -188,8 +199,13 @@ impl ViewModelBuilder {
     }
 
     /// Builds the visible lines with syntax highlighting and selection.
+    ///
+    /// # Arguments
+    /// * `content_for_highlighting` - Pre-fetched content string for tree-sitter highlighting.
+    ///   Caller should use Document::cached_content() to avoid repeated cloning.
     fn build_visible_lines(
         document: &Document,
+        content_for_highlighting: &str,
         scroll_x: usize,
         scroll_y: usize,
         width: usize,
@@ -198,7 +214,6 @@ impl ViewModelBuilder {
         selection: Option<(usize, usize)>,
     ) -> Vec<LinePresentation> {
         let mut visible_lines = Vec::with_capacity(height);
-        let content = document.content();
         let buffer = document.buffer();
         let highlighter = document.highlighter();
 
@@ -226,7 +241,7 @@ impl ViewModelBuilder {
             // Build styled spans for this line
             let spans = Self::build_line_spans(
                 &display_text,
-                &content,
+                content_for_highlighting,
                 &line_text,
                 line_idx,
                 line_start_char,
@@ -337,8 +352,7 @@ impl ViewModelBuilder {
         // Selected part (override with selection style)
         if sel_end > sel_start {
             let selected_text: String = chars[sel_start..sel_end].iter().collect();
-            let selection_style = Style::default().bg(Color::Blue).fg(Color::White);
-            spans.push(StyledSpan::new(selected_text, selection_style));
+            spans.push(StyledSpan::selection(selected_text));
         }
 
         // Post-selection part (with syntax highlighting)

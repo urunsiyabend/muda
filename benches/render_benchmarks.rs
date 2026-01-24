@@ -9,6 +9,7 @@ use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criteri
 use mudatexteditor::domain::Document;
 use mudatexteditor::view::{EditorView, FocusState, Sidebar};
 use mudatexteditor::view_model::builder::ViewModelBuilder;
+use ropey::Rope;
 use std::path::PathBuf;
 
 mod test_data;
@@ -366,6 +367,304 @@ fn bench_content_access(c: &mut Criterion) {
     group.finish();
 }
 
+/// Benchmark pure navigation + render (no document creation overhead).
+fn bench_navigation_render_cycle(c: &mut Criterion) {
+    let mut group = c.benchmark_group("render/navigation_cycle");
+    group.sample_size(100);
+
+    for size in [TestSizes::SMALL, TestSizes::MEDIUM, TestSizes::LARGE] {
+        let size_name = match size {
+            TestSizes::SMALL => "10KB",
+            TestSizes::MEDIUM => "100KB",
+            TestSizes::LARGE => "1MB",
+            _ => "unknown",
+        };
+
+        let content = generate_rust_source(size);
+        // Create document ONCE, outside the benchmark
+        let doc = Document::from_str(&content, Some(PathBuf::from("test.rs")));
+        let mut view = EditorView::new(doc.id());
+        view.viewport.resize(120, 40);
+        // Position in middle
+        let middle = doc.len_chars() / 2;
+        view.move_caret_to(middle, false);
+        view.viewport.scroll_y = doc.len_lines() / 2 - 20;
+        let sidebar = Sidebar::default();
+
+        group.bench_with_input(
+            BenchmarkId::new("arrow_right_render", size_name),
+            &(&doc, &view, &sidebar),
+            |b, (doc, view, sidebar)| {
+                let mut view_clone = (*view).clone();
+                b.iter(|| {
+                    // Simulate arrow right
+                    let offset = view_clone.caret_offset();
+                    if offset < doc.len_chars() {
+                        view_clone.move_caret_to(offset + 1, false);
+                    }
+
+                    // Build render model
+                    black_box(ViewModelBuilder::build(
+                        doc,
+                        &view_clone,
+                        None,
+                        None,
+                        sidebar,
+                        FocusState::Editor,
+                        40,
+                        None,
+                    ))
+                })
+            },
+        );
+    }
+
+    group.finish();
+}
+
+/// Benchmark edit + render cycle (with incremental parsing).
+fn bench_edit_render_cycle(c: &mut Criterion) {
+    let mut group = c.benchmark_group("render/edit_cycle");
+    group.sample_size(50);
+
+    for size in [TestSizes::SMALL, TestSizes::MEDIUM, TestSizes::LARGE] {
+        let size_name = match size {
+            TestSizes::SMALL => "10KB",
+            TestSizes::MEDIUM => "100KB",
+            TestSizes::LARGE => "1MB",
+            _ => "unknown",
+        };
+
+        let content = generate_rust_source(size);
+
+        group.bench_with_input(
+            BenchmarkId::new("insert_char_render", size_name),
+            &content,
+            |b, content| {
+                b.iter_batched(
+                    || {
+                        // Create document for each batch (we need fresh state)
+                        let mut doc = Document::from_str(content, Some(PathBuf::from("test.rs")));
+                        let mut view = EditorView::new(doc.id());
+                        view.viewport.resize(120, 40);
+                        // Position in middle
+                        let middle = doc.len_chars() / 2;
+                        view.move_caret_to(middle, false);
+                        view.viewport.scroll_y = doc.len_lines() / 2 - 20;
+
+                        // Pre-warm the cache
+                        doc.refresh_content_cache();
+
+                        let sidebar = Sidebar::default();
+                        (doc, view, sidebar)
+                    },
+                    |(mut doc, mut view, sidebar)| {
+                        // Insert character
+                        let offset = view.caret_offset();
+                        doc.buffer_mut().insert_char(offset, 'x');
+                        view.move_caret_to(offset + 1, false);
+
+                        // Incremental syntax update
+                        doc.update_syntax_incremental(offset, 0, 1);
+
+                        // Build render model
+                        black_box(ViewModelBuilder::build(
+                            &doc,
+                            &view,
+                            None,
+                            None,
+                            &sidebar,
+                            FocusState::Editor,
+                            40,
+                            None,
+                        ))
+                    },
+                    criterion::BatchSize::LargeInput,
+                )
+            },
+        );
+    }
+
+    group.finish();
+}
+
+/// Benchmark just the incremental syntax update (isolate parsing cost).
+fn bench_incremental_syntax(c: &mut Criterion) {
+    let mut group = c.benchmark_group("render/incremental_syntax");
+    group.sample_size(50);
+
+    for size in [TestSizes::SMALL, TestSizes::MEDIUM, TestSizes::LARGE] {
+        let size_name = match size {
+            TestSizes::SMALL => "10KB",
+            TestSizes::MEDIUM => "100KB",
+            TestSizes::LARGE => "1MB",
+            _ => "unknown",
+        };
+
+        let content = generate_rust_source(size);
+
+        group.bench_with_input(
+            BenchmarkId::new("update_syntax_incremental", size_name),
+            &content,
+            |b, content| {
+                b.iter_batched(
+                    || {
+                        let mut doc = Document::from_str(content, Some(PathBuf::from("test.rs")));
+                        doc.refresh_content_cache();
+                        let middle = doc.len_chars() / 2;
+                        (doc, middle)
+                    },
+                    |(mut doc, offset)| {
+                        // Just buffer insert + incremental syntax, no render
+                        doc.buffer_mut().insert_char(offset, 'x');
+                        doc.update_syntax_incremental(offset, 0, 1);
+                        black_box(doc.revision())
+                    },
+                    // Use PerIteration to measure single incremental parse, not accumulated
+                    criterion::BatchSize::PerIteration,
+                )
+            },
+        );
+    }
+
+    group.finish();
+}
+
+/// Benchmark just buffer operations (isolate rope cost).
+fn bench_buffer_only(c: &mut Criterion) {
+    let mut group = c.benchmark_group("render/buffer_only");
+    group.sample_size(100);
+
+    for size in [TestSizes::SMALL, TestSizes::MEDIUM, TestSizes::LARGE] {
+        let size_name = match size {
+            TestSizes::SMALL => "10KB",
+            TestSizes::MEDIUM => "100KB",
+            TestSizes::LARGE => "1MB",
+            _ => "unknown",
+        };
+
+        let content = generate_rust_source(size);
+
+        group.bench_with_input(
+            BenchmarkId::new("insert_char", size_name),
+            &content,
+            |b, content| {
+                b.iter_batched(
+                    || {
+                        let doc = Document::from_str(content, Some(PathBuf::from("test.rs")));
+                        let middle = doc.len_chars() / 2;
+                        (doc, middle)
+                    },
+                    |(mut doc, offset)| {
+                        // Just buffer insert, no syntax or render
+                        doc.buffer_mut().insert_char(offset, 'x');
+                        black_box(doc.revision())
+                    },
+                    // Use PerIteration to measure single inserts, not accumulated operations
+                    criterion::BatchSize::PerIteration,
+                )
+            },
+        );
+    }
+
+    group.finish();
+}
+
+/// Benchmark raw ropey operations without Document overhead.
+fn bench_raw_rope(c: &mut Criterion) {
+    let mut group = c.benchmark_group("render/raw_rope");
+    group.sample_size(100);
+
+    for size in [TestSizes::SMALL, TestSizes::MEDIUM, TestSizes::LARGE] {
+        let size_name = match size {
+            TestSizes::SMALL => "10KB",
+            TestSizes::MEDIUM => "100KB",
+            TestSizes::LARGE => "1MB",
+            _ => "unknown",
+        };
+
+        let content = generate_rust_source(size);
+        // Create rope ONCE outside the benchmark
+        let rope = Rope::from_str(&content);
+        let middle = rope.len_chars() / 2;
+
+        group.bench_function(BenchmarkId::new("insert_char", size_name), |b| {
+            b.iter(|| {
+                // Clone the rope for each iteration (this tests rope clone + insert)
+                let mut r = rope.clone();
+                r.insert_char(middle, 'x');
+                black_box(r.len_chars())
+            })
+        });
+    }
+
+    group.finish();
+}
+
+/// Benchmark raw ropey insert WITHOUT clone (true O(log n) test).
+fn bench_rope_insert_only(c: &mut Criterion) {
+    let mut group = c.benchmark_group("render/rope_insert_only");
+    group.sample_size(100);
+
+    for size in [TestSizes::SMALL, TestSizes::MEDIUM, TestSizes::LARGE] {
+        let size_name = match size {
+            TestSizes::SMALL => "10KB",
+            TestSizes::MEDIUM => "100KB",
+            TestSizes::LARGE => "1MB",
+            _ => "unknown",
+        };
+
+        let content = generate_rust_source(size);
+
+        group.bench_with_input(
+            BenchmarkId::new("insert_char_no_clone", size_name),
+            &content,
+            |b, content| {
+                b.iter_batched(
+                    || {
+                        let rope = Rope::from_str(content);
+                        let middle = rope.len_chars() / 2;
+                        (rope, middle)
+                    },
+                    |(mut rope, middle)| {
+                        rope.insert_char(middle, 'x');
+                        black_box(rope.len_chars())
+                    },
+                    criterion::BatchSize::PerIteration,
+                )
+            },
+        );
+    }
+
+    group.finish();
+}
+
+/// Benchmark Document creation (with tree-sitter parsing).
+fn bench_document_creation(c: &mut Criterion) {
+    let mut group = c.benchmark_group("render/document_creation");
+    group.sample_size(20);
+
+    for size in [TestSizes::SMALL, TestSizes::MEDIUM, TestSizes::LARGE] {
+        let size_name = match size {
+            TestSizes::SMALL => "10KB",
+            TestSizes::MEDIUM => "100KB",
+            TestSizes::LARGE => "1MB",
+            _ => "unknown",
+        };
+
+        let content = generate_rust_source(size);
+
+        group.bench_function(BenchmarkId::new("from_str", size_name), |b| {
+            b.iter(|| {
+                let doc = Document::from_str(&content, Some(PathBuf::from("test.rs")));
+                black_box(doc.id())
+            })
+        });
+    }
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_build_render_model,
@@ -374,6 +673,13 @@ criterion_group!(
     bench_viewport_sizes,
     bench_sidebar_toggle,
     bench_content_access,
+    bench_navigation_render_cycle,
+    bench_edit_render_cycle,
+    bench_incremental_syntax,
+    bench_buffer_only,
+    bench_raw_rope,
+    bench_rope_insert_only,
+    bench_document_creation,
 );
 
 criterion_main!(benches);
