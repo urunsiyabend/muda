@@ -8,7 +8,7 @@
 //! - Line access
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use mudatexteditor::domain::text_buffer::{TextBuffer, TextRange};
+use core_editor::domain::text_buffer::{TextBuffer, TextRange};
 
 mod test_data;
 use test_data::{generate_rust_source, TestSizes};

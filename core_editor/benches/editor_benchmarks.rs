@@ -7,13 +7,13 @@
 //! - Large file behavior
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use mudatexteditor::commands::editor_command::{Direction, MoveScope};
-use mudatexteditor::commands::{CommandHistory, EditorCommand};
-use mudatexteditor::commands::dispatcher::{CommandContext, CommandDispatcher};
-use mudatexteditor::domain::Document;
-use mudatexteditor::events::EventBus;
-use mudatexteditor::view::{EditorView, FocusState, Sidebar};
-use mudatexteditor::view_model::builder::ViewModelBuilder;
+use core_editor::commands::editor_command::{Direction, MoveScope};
+use core_editor::commands::{CommandHistory, EditorCommand};
+use core_editor::commands::dispatcher::{CommandContext, CommandDispatcher};
+use core_editor::domain::Document;
+use core_editor::events::EventBus;
+use core_editor::view::{EditorView, FocusState, Sidebar};
+use core_editor::view_model::builder::ViewModelBuilder;
 use std::path::PathBuf;
 
 mod test_data;

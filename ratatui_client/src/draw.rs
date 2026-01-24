@@ -20,7 +20,7 @@ use ratatui::{
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph},
 };
 
-use mudatexteditor::view_model::{DialogPresentation, RenderModel, SidebarPresentation, TextStyle};
+use core_editor::view_model::{DialogPresentation, RenderModel, SidebarPresentation, TextStyle};
 
 // =============================================================================
 // Style Mapping: TextStyle → ratatui::Style

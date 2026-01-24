@@ -1,7 +1,6 @@
-mod app;
 mod draw;
 
-use app::App;
+use core_editor::app::App;
 use draw::ui;
 
 use crossterm::event::{self, EnableBracketedPaste, Event, KeyCode, KeyEventKind, KeyModifiers};

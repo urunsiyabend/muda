@@ -6,9 +6,9 @@
 //! - Styled span generation
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use mudatexteditor::domain::Document;
-use mudatexteditor::view::{EditorView, FocusState, Sidebar};
-use mudatexteditor::view_model::builder::ViewModelBuilder;
+use core_editor::domain::Document;
+use core_editor::view::{EditorView, FocusState, Sidebar};
+use core_editor::view_model::builder::ViewModelBuilder;
 use ropey::Rope;
 use std::path::PathBuf;
 

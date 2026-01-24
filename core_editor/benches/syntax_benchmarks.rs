@@ -6,7 +6,7 @@
 //! - Query execution time
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use mudatexteditor::syntax::{SyntaxHighlighter, SyntaxLanguage};
+use core_editor::syntax::{SyntaxHighlighter, SyntaxLanguage};
 
 mod test_data;
 use test_data::{generate_json, generate_plain_text, generate_rust_source, TestSizes};

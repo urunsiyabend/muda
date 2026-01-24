@@ -8,11 +8,11 @@
 
 use std::path::PathBuf;
 
-use mudatexteditor::commands::editor_command::{Direction, MoveScope};
-use mudatexteditor::commands::{CommandContext, CommandDispatcher, DispatchResult, EditorCommand};
-use mudatexteditor::domain::{DiscardAcknowledgment, ProtectionError, Workspace};
-use mudatexteditor::view::{FocusState, Sidebar};
-use mudatexteditor::view_model::{PendingAction, RenderModel, builder::ViewModelBuilder};
+use crate::commands::editor_command::{Direction, MoveScope};
+use crate::commands::{CommandContext, CommandDispatcher, DispatchResult, EditorCommand};
+use crate::domain::{DiscardAcknowledgment, ProtectionError, Workspace};
+use crate::view::{FocusState, Sidebar};
+use crate::view_model::{PendingAction, RenderModel, builder::ViewModelBuilder};
 
 /// The main application state.
 ///
@@ -683,7 +683,7 @@ impl App {
     ///
     /// Prefer using App's higher-level methods for read access.
     #[allow(dead_code)]
-    pub(crate) fn view(&self) -> Option<&mudatexteditor::view::EditorView> {
+    pub(crate) fn view(&self) -> Option<&crate::view::EditorView> {
         self.workspace.active_view()
     }
 
@@ -692,7 +692,7 @@ impl App {
     /// **DEPRECATED**: Direct view mutations bypass the command system.
     /// Use EditorCommand + dispatch() instead for operations that modify state.
     #[allow(dead_code)]
-    pub(crate) fn view_mut(&mut self) -> Option<&mut mudatexteditor::view::EditorView> {
+    pub(crate) fn view_mut(&mut self) -> Option<&mut crate::view::EditorView> {
         self.workspace.active_view_mut()
     }
 
@@ -700,7 +700,7 @@ impl App {
     ///
     /// Prefer using App's higher-level methods for read access.
     #[allow(dead_code)]
-    pub(crate) fn document(&self) -> Option<&mudatexteditor::domain::Document> {
+    pub(crate) fn document(&self) -> Option<&crate::domain::Document> {
         self.workspace.active_document()
     }
 
@@ -709,7 +709,7 @@ impl App {
     /// **DEPRECATED**: Direct document mutations bypass the command system
     /// and undo/redo history. Use EditorCommand + dispatch() instead.
     #[allow(dead_code)]
-    pub(crate) fn document_mut(&mut self) -> Option<&mut mudatexteditor::domain::Document> {
+    pub(crate) fn document_mut(&mut self) -> Option<&mut crate::domain::Document> {
         self.workspace.active_document_mut()
     }
 }
