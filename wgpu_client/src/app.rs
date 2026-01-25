@@ -198,8 +198,85 @@ impl WgpuApp {
                     }
                 }
             }
+            // Command palette actions
+            AppAction::ToggleCommandPalette => {
+                if let Some(renderer) = &mut self.renderer {
+                    renderer.toggle_command_palette();
+                }
+            }
+            AppAction::CommandPaletteUp => {
+                if let Some(renderer) = &mut self.renderer {
+                    renderer.command_palette_up();
+                }
+            }
+            AppAction::CommandPaletteDown => {
+                if let Some(renderer) = &mut self.renderer {
+                    renderer.command_palette_down();
+                }
+            }
+            AppAction::CommandPaletteExecute => {
+                if let Some(renderer) = &mut self.renderer {
+                    if let Some(command_id) = renderer.command_palette_execute() {
+                        self.execute_command(&command_id);
+                    }
+                }
+            }
+            AppAction::CommandPaletteClose => {
+                if let Some(renderer) = &mut self.renderer {
+                    renderer.hide_command_palette();
+                }
+            }
+            AppAction::CommandPaletteType(c) => {
+                if let Some(renderer) = &mut self.renderer {
+                    renderer.command_palette_type(c);
+                }
+            }
+            AppAction::CommandPaletteBackspace => {
+                if let Some(renderer) = &mut self.renderer {
+                    renderer.command_palette_backspace();
+                }
+            }
         }
         self.request_redraw();
+    }
+
+    /// Execute a command by its ID.
+    fn execute_command(&mut self, command_id: &str) {
+        log::debug!("Executing command: {}", command_id);
+        match command_id {
+            "file.new" => {
+                // TODO: Implement new file
+            }
+            "file.open" => {
+                // TODO: Implement open file dialog
+            }
+            "file.save" => {
+                if let Err(e) = self.editor.save() {
+                    log::error!("Save failed: {}", e);
+                }
+            }
+            "edit.undo" => {
+                self.editor.dispatch(core_editor::commands::EditorCommand::Undo);
+            }
+            "edit.redo" => {
+                self.editor.dispatch(core_editor::commands::EditorCommand::Redo);
+            }
+            "edit.cut" => {
+                self.editor.dispatch(core_editor::commands::EditorCommand::Cut);
+            }
+            "edit.copy" => {
+                self.editor.dispatch(core_editor::commands::EditorCommand::Copy);
+            }
+            "edit.paste" => {
+                self.editor.dispatch(core_editor::commands::EditorCommand::Paste);
+            }
+            "view.sidebar" => {
+                self.editor.toggle_sidebar();
+            }
+            _ => {
+                log::warn!("Unknown command: {}", command_id);
+            }
+        }
     }
 
     /// Handles mouse click at the given position (logical pixels).
@@ -673,12 +750,19 @@ impl ApplicationHandler for WgpuApp {
                     return; // Block all other input when dialog is open
                 }
 
+                // Check if command palette is visible
+                let command_palette_visible = self.renderer
+                    .as_ref()
+                    .map(|r| r.is_command_palette_visible())
+                    .unwrap_or(false);
+
                 // Try app-level action first
                 if let Some(action) = translate_app_action(
                     &event,
                     &self.modifiers,
                     self.editor.has_pending_action(),
                     self.editor.is_sidebar_focused(),
+                    command_palette_visible,
                 ) {
                     self.handle_app_action(action);
 

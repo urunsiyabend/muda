@@ -115,6 +115,20 @@ pub enum AppAction {
     SidebarBack,
     /// Sidebar: open selected item.
     SidebarOpen,
+    /// Toggle command palette.
+    ToggleCommandPalette,
+    /// Command palette navigation: move up.
+    CommandPaletteUp,
+    /// Command palette navigation: move down.
+    CommandPaletteDown,
+    /// Execute selected command in palette.
+    CommandPaletteExecute,
+    /// Close command palette.
+    CommandPaletteClose,
+    /// Type a character in command palette.
+    CommandPaletteType(char),
+    /// Backspace in command palette.
+    CommandPaletteBackspace,
 }
 
 /// Translates a winit key event to an app-level action.
@@ -123,12 +137,14 @@ pub fn translate_app_action(
     modifiers: &Modifiers,
     has_pending_action: bool,
     sidebar_focused: bool,
+    command_palette_visible: bool,
 ) -> Option<AppAction> {
     if event.state != ElementState::Pressed {
         return None;
     }
 
     let ctrl = modifiers.state().control_key();
+    let shift = modifiers.state().shift_key();
 
     // Dialog handling takes priority
     if has_pending_action {
@@ -140,8 +156,27 @@ pub fn translate_app_action(
         };
     }
 
+    // Command palette handling takes priority when visible
+    if command_palette_visible {
+        return match &event.logical_key {
+            Key::Named(NamedKey::Escape) => Some(AppAction::CommandPaletteClose),
+            Key::Named(NamedKey::ArrowUp) => Some(AppAction::CommandPaletteUp),
+            Key::Named(NamedKey::ArrowDown) => Some(AppAction::CommandPaletteDown),
+            Key::Named(NamedKey::Enter) => Some(AppAction::CommandPaletteExecute),
+            Key::Named(NamedKey::Backspace) => Some(AppAction::CommandPaletteBackspace),
+            Key::Character(c) if !ctrl => {
+                c.chars().next().map(AppAction::CommandPaletteType)
+            }
+            _ => None,
+        };
+    }
+
     // Global shortcuts
     match &event.logical_key {
+        // Ctrl+Shift+P or Ctrl+P for command palette
+        Key::Character(c) if ctrl && shift && (c == "p" || c == "P") => {
+            return Some(AppAction::ToggleCommandPalette);
+        }
         Key::Named(NamedKey::Escape) => {
             return if sidebar_focused {
                 Some(AppAction::FocusEditor)

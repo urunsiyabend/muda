@@ -7,9 +7,12 @@
 
 mod app;
 mod components;
+mod design_system;
 mod input;
 mod renderer;
 mod theme;
+mod ui;
+mod widgets;
 
 use std::env;
 use std::fs::File;

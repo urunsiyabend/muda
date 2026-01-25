@@ -2,6 +2,7 @@
 
 use crate::components::{Bounds, Caret, Dialog, Gutter, SidebarComponent, StatusBar, TabBar, TextArea};
 use crate::theme::Theme;
+use crate::ui::{AppLayout, LayoutRegion, CommandPalette, CommandEntry, CommandKind};
 use core_editor::view_model::RenderModel;
 
 /// Main GPU renderer that coordinates all UI components.
@@ -14,6 +15,10 @@ pub struct GpuRenderer {
     sidebar: SidebarComponent,
     tab_bar: TabBar,
     dialog: Dialog,
+
+    // New UI components
+    app_layout: AppLayout,
+    command_palette: CommandPalette,
 
     // State
     surface: wgpu::Surface<'static>,
@@ -95,6 +100,30 @@ impl GpuRenderer {
         let tab_bar = TabBar::new(&device, &queue, surface_format);
         let dialog = Dialog::new(&device, &queue, surface_format);
 
+        // New UI components
+        let app_layout = AppLayout::new();
+        let mut command_palette = CommandPalette::new();
+
+        // Register default commands
+        command_palette.register_commands(vec![
+            CommandEntry::command("file.new", "New File").with_shortcut("Ctrl+N"),
+            CommandEntry::command("file.open", "Open File").with_shortcut("Ctrl+O"),
+            CommandEntry::command("file.save", "Save").with_shortcut("Ctrl+S"),
+            CommandEntry::command("file.save_as", "Save As").with_shortcut("Ctrl+Shift+S"),
+            CommandEntry::command("edit.undo", "Undo").with_shortcut("Ctrl+Z"),
+            CommandEntry::command("edit.redo", "Redo").with_shortcut("Ctrl+Y"),
+            CommandEntry::command("edit.cut", "Cut").with_shortcut("Ctrl+X"),
+            CommandEntry::command("edit.copy", "Copy").with_shortcut("Ctrl+C"),
+            CommandEntry::command("edit.paste", "Paste").with_shortcut("Ctrl+V"),
+            CommandEntry::command("edit.find", "Find").with_shortcut("Ctrl+F"),
+            CommandEntry::command("edit.replace", "Find and Replace").with_shortcut("Ctrl+H"),
+            CommandEntry::command("view.sidebar", "Toggle Sidebar").with_shortcut("Ctrl+B"),
+            CommandEntry::command("view.panel", "Toggle Panel").with_shortcut("Ctrl+J"),
+            CommandEntry::command("view.command_palette", "Command Palette").with_shortcut("Ctrl+Shift+P"),
+            CommandEntry::command("go.line", "Go to Line").with_shortcut("Ctrl+G"),
+            CommandEntry::command("go.file", "Go to File").with_shortcut("Ctrl+P"),
+        ]);
+
         // Measure actual character width from the font
         let measured_char_width = text_area.measure_char_width(theme.font_size);
 
@@ -106,6 +135,8 @@ impl GpuRenderer {
             sidebar,
             tab_bar,
             dialog,
+            app_layout,
+            command_palette,
             surface,
             device,
             queue,
@@ -151,7 +182,59 @@ impl GpuRenderer {
 
     /// Updates animation state. Returns true if a redraw is needed.
     pub fn update(&mut self) -> bool {
-        self.caret.update()
+        let caret_update = self.caret.update();
+        let palette_update = self.command_palette.update();
+        caret_update || palette_update
+    }
+
+    /// Toggle the command palette.
+    pub fn toggle_command_palette(&mut self) {
+        self.command_palette.toggle();
+    }
+
+    /// Show the command palette.
+    pub fn show_command_palette(&mut self) {
+        self.command_palette.show();
+    }
+
+    /// Hide the command palette.
+    pub fn hide_command_palette(&mut self) {
+        self.command_palette.hide();
+    }
+
+    /// Check if command palette is visible.
+    pub fn is_command_palette_visible(&self) -> bool {
+        self.command_palette.is_visible()
+    }
+
+    /// Type a character into the command palette.
+    pub fn command_palette_type(&mut self, c: char) {
+        self.command_palette.type_char(c);
+    }
+
+    /// Backspace in the command palette.
+    pub fn command_palette_backspace(&mut self) {
+        self.command_palette.backspace();
+    }
+
+    /// Move selection up in command palette.
+    pub fn command_palette_up(&mut self) {
+        self.command_palette.select_previous();
+    }
+
+    /// Move selection down in command palette.
+    pub fn command_palette_down(&mut self) {
+        self.command_palette.select_next();
+    }
+
+    /// Execute selected command in palette.
+    pub fn command_palette_execute(&mut self) -> Option<String> {
+        self.command_palette.execute().map(|e| e.id)
+    }
+
+    /// Hit test for layout region.
+    pub fn hit_test(&self, x: f32, y: f32) -> LayoutRegion {
+        self.app_layout.hit_test(x, y)
     }
 
     /// Returns the time until the next animation frame is needed.
@@ -166,8 +249,16 @@ impl GpuRenderer {
 
         let screen_width = self.config.width as f32;
         let screen_height = self.config.height as f32;
+        let logical_width = screen_width / scale_factor;
+        let logical_height = screen_height / scale_factor;
 
-        // Calculate layout
+        // Update app layout for new frame
+        self.app_layout.calculate(logical_width, logical_height);
+
+        // Update command palette bounds
+        self.command_palette.calculate_bounds(logical_width, logical_height);
+
+        // Calculate layout (existing system)
         let layout = self.calculate_layout(model, scale_factor);
 
         // Prepare all components (pass full screen resolution for glyphon viewport)
