@@ -6,7 +6,7 @@ use glyphon::{
 };
 
 use super::{Bounds, Rect, RectRenderer};
-use crate::theme::{Color, Theme};
+use crate::theme::{Color, Theme, ColorRole};
 use core_editor::view_model::DialogPresentation;
 
 /// Modal dialog component.
@@ -119,7 +119,7 @@ impl Dialog {
             Attrs::new()
                 .family(Family::SansSerif)
                 .weight(glyphon::Weight::BOLD)
-                .color(theme.palette.fg.to_glyphon()),
+                .color(theme.palette.get(ColorRole::FgPrimary).to_glyphon()),
             Shaping::Advanced,
         );
         self.title_buffer.shape_until_scroll(&mut self.font_system, false);
@@ -148,7 +148,7 @@ impl Dialog {
             &text,
             Attrs::new()
                 .family(Family::SansSerif)
-                .color(theme.palette.fg.to_glyphon()),
+                .color(theme.palette.get(ColorRole::FgPrimary).to_glyphon()),
             Shaping::Advanced,
         );
         self.content_buffer.shape_until_scroll(&mut self.font_system, false);
@@ -246,7 +246,7 @@ impl Dialog {
                     right: ((dialog_bounds.x + dialog_bounds.width) * scale_factor) as i32,
                     bottom: ((dialog_bounds.y + 36.0) * scale_factor) as i32,
                 },
-                default_color: theme.palette.fg.to_glyphon(),
+                default_color: theme.palette.get(ColorRole::FgPrimary).to_glyphon(),
                 custom_glyphs: &[],
             },
             // Content
@@ -261,7 +261,7 @@ impl Dialog {
                     right: ((dialog_bounds.x + dialog_bounds.width - Self::DIALOG_PADDING) * scale_factor) as i32,
                     bottom: ((buttons_y - 10.0) * scale_factor) as i32,
                 },
-                default_color: theme.palette.fg.to_glyphon(),
+                default_color: theme.palette.get(ColorRole::FgPrimary).to_glyphon(),
                 custom_glyphs: &[],
             },
             // Button 1: Save

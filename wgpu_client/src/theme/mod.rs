@@ -2,15 +2,15 @@
 //!
 //! Provides a consistent, configurable color palette and style mapping
 //! from semantic `TextStyle` tokens to concrete GPU rendering attributes.
+//!
+//! This module re-exports from the design_system for a unified theming API.
 
 mod colors;
-mod palette;
 
 pub use colors::Color;
-pub use palette::Theme;
 
-#[allow(unused)]
-pub use palette::Palette;
+// Re-export Theme and ColorPalette from design_system
+pub use crate::design_system::{Theme, ColorPalette, ColorRole};
 
 use core_editor::view_model::TextStyle;
 
@@ -67,30 +67,31 @@ pub fn map_style(style: TextStyle, theme: &Theme) -> GpuStyle {
 
     match style {
         // Normal text
-        TextStyle::Normal => GpuStyle::new(p.fg),
+        TextStyle::Normal => GpuStyle::new(p.get(ColorRole::FgPrimary)),
 
         // Selection
-        TextStyle::Selection => GpuStyle::new(p.selection_fg).with_bg(p.selection_bg),
+        TextStyle::Selection => GpuStyle::new(p.get(ColorRole::SelectionFg))
+            .with_bg(p.get(ColorRole::Selection)),
 
         // Syntax highlighting
-        TextStyle::Keyword => GpuStyle::new(p.keyword).bold(),
-        TextStyle::String => GpuStyle::new(p.string),
-        TextStyle::Number => GpuStyle::new(p.number),
-        TextStyle::Comment => GpuStyle::new(p.comment).italic(),
-        TextStyle::Type => GpuStyle::new(p.type_name),
-        TextStyle::Function => GpuStyle::new(p.function),
-        TextStyle::Variable => GpuStyle::new(p.variable),
-        TextStyle::Operator => GpuStyle::new(p.operator),
-        TextStyle::Punctuation => GpuStyle::new(p.punctuation),
-        TextStyle::Constant => GpuStyle::new(p.constant).bold(),
-        TextStyle::Module => GpuStyle::new(p.module),
-        TextStyle::Attribute => GpuStyle::new(p.attribute),
-        TextStyle::Macro => GpuStyle::new(p.macro_name),
+        TextStyle::Keyword => GpuStyle::new(p.get(ColorRole::SyntaxKeyword)).bold(),
+        TextStyle::String => GpuStyle::new(p.get(ColorRole::SyntaxString)),
+        TextStyle::Number => GpuStyle::new(p.get(ColorRole::SyntaxNumber)),
+        TextStyle::Comment => GpuStyle::new(p.get(ColorRole::SyntaxComment)).italic(),
+        TextStyle::Type => GpuStyle::new(p.get(ColorRole::SyntaxType)),
+        TextStyle::Function => GpuStyle::new(p.get(ColorRole::SyntaxFunction)),
+        TextStyle::Variable => GpuStyle::new(p.get(ColorRole::SyntaxVariable)),
+        TextStyle::Operator => GpuStyle::new(p.get(ColorRole::SyntaxOperator)),
+        TextStyle::Punctuation => GpuStyle::new(p.get(ColorRole::SyntaxPunctuation)),
+        TextStyle::Constant => GpuStyle::new(p.get(ColorRole::SyntaxConstant)).bold(),
+        TextStyle::Module => GpuStyle::new(p.get(ColorRole::SyntaxModule)),
+        TextStyle::Attribute => GpuStyle::new(p.get(ColorRole::SyntaxAttribute)),
+        TextStyle::Macro => GpuStyle::new(p.get(ColorRole::SyntaxMacro)),
 
         // UI elements
-        TextStyle::LineNumber => GpuStyle::new(p.line_number),
-        TextStyle::CurrentLineNumber => GpuStyle::new(p.current_line_number).bold(),
-        TextStyle::Error => GpuStyle::new(p.error).bold().underline(),
-        TextStyle::Warning => GpuStyle::new(p.warning).underline(),
+        TextStyle::LineNumber => GpuStyle::new(p.get(ColorRole::LineNumber)),
+        TextStyle::CurrentLineNumber => GpuStyle::new(p.get(ColorRole::CurrentLineNumber)).bold(),
+        TextStyle::Error => GpuStyle::new(p.get(ColorRole::Error)).bold().underline(),
+        TextStyle::Warning => GpuStyle::new(p.get(ColorRole::Warning)).underline(),
     }
 }

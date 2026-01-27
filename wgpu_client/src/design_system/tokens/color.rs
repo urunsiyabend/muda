@@ -68,14 +68,20 @@ pub enum ColorRole {
     Error,
     /// Informational state
     Info,
+    /// Hint/suggestion state
+    Hint,
 
     // =========================================================================
     // Selection & Focus
     // =========================================================================
     /// Text selection background
     Selection,
+    /// Text selection foreground
+    SelectionFg,
     /// Focus ring/outline
     Focus,
+    /// Current line highlight background
+    CurrentLine,
 
     // =========================================================================
     // Borders
@@ -86,6 +92,56 @@ pub enum ColorRole {
     BorderSubtle,
     /// Focus border
     BorderFocus,
+
+    // =========================================================================
+    // Editor Chrome
+    // =========================================================================
+    /// Caret (cursor) color
+    Caret,
+    /// Gutter background
+    GutterBg,
+    /// Line number color
+    LineNumber,
+    /// Current line number color
+    CurrentLineNumber,
+    /// Status bar background
+    StatusBarBg,
+    /// Status bar foreground
+    StatusBarFg,
+    /// Sidebar background
+    SidebarBg,
+    /// Sidebar foreground
+    SidebarFg,
+
+    // =========================================================================
+    // Syntax Highlighting
+    // =========================================================================
+    /// Keywords (if, else, fn, etc.)
+    SyntaxKeyword,
+    /// String literals
+    SyntaxString,
+    /// Numeric literals
+    SyntaxNumber,
+    /// Comments
+    SyntaxComment,
+    /// Type names
+    SyntaxType,
+    /// Function names
+    SyntaxFunction,
+    /// Variable names
+    SyntaxVariable,
+    /// Operators (+, -, *, etc.)
+    SyntaxOperator,
+    /// Punctuation (braces, parens, etc.)
+    SyntaxPunctuation,
+    /// Constants
+    SyntaxConstant,
+    /// Module/namespace names
+    SyntaxModule,
+    /// Attributes/decorators
+    SyntaxAttribute,
+    /// Macro names
+    SyntaxMacro,
 }
 
 /// Complete semantic color palette that maps roles to actual colors.
@@ -119,15 +175,43 @@ pub struct ColorPalette {
     pub warning: Color,
     pub error: Color,
     pub info: Color,
+    pub hint: Color,
 
     // Selection & Focus
     pub selection: Color,
+    pub selection_fg: Color,
     pub focus: Color,
+    pub current_line: Color,
 
     // Borders
     pub border_default: Color,
     pub border_subtle: Color,
     pub border_focus: Color,
+
+    // Editor Chrome
+    pub caret: Color,
+    pub gutter_bg: Color,
+    pub line_number: Color,
+    pub current_line_number: Color,
+    pub status_bar_bg: Color,
+    pub status_bar_fg: Color,
+    pub sidebar_bg: Color,
+    pub sidebar_fg: Color,
+
+    // Syntax Highlighting
+    pub syntax_keyword: Color,
+    pub syntax_string: Color,
+    pub syntax_number: Color,
+    pub syntax_comment: Color,
+    pub syntax_type: Color,
+    pub syntax_function: Color,
+    pub syntax_variable: Color,
+    pub syntax_operator: Color,
+    pub syntax_punctuation: Color,
+    pub syntax_constant: Color,
+    pub syntax_module: Color,
+    pub syntax_attribute: Color,
+    pub syntax_macro: Color,
 }
 
 impl ColorPalette {
@@ -157,13 +241,41 @@ impl ColorPalette {
             ColorRole::Warning => self.warning,
             ColorRole::Error => self.error,
             ColorRole::Info => self.info,
+            ColorRole::Hint => self.hint,
 
             ColorRole::Selection => self.selection,
+            ColorRole::SelectionFg => self.selection_fg,
             ColorRole::Focus => self.focus,
+            ColorRole::CurrentLine => self.current_line,
 
             ColorRole::BorderDefault => self.border_default,
             ColorRole::BorderSubtle => self.border_subtle,
             ColorRole::BorderFocus => self.border_focus,
+
+            // Editor Chrome
+            ColorRole::Caret => self.caret,
+            ColorRole::GutterBg => self.gutter_bg,
+            ColorRole::LineNumber => self.line_number,
+            ColorRole::CurrentLineNumber => self.current_line_number,
+            ColorRole::StatusBarBg => self.status_bar_bg,
+            ColorRole::StatusBarFg => self.status_bar_fg,
+            ColorRole::SidebarBg => self.sidebar_bg,
+            ColorRole::SidebarFg => self.sidebar_fg,
+
+            // Syntax Highlighting
+            ColorRole::SyntaxKeyword => self.syntax_keyword,
+            ColorRole::SyntaxString => self.syntax_string,
+            ColorRole::SyntaxNumber => self.syntax_number,
+            ColorRole::SyntaxComment => self.syntax_comment,
+            ColorRole::SyntaxType => self.syntax_type,
+            ColorRole::SyntaxFunction => self.syntax_function,
+            ColorRole::SyntaxVariable => self.syntax_variable,
+            ColorRole::SyntaxOperator => self.syntax_operator,
+            ColorRole::SyntaxPunctuation => self.syntax_punctuation,
+            ColorRole::SyntaxConstant => self.syntax_constant,
+            ColorRole::SyntaxModule => self.syntax_module,
+            ColorRole::SyntaxAttribute => self.syntax_attribute,
+            ColorRole::SyntaxMacro => self.syntax_macro,
         }
     }
 
@@ -198,15 +310,43 @@ impl ColorPalette {
             warning: Color::from_hex(0xCCA700),
             error: Color::from_hex(0xF44747),
             info: Color::from_hex(0x3794FF),
+            hint: Color::from_hex(0x6A9955),
 
             // Selection & Focus
             selection: Color::from_hex(0x264F78),
+            selection_fg: Color::from_hex(0xFFFFFF),
             focus: Color::from_hex(0x007ACC),
+            current_line: Color::from_hex(0x2A2D2E),
 
             // Borders
             border_default: Color::from_hex(0x3C3C3C),
             border_subtle: Color::from_hex(0x2D2D2D),
             border_focus: Color::from_hex(0x007ACC),
+
+            // Editor Chrome
+            caret: Color::from_hex(0xAEAFAD),
+            gutter_bg: Color::from_hex(0x1E1E1E),
+            line_number: Color::from_hex(0x858585),
+            current_line_number: Color::from_hex(0xC6C6C6),
+            status_bar_bg: Color::from_hex(0x007ACC),
+            status_bar_fg: Color::from_hex(0xFFFFFF),
+            sidebar_bg: Color::from_hex(0x252526),
+            sidebar_fg: Color::from_hex(0xCCCCCC),
+
+            // Syntax Highlighting (One Dark / VS Code inspired)
+            syntax_keyword: Color::from_hex(0xC586C0),      // Purple
+            syntax_string: Color::from_hex(0xCE9178),       // Orange
+            syntax_number: Color::from_hex(0xB5CEA8),       // Light green
+            syntax_comment: Color::from_hex(0x6A9955),      // Green
+            syntax_type: Color::from_hex(0x4EC9B0),         // Cyan
+            syntax_function: Color::from_hex(0xDCDCAA),     // Yellow
+            syntax_variable: Color::from_hex(0x9CDCFE),     // Light blue
+            syntax_operator: Color::from_hex(0xD4D4D4),     // White
+            syntax_punctuation: Color::from_hex(0x808080),  // Gray
+            syntax_constant: Color::from_hex(0x4FC1FF),     // Blue
+            syntax_module: Color::from_hex(0x4EC9B0),       // Cyan
+            syntax_attribute: Color::from_hex(0x9CDCFE),    // Light blue
+            syntax_macro: Color::from_hex(0x569CD6),        // Blue
         }
     }
 
@@ -241,15 +381,43 @@ impl ColorPalette {
             warning: Color::from_hex(0xBF8803),
             error: Color::from_hex(0xE51400),
             info: Color::from_hex(0x1A85FF),
+            hint: Color::from_hex(0x008000),
 
             // Selection & Focus
             selection: Color::from_hex(0xADD6FF),
+            selection_fg: Color::from_hex(0x000000),
             focus: Color::from_hex(0x007ACC),
+            current_line: Color::from_hex(0xFFFBDD),
 
             // Borders
             border_default: Color::from_hex(0xE0E0E0),
             border_subtle: Color::from_hex(0xEEEEEE),
             border_focus: Color::from_hex(0x007ACC),
+
+            // Editor Chrome
+            caret: Color::from_hex(0x000000),
+            gutter_bg: Color::from_hex(0xF3F3F3),
+            line_number: Color::from_hex(0x999999),
+            current_line_number: Color::from_hex(0x333333),
+            status_bar_bg: Color::from_hex(0x007ACC),
+            status_bar_fg: Color::from_hex(0xFFFFFF),
+            sidebar_bg: Color::from_hex(0xF3F3F3),
+            sidebar_fg: Color::from_hex(0x333333),
+
+            // Syntax Highlighting
+            syntax_keyword: Color::from_hex(0x0000FF),      // Blue
+            syntax_string: Color::from_hex(0xA31515),       // Red
+            syntax_number: Color::from_hex(0x098658),       // Green
+            syntax_comment: Color::from_hex(0x008000),      // Green
+            syntax_type: Color::from_hex(0x267F99),         // Teal
+            syntax_function: Color::from_hex(0x795E26),     // Brown
+            syntax_variable: Color::from_hex(0x001080),     // Dark blue
+            syntax_operator: Color::from_hex(0x000000),     // Black
+            syntax_punctuation: Color::from_hex(0x000000),  // Black
+            syntax_constant: Color::from_hex(0x0070C1),     // Blue
+            syntax_module: Color::from_hex(0x267F99),       // Teal
+            syntax_attribute: Color::from_hex(0x795E26),    // Brown
+            syntax_macro: Color::from_hex(0x0000FF),        // Blue
         }
     }
 }

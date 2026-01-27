@@ -28,6 +28,7 @@ mod status_bar;
 mod sidebar;
 mod tab_bar;
 mod dialog;
+mod ui_text_renderer;
 
 pub use rect::{Rect, RectRenderer};
 pub use text_area::TextArea;
@@ -37,6 +38,7 @@ pub use status_bar::StatusBar;
 pub use sidebar::SidebarComponent;
 pub use tab_bar::TabBar;
 pub use dialog::Dialog;
+pub use ui_text_renderer::UITextRenderer;
 
 use crate::theme::Theme;
 

@@ -1,8 +1,9 @@
 //! GPU renderer orchestrating all components.
 
-use crate::components::{Bounds, Caret, Dialog, Gutter, SidebarComponent, StatusBar, TabBar, TextArea};
-use crate::theme::Theme;
-use crate::ui::{AppLayout, LayoutRegion, CommandPalette, CommandEntry, CommandKind};
+use crate::components::{Bounds, Caret, Dialog, Gutter, SidebarComponent, StatusBar, TabBar, TextArea, UITextRenderer};
+use crate::theme::{Theme, ColorRole};
+use crate::ui::{AppLayout, LayoutRegion, CommandPalette, CommandEntry, CommandKind, EditorTabs, TabInfo, PanelManager, PanelKind, StatusLine, FileTree, FileEntry};
+use crate::design_system::StyledRectRenderer;
 use core_editor::view_model::RenderModel;
 
 /// Main GPU renderer that coordinates all UI components.
@@ -19,6 +20,14 @@ pub struct GpuRenderer {
     // New UI components
     app_layout: AppLayout,
     command_palette: CommandPalette,
+    editor_tabs: EditorTabs,
+    panel_manager: PanelManager,
+    status_line: StatusLine,
+    file_tree: FileTree,
+
+    // New UI renderers (design system)
+    styled_rect_renderer: StyledRectRenderer,
+    ui_text_renderer: UITextRenderer,
 
     // State
     surface: wgpu::Surface<'static>,
@@ -103,6 +112,14 @@ impl GpuRenderer {
         // New UI components
         let app_layout = AppLayout::new();
         let mut command_palette = CommandPalette::new();
+        let editor_tabs = EditorTabs::new();
+        let panel_manager = PanelManager::new();
+        let status_line = StatusLine::new();
+        let file_tree = FileTree::new();
+
+        // New UI renderers (design system)
+        let styled_rect_renderer = StyledRectRenderer::new(&device, surface_format);
+        let ui_text_renderer = UITextRenderer::new(&device, &queue, surface_format);
 
         // Register default commands
         command_palette.register_commands(vec![
@@ -137,6 +154,12 @@ impl GpuRenderer {
             dialog,
             app_layout,
             command_palette,
+            editor_tabs,
+            panel_manager,
+            status_line,
+            file_tree,
+            styled_rect_renderer,
+            ui_text_renderer,
             surface,
             device,
             queue,
@@ -232,6 +255,82 @@ impl GpuRenderer {
         self.command_palette.execute().map(|e| e.id)
     }
 
+    /// Handle mouse movement over editor tabs. Returns true if redraw needed.
+    pub fn editor_tabs_on_pointer_move(&mut self, x: f32, y: f32) -> bool {
+        self.editor_tabs.on_pointer_move(x, y)
+    }
+
+    /// Handle click on editor tabs. Returns (tab_id, is_close_click) if clicked.
+    pub fn editor_tabs_on_click(&mut self, x: f32, y: f32) -> Option<(usize, bool)> {
+        self.editor_tabs.on_click(x, y)
+    }
+
+    /// Handle middle click on editor tabs. Returns tab_id if clicked.
+    pub fn editor_tabs_on_middle_click(&mut self, x: f32, y: f32) -> Option<usize> {
+        self.editor_tabs.on_middle_click(x, y)
+    }
+
+    /// Toggle the bottom panel visibility.
+    pub fn toggle_panel(&mut self) {
+        self.panel_manager.toggle();
+    }
+
+    /// Show the bottom panel.
+    pub fn show_panel(&mut self) {
+        self.panel_manager.show();
+    }
+
+    /// Hide the bottom panel.
+    pub fn hide_panel(&mut self) {
+        self.panel_manager.hide();
+    }
+
+    /// Check if the bottom panel is visible.
+    pub fn is_panel_visible(&self) -> bool {
+        self.panel_manager.is_visible()
+    }
+
+    /// Get the current panel height (0 if hidden).
+    pub fn panel_height(&self) -> f32 {
+        self.panel_manager.height()
+    }
+
+    /// Handle mouse movement over panel. Returns true if redraw needed.
+    pub fn panel_on_pointer_move(&mut self, x: f32, y: f32) -> bool {
+        self.panel_manager.on_pointer_move(x, y)
+    }
+
+    /// Handle click on panel. Returns clicked panel kind if any.
+    pub fn panel_on_click(&mut self, x: f32, y: f32) -> Option<PanelKind> {
+        self.panel_manager.on_click(x, y)
+    }
+
+    /// Check if pointer is on panel resize handle.
+    pub fn is_on_panel_resize_handle(&self, x: f32, y: f32) -> bool {
+        self.panel_manager.is_on_resize_handle(x, y)
+    }
+
+    /// Start panel resize.
+    pub fn start_panel_resize(&mut self, y: f32) {
+        self.panel_manager.start_resize(y);
+    }
+
+    /// Stop panel resize.
+    pub fn stop_panel_resize(&mut self) {
+        self.panel_manager.stop_resize();
+    }
+
+    /// Handle mouse movement over file tree. Returns true if redraw needed.
+    pub fn file_tree_on_pointer_move(&mut self, x: f32, y: f32) -> bool {
+        self.file_tree.on_pointer_move(x, y)
+    }
+
+    /// Handle click on file tree. Returns clicked entry info if any.
+    /// Returns (entry_id, is_chevron_click) where is_chevron_click means expand/collapse.
+    pub fn file_tree_on_click(&mut self, x: f32, y: f32) -> Option<(usize, bool)> {
+        self.file_tree.on_click(x, y)
+    }
+
     /// Hit test for layout region.
     pub fn hit_test(&self, x: f32, y: f32) -> LayoutRegion {
         self.app_layout.hit_test(x, y)
@@ -273,6 +372,24 @@ impl GpuRenderer {
             self.config.height,
         );
 
+        // Update new FileTree with sidebar entries
+        if model.sidebar.visible {
+            let file_entries: Vec<FileEntry> = model.sidebar.entries.iter().enumerate().map(|(i, entry)| {
+                FileEntry {
+                    id: i,
+                    name: entry.name.clone(),
+                    path: String::new(), // Path not available in presentation
+                    is_dir: entry.is_dir,
+                    is_expanded: false, // Expansion state not tracked in presentation
+                    depth: 0,           // Flat list in current presentation
+                    is_selected: entry.is_selected,
+                }
+            }).collect();
+            self.file_tree.update_entries(file_entries);
+            self.file_tree.set_bounds(layout.sidebar);
+            self.file_tree.set_focused(model.sidebar.focused);
+        }
+
         self.gutter.prepare(
             &self.device,
             &self.queue,
@@ -306,6 +423,11 @@ impl GpuRenderer {
             self.config.height,
         );
 
+        // Update new StatusLine with status data
+        self.status_line.set_bounds(layout.status_bar);
+        self.status_line.set_position(model.status.cursor_line, model.status.cursor_column);
+        self.status_line.set_language(&model.status.language);
+
         self.tab_bar.prepare(
             &self.device,
             &self.queue,
@@ -316,6 +438,21 @@ impl GpuRenderer {
             self.config.width,
             self.config.height,
         );
+
+        // Update new EditorTabs with tab data
+        if model.tab_bar.visible {
+            let tab_infos: Vec<TabInfo> = model.tab_bar.tabs.iter().enumerate().map(|(i, tab)| {
+                TabInfo {
+                    id: i,
+                    title: tab.title.clone(),
+                    path: None,
+                    is_dirty: tab.is_dirty,
+                    is_active: tab.is_active,
+                }
+            }).collect();
+            self.editor_tabs.update_tabs(tab_infos);
+            self.editor_tabs.set_bounds(layout.tab_bar);
+        }
 
         // Build all rectangles
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -330,7 +467,7 @@ impl GpuRenderer {
                     view: &view,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(self.theme.palette.bg.to_wgpu()),
+                        load: wgpu::LoadOp::Clear(self.theme.palette.get(ColorRole::BgPrimary).to_wgpu()),
                         store: wgpu::StoreOp::Store,
                     },
                 })],
@@ -340,16 +477,116 @@ impl GpuRenderer {
             });
         }
 
-        // Render sidebar backgrounds
+        // Render sidebar/file tree using new design system
         if model.sidebar.visible {
-            let sidebar_rects = self.sidebar.build_rects(&model.sidebar, layout.sidebar, &self.theme);
-            self.sidebar.render_background(&mut encoder, &view, &self.queue, &sidebar_rects, screen_width, screen_height, scale_factor);
+            let tree_rects = self.file_tree.build_rects();
+            let tree_texts = self.file_tree.build_texts();
+
+            self.styled_rect_renderer.clear();
+            self.styled_rect_renderer.push_all(&tree_rects, logical_width, logical_height);
+            self.styled_rect_renderer.prepare(&self.queue);
+
+            {
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("sidebar_rect_pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Load,
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                });
+                self.styled_rect_renderer.render(&mut pass);
+            }
+
+            self.ui_text_renderer.prepare(
+                &self.device,
+                &self.queue,
+                &tree_texts,
+                scale_factor,
+                self.config.width,
+                self.config.height,
+            );
+
+            {
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("sidebar_text_pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Load,
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                });
+                self.ui_text_renderer.render(&mut pass);
+            }
         }
 
-        // Render tab bar background
+        // Render tab bar using new EditorTabs component
         if model.tab_bar.visible {
-            let tab_bar_rects = self.tab_bar.build_rects(&model.tab_bar, layout.tab_bar, &self.theme, self.measured_char_width);
-            self.tab_bar.render_background(&mut encoder, &view, &self.queue, &tab_bar_rects, screen_width, screen_height, scale_factor);
+            let tab_rects = self.editor_tabs.build_rects();
+            let tab_texts = self.editor_tabs.build_texts();
+
+            // Render tab backgrounds using styled rect renderer
+            self.styled_rect_renderer.clear();
+            self.styled_rect_renderer.push_all(&tab_rects, logical_width, logical_height);
+            self.styled_rect_renderer.prepare(&self.queue);
+
+            {
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("tab_bar_rect_pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Load,
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                });
+                self.styled_rect_renderer.render(&mut pass);
+            }
+
+            // Render tab text using UI text renderer
+            self.ui_text_renderer.prepare(
+                &self.device,
+                &self.queue,
+                &tab_texts,
+                scale_factor,
+                self.config.width,
+                self.config.height,
+            );
+
+            {
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("tab_bar_text_pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Load,
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                });
+                self.ui_text_renderer.render(&mut pass);
+            }
         }
 
         // Render gutter background
@@ -364,8 +601,60 @@ impl GpuRenderer {
         // Render selection backgrounds on top
         self.text_area.render_selections(&mut encoder, &view, &self.queue, &selection_rects, screen_width, screen_height, scale_factor);
 
-        // Render status bar background
-        self.status_bar.render_background(&mut encoder, &view, &self.queue, layout.status_bar, &self.theme, screen_width, screen_height, scale_factor);
+        // Render status line using new design system
+        {
+            let status_rects = self.status_line.build_rects();
+            let status_texts = self.status_line.build_texts();
+
+            self.styled_rect_renderer.clear();
+            self.styled_rect_renderer.push_all(&status_rects, logical_width, logical_height);
+            self.styled_rect_renderer.prepare(&self.queue);
+
+            {
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("status_rect_pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Load,
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                });
+                self.styled_rect_renderer.render(&mut pass);
+            }
+
+            self.ui_text_renderer.prepare(
+                &self.device,
+                &self.queue,
+                &status_texts,
+                scale_factor,
+                self.config.width,
+                self.config.height,
+            );
+
+            {
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("status_text_pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Load,
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                });
+                self.ui_text_renderer.render(&mut pass);
+            }
+        }
 
         // Render caret
         self.caret.render(
@@ -398,17 +687,70 @@ impl GpuRenderer {
                 occlusion_query_set: None,
             });
 
-            if model.sidebar.visible {
-                self.sidebar.render(&mut pass);
-            }
-            if model.tab_bar.visible {
-                self.tab_bar.render(&mut pass);
-            }
+            // Sidebar is now rendered via FileTree with styled_rect_renderer and ui_text_renderer
+            // Tab bar is now rendered via EditorTabs with styled_rect_renderer and ui_text_renderer
             if model.gutter.visible {
                 self.gutter.render(&mut pass);
             }
             self.text_area.render(&mut pass);
-            self.status_bar.render(&mut pass);
+            // Status bar is now rendered via StatusLine with styled_rect_renderer and ui_text_renderer
+        }
+
+        // Render bottom panel (if visible)
+        if self.panel_manager.is_visible() {
+            let panel_rects = self.panel_manager.build_rects();
+            let panel_texts = self.panel_manager.build_texts();
+
+            // Render panel backgrounds
+            self.styled_rect_renderer.clear();
+            self.styled_rect_renderer.push_all(&panel_rects, logical_width, logical_height);
+            self.styled_rect_renderer.prepare(&self.queue);
+
+            {
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("panel_rect_pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Load,
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                });
+                self.styled_rect_renderer.render(&mut pass);
+            }
+
+            // Render panel text
+            self.ui_text_renderer.prepare(
+                &self.device,
+                &self.queue,
+                &panel_texts,
+                scale_factor,
+                self.config.width,
+                self.config.height,
+            );
+
+            {
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("panel_text_pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Load,
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                });
+                self.ui_text_renderer.render(&mut pass);
+            }
         }
 
         // Render dialog overlay (on top of everything)
@@ -450,6 +792,68 @@ impl GpuRenderer {
             }
         }
 
+        // Render command palette overlay (on top of everything except dialog)
+        if self.command_palette.is_visible() {
+            // Build primitives from command palette
+            let palette_rects = self.command_palette.build_rects();
+            let palette_texts = self.command_palette.build_texts();
+
+            // Prepare styled rect renderer
+            self.styled_rect_renderer.clear();
+            self.styled_rect_renderer.push_all(&palette_rects, logical_width, logical_height);
+            self.styled_rect_renderer.prepare(&self.queue);
+
+            // Prepare UI text renderer
+            self.ui_text_renderer.prepare(
+                &self.device,
+                &self.queue,
+                &palette_texts,
+                scale_factor,
+                self.config.width,
+                self.config.height,
+            );
+
+            // Render styled rects (backdrop, container, input box, etc.)
+            {
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("command_palette_rect_pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Load,
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                });
+
+                self.styled_rect_renderer.render(&mut pass);
+            }
+
+            // Render text (query, entries)
+            {
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("command_palette_text_pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Load,
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                });
+
+                self.ui_text_renderer.render(&mut pass);
+            }
+        }
+
         self.queue.submit(std::iter::once(encoder.finish()));
         output.present();
 
@@ -457,17 +861,28 @@ impl GpuRenderer {
     }
 
     /// Calculates the layout bounds for all components.
-    fn calculate_layout(&self, model: &RenderModel, scale_factor: f32) -> Layout {
+    fn calculate_layout(&mut self, model: &RenderModel, scale_factor: f32) -> Layout {
         let screen_width = self.config.width as f32 / scale_factor;
         let screen_height = self.config.height as f32 / scale_factor;
         let status_height = self.status_bar.height();
         let tab_bar_height = if model.tab_bar.visible { self.tab_bar.height() } else { 0.0 };
+        let panel_height = self.panel_manager.height();
 
         // Total bounds
         let total = Bounds::new(0.0, 0.0, screen_width, screen_height);
 
         // Split off status bar at bottom
         let (main_area, status_bar) = total.split_vertical(screen_height - status_height);
+
+        // Split off panel above status bar (if visible)
+        let (main_area, panel) = if panel_height > 0.0 {
+            let (upper, lower) = main_area.split_vertical(main_area.height - panel_height);
+            // Update panel bounds
+            self.panel_manager.set_bounds(lower);
+            (upper, lower)
+        } else {
+            (main_area, Bounds::default())
+        };
 
         // Split sidebar if visible
         let (sidebar, right_area) = if model.sidebar.visible {
@@ -496,6 +911,7 @@ impl GpuRenderer {
             tab_bar,
             gutter,
             text_area,
+            panel,
             status_bar,
         }
     }
@@ -507,5 +923,6 @@ struct Layout {
     tab_bar: Bounds,
     gutter: Bounds,
     text_area: Bounds,
+    panel: Bounds,
     status_bar: Bounds,
 }

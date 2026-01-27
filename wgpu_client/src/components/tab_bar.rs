@@ -6,7 +6,7 @@ use glyphon::{
 };
 
 use super::{Bounds, Rect, RectRenderer};
-use crate::theme::Theme;
+use crate::theme::{Theme, ColorRole};
 use core_editor::view_model::TabBarPresentation;
 
 /// Tab bar component showing open document tabs.
@@ -113,7 +113,7 @@ impl TabBar {
             &text,
             Attrs::new()
                 .family(Family::SansSerif)
-                .color(theme.palette.fg.to_glyphon()),
+                .color(theme.palette.get(ColorRole::FgPrimary).to_glyphon()),
             Shaping::Advanced,
         );
 
@@ -130,7 +130,7 @@ impl TabBar {
                 right: ((bounds.x + bounds.width) * scale_factor) as i32,
                 bottom: ((bounds.y + bounds.height) * scale_factor) as i32,
             },
-            default_color: theme.palette.fg.to_glyphon(),
+            default_color: theme.palette.get(ColorRole::FgPrimary).to_glyphon(),
             custom_glyphs: &[],
         }];
 
@@ -169,7 +169,7 @@ impl TabBar {
             bounds.y,
             bounds.width,
             bounds.height,
-            theme.palette.gutter_bg,
+            theme.palette.get(ColorRole::GutterBg),
         ));
 
         // Bottom border line
@@ -178,7 +178,7 @@ impl TabBar {
             bounds.y + bounds.height - 1.0,
             bounds.width,
             1.0,
-            theme.palette.line_number,
+            theme.palette.get(ColorRole::LineNumber),
         ));
 
         // Calculate tab positions and highlight active
@@ -197,7 +197,7 @@ impl TabBar {
                     bounds.y,
                     tab_width,
                     bounds.height - 1.0, // Don't cover the bottom border
-                    theme.palette.bg, // Same as editor background
+                    theme.palette.get(ColorRole::BgPrimary), // Same as editor background
                 ));
 
                 // Active tab indicator (accent line at bottom)
@@ -206,7 +206,7 @@ impl TabBar {
                     bounds.y + bounds.height - 2.0,
                     tab_width,
                     2.0,
-                    theme.palette.caret, // Use caret color as accent
+                    theme.palette.get(ColorRole::Caret), // Use caret color as accent
                 ));
             }
 

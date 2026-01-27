@@ -6,7 +6,7 @@ use glyphon::{
 };
 
 use super::{Bounds, Rect, RectRenderer};
-use crate::theme::Theme;
+use crate::theme::{Theme, ColorRole};
 use core_editor::view_model::{GutterModel, RenderModel};
 
 /// Line number gutter component.
@@ -114,7 +114,7 @@ impl Gutter {
             &text,
             Attrs::new()
                 .family(Family::Monospace)
-                .color(theme.palette.line_number.to_glyphon()),
+                .color(theme.palette.get(ColorRole::LineNumber).to_glyphon()),
             Shaping::Advanced,
         );
 
@@ -131,7 +131,7 @@ impl Gutter {
                 right: ((bounds.x + bounds.width) * scale_factor) as i32,
                 bottom: ((bounds.y + bounds.height) * scale_factor) as i32,
             },
-            default_color: theme.palette.line_number.to_glyphon(),
+            default_color: theme.palette.get(ColorRole::LineNumber).to_glyphon(),
             custom_glyphs: &[],
         }];
 
@@ -168,7 +168,7 @@ impl Gutter {
             bounds.y * scale_factor,
             bounds.width * scale_factor,
             bounds.height * scale_factor,
-            theme.palette.gutter_bg,
+            theme.palette.get(ColorRole::GutterBg),
         );
         self.rect_renderer
             .render(encoder, view, queue, &[rect], screen_width, screen_height);

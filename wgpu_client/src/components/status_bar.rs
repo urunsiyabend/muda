@@ -6,7 +6,7 @@ use glyphon::{
 };
 
 use super::{Bounds, Rect, RectRenderer};
-use crate::theme::Theme;
+use crate::theme::{Theme, ColorRole};
 use core_editor::view_model::StatusPresentation;
 
 /// Status bar at the bottom of the editor.
@@ -106,7 +106,7 @@ impl StatusBar {
             &text,
             Attrs::new()
                 .family(Family::SansSerif)
-                .color(theme.palette.status_bar_fg.to_glyphon()),
+                .color(theme.palette.get(ColorRole::StatusBarFg).to_glyphon()),
             Shaping::Advanced,
         );
 
@@ -123,7 +123,7 @@ impl StatusBar {
                 right: ((bounds.x + bounds.width) * scale_factor) as i32,
                 bottom: ((bounds.y + bounds.height) * scale_factor) as i32,
             },
-            default_color: theme.palette.status_bar_fg.to_glyphon(),
+            default_color: theme.palette.get(ColorRole::StatusBarFg).to_glyphon(),
             custom_glyphs: &[],
         }];
 
@@ -160,7 +160,7 @@ impl StatusBar {
             bounds.y * scale_factor,
             bounds.width * scale_factor,
             bounds.height * scale_factor,
-            theme.palette.status_bar_bg,
+            theme.palette.get(ColorRole::StatusBarBg),
         );
         self.rect_renderer
             .render(encoder, view, queue, &[rect], screen_width, screen_height);

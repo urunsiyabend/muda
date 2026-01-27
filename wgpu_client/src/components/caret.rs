@@ -3,7 +3,7 @@
 use std::time::{Duration, Instant};
 
 use super::{Bounds, Rect, RectRenderer};
-use crate::theme::Theme;
+use crate::theme::{Theme, ColorRole};
 use core_editor::view_model::CaretPresentation;
 
 /// Caret blinking state and rendering.
@@ -93,7 +93,7 @@ impl Caret {
         let x = bounds.x + (caret.position.column as f32 * char_width);
         let y = bounds.y + (caret.position.row as f32 * line_height);
 
-        Some(Rect::new(x, y, self.width, line_height, theme.palette.caret))
+        Some(Rect::new(x, y, self.width, line_height, theme.palette.get(ColorRole::Caret)))
     }
 
     /// Renders the caret.

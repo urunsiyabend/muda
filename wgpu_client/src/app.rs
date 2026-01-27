@@ -236,6 +236,12 @@ impl WgpuApp {
                     renderer.command_palette_backspace();
                 }
             }
+            // Panel actions
+            AppAction::TogglePanel => {
+                if let Some(renderer) = &mut self.renderer {
+                    renderer.toggle_panel();
+                }
+            }
         }
         self.request_redraw();
     }
@@ -305,8 +311,36 @@ impl WgpuApp {
             return;
         }
 
-        // Check if click is in tab bar (ignore for now, TODO: handle tab clicks)
+        // Check if click is in tab bar
         if y < tab_bar_height {
+            // Handle tab clicks - we need to get the result and drop the renderer borrow first
+            drop(renderer);
+            if let Some(renderer) = &mut self.renderer {
+                let lx = x / scale_factor;
+                let ly = y / scale_factor;
+                if let Some((tab_idx, is_close)) = renderer.editor_tabs_on_click(lx, ly) {
+                    // Get the view IDs in order to map tab index to ViewId
+                    let view_ids: Vec<_> = self.editor.workspace.views().map(|(id, _)| *id).collect();
+                    if let Some(&view_id) = view_ids.get(tab_idx) {
+                        if is_close {
+                            // Close tab - close the view (document protection will be checked)
+                            if view_ids.len() > 1 {
+                                // Switch to another tab first if multiple tabs exist
+                                let next_idx = if tab_idx + 1 < view_ids.len() { tab_idx + 1 } else { tab_idx.saturating_sub(1) };
+                                if let Some(&next_view_id) = view_ids.get(next_idx) {
+                                    self.editor.workspace.set_active_view(next_view_id);
+                                }
+                                self.editor.workspace.close_view(view_id);
+                            }
+                            // If only one tab, don't close it
+                        } else {
+                            // Switch to the clicked tab
+                            self.editor.workspace.set_active_view(view_id);
+                        }
+                        self.request_redraw();
+                    }
+                }
+            }
             return;
         }
 
@@ -634,6 +668,16 @@ impl ApplicationHandler for WgpuApp {
                 // Block drag selection when dialog is open
                 if self.editor.has_pending_action() {
                     return;
+                }
+
+                // Handle hover state for EditorTabs
+                if let (Some(window), Some(renderer)) = (&self.window, &mut self.renderer) {
+                    let scale_factor = window.scale_factor() as f32;
+                    let lx = position.x as f32 / scale_factor;
+                    let ly = position.y as f32 / scale_factor;
+                    if renderer.editor_tabs_on_pointer_move(lx, ly) {
+                        self.request_redraw();
+                    }
                 }
 
                 // Handle drag selection

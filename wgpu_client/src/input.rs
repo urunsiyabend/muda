@@ -129,6 +129,8 @@ pub enum AppAction {
     CommandPaletteType(char),
     /// Backspace in command palette.
     CommandPaletteBackspace,
+    /// Toggle bottom panel (terminal/output).
+    TogglePanel,
 }
 
 /// Translates a winit key event to an app-level action.
@@ -186,6 +188,7 @@ pub fn translate_app_action(
         }
         Key::Character(c) if ctrl && c == "b" => return Some(AppAction::ToggleSidebar),
         Key::Character(c) if ctrl && c == "h" => return Some(AppAction::FocusSidebar),
+        Key::Character(c) if ctrl && c == "j" => return Some(AppAction::TogglePanel),
         _ => {}
     }
 

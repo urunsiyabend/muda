@@ -14,8 +14,8 @@ pub mod split_view;
 
 pub use app_layout::{AppLayout, LayoutRegion};
 pub use toolbar::Toolbar;
-pub use editor_tabs::EditorTabs;
-pub use file_tree::FileTree;
+pub use editor_tabs::{EditorTabs, TabInfo};
+pub use file_tree::{FileTree, FileEntry};
 pub use panels::{PanelManager, PanelKind};
 pub use status_line::StatusLine;
 pub use command_palette::{CommandPalette, CommandEntry, CommandKind};

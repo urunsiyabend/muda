@@ -9,6 +9,7 @@ mod sizing;
 mod radius;
 mod elevation;
 mod motion;
+mod theme;
 
 pub use color::{ColorRole, ColorPalette};
 pub use spacing::{Space, Spacing};
@@ -16,3 +17,4 @@ pub use sizing::ComponentSize;
 pub use radius::{Radius, CornerRadii};
 pub use elevation::{Elevation, Shadow};
 pub use motion::{Duration, Easing};
+pub use theme::Theme;

@@ -28,6 +28,7 @@ pub use tokens::{
     Radius, CornerRadii,
     Elevation, Shadow,
     Duration, Easing,
+    Theme,
 };
 pub use primitives::{StyledRect, StyledRectRenderer, TextBlock, TextAlign, TextOverflow};
 pub use interaction::{InteractionState, InteractionTracker};

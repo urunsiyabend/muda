@@ -6,7 +6,7 @@ use glyphon::{
 };
 
 use super::{Bounds, Rect, RectRenderer};
-use crate::theme::Theme;
+use crate::theme::{Theme, ColorRole};
 use core_editor::view_model::SidebarPresentation;
 
 /// File explorer sidebar component.
@@ -113,7 +113,7 @@ impl SidebarComponent {
             &text,
             Attrs::new()
                 .family(Family::SansSerif)
-                .color(theme.palette.sidebar_fg.to_glyphon()),
+                .color(theme.palette.get(ColorRole::SidebarFg).to_glyphon()),
             Shaping::Advanced,
         );
 
@@ -131,7 +131,7 @@ impl SidebarComponent {
                 right: ((bounds.x + bounds.width) * scale_factor) as i32,
                 bottom: ((bounds.y + bounds.height) * scale_factor) as i32,
             },
-            default_color: theme.palette.sidebar_fg.to_glyphon(),
+            default_color: theme.palette.get(ColorRole::SidebarFg).to_glyphon(),
             custom_glyphs: &[],
         }];
 
@@ -169,7 +169,7 @@ impl SidebarComponent {
             bounds.y,
             bounds.width,
             bounds.height,
-            theme.palette.sidebar_bg,
+            theme.palette.get(ColorRole::SidebarBg),
         ));
 
         // Selection highlight
@@ -182,9 +182,9 @@ impl SidebarComponent {
                     bounds.width,
                     line_height,
                     if sidebar.focused {
-                        theme.palette.selection_bg
+                        theme.palette.get(ColorRole::Selection)
                     } else {
-                        theme.palette.hover
+                        theme.palette.get(ColorRole::InteractiveHover)
                     },
                 ));
             }
@@ -196,7 +196,7 @@ impl SidebarComponent {
             bounds.y,
             1.0,
             bounds.height,
-            theme.palette.border,
+            theme.palette.get(ColorRole::BorderDefault),
         ));
 
         rects

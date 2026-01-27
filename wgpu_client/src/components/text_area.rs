@@ -11,7 +11,7 @@ use glyphon::{
 };
 
 use super::{Bounds, Rect, RectRenderer};
-use crate::theme::{self, Theme};
+use crate::theme::{self, Theme, ColorRole};
 use core_editor::view_model::RenderModel;
 
 /// Text area component for the main editor content.
@@ -145,7 +145,7 @@ impl TextArea {
                 right: ((bounds.x + bounds.width) * scale_factor) as i32,
                 bottom: ((bounds.y + bounds.height) * scale_factor) as i32,
             },
-            default_color: theme.palette.fg.to_glyphon(),
+            default_color: theme.palette.get(ColorRole::FgPrimary).to_glyphon(),
             custom_glyphs: &[],
         }];
 
@@ -184,7 +184,7 @@ impl TextArea {
                     bounds.y + (current_line as f32 * line_height),
                     bounds.width,
                     line_height,
-                    theme.palette.current_line_bg,
+                    theme.palette.get(ColorRole::CurrentLine),
                 ));
             }
         }
