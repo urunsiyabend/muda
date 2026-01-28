@@ -28,6 +28,8 @@ pub struct EffectQueue {
     notify_set: HashSet<EntityId>,
     /// Mid-priority queue for Emit effects (not deduplicated).
     emit_queue: VecDeque<(EntityId, TypeId, Box<dyn Any>)>,
+    /// Queue for global emit effects (app-wide events).
+    global_emit_queue: VecDeque<(TypeId, Box<dyn Any>)>,
     /// Current flush depth for cascade detection.
     depth: usize,
 }
@@ -39,6 +41,7 @@ impl EffectQueue {
             notify_queue: VecDeque::new(),
             notify_set: HashSet::new(),
             emit_queue: VecDeque::new(),
+            global_emit_queue: VecDeque::new(),
             depth: 0,
         }
     }
@@ -55,9 +58,14 @@ impl EffectQueue {
         self.emit_queue.push_back((emitter, event_type_id, event));
     }
 
-    /// Check if both queues are empty.
+    /// Queue a global emit effect (app-wide event).
+    pub fn push_global_emit(&mut self, event_type_id: TypeId, event: Box<dyn Any>) {
+        self.global_emit_queue.push_back((event_type_id, event));
+    }
+
+    /// Check if all queues are empty.
     pub fn is_empty(&self) -> bool {
-        self.notify_queue.is_empty() && self.emit_queue.is_empty()
+        self.notify_queue.is_empty() && self.emit_queue.is_empty() && self.global_emit_queue.is_empty()
     }
 
     /// Drain all notify effects and clear the deduplication set.
@@ -69,6 +77,11 @@ impl EffectQueue {
     /// Drain all emit effects.
     pub fn drain_emit(&mut self) -> Vec<(EntityId, TypeId, Box<dyn Any>)> {
         self.emit_queue.drain(..).collect()
+    }
+
+    /// Drain all global emit effects.
+    pub fn drain_global_emit(&mut self) -> Vec<(TypeId, Box<dyn Any>)> {
+        self.global_emit_queue.drain(..).collect()
     }
 
     /// Get the current flush depth.
