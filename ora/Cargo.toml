@@ -1,0 +1,11 @@
+[package]
+name = "ora"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+winit = "0.30"
+wgpu = "23"
+generational-arena = "0.2"
+pollster = "0.4"
+log = "0.4"

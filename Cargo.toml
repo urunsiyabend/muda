@@ -1,5 +1,5 @@
 [workspace]
-members = ["core_editor", "ratatui_client", "wgpu_client"]
+members = ["core_editor", "ratatui_client", "wgpu_client", "ora"]
 resolver = "2"
 
 [workspace.package]
