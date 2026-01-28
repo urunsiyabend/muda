@@ -1,22 +1,36 @@
 use crate::entity::EntityStorage;
 use crate::layout::{compute_flexbox, AvailableSpace, LayoutInput, LayoutOutput};
 use crate::style::units::{Rect, Size};
-use crate::style::Style;
+use crate::style::{Color, Style};
 
 /// Opaque handle to layout data produced by the layout engine.
 #[derive(Debug, Clone, Copy)]
 pub struct LayoutId(pub(crate) usize);
 
 /// GPU rendering command produced during paint phase.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum PaintCommand {
     /// Draw a colored rectangle at the given position and size.
+    /// Legacy from Phase 1, kept for compatibility.
     Rect {
         x: f32,
         y: f32,
         width: f32,
         height: f32,
         color: [f32; 4],
+    },
+    /// Draw a styled rectangle with background, border, border-radius, and shadow.
+    StyledRect {
+        bounds: Rect,
+        style: Style,
+    },
+    /// Draw text at the given position with the specified style.
+    Text {
+        buffer: glyphon::Buffer,
+        left: f32,
+        top: f32,
+        bounds: Rect,
+        color: Color,
     },
 }
 
@@ -30,6 +44,9 @@ pub struct LayoutContext<'a> {
     pub(crate) styles: Vec<Style>,
     pub(crate) children_map: Vec<Vec<usize>>,
     pub(crate) intrinsic_sizes: Vec<Option<Size<f32>>>,
+    /// Optional reference to TextSystem for text measurement during layout.
+    /// When None, text measurement falls back to rough estimation.
+    pub(crate) text_system: Option<*mut crate::rendering::TextSystem>,
 }
 
 impl<'a> LayoutContext<'a> {
@@ -42,6 +59,52 @@ impl<'a> LayoutContext<'a> {
             styles: Vec::new(),
             children_map: Vec::new(),
             intrinsic_sizes: Vec::new(),
+            text_system: None,
+        }
+    }
+
+    /// Set the TextSystem reference for text measurement.
+    pub(crate) fn set_text_system(&mut self, text_system: *mut crate::rendering::TextSystem) {
+        self.text_system = Some(text_system);
+    }
+
+    /// Measure text and return the Buffer (for reuse during paint) and measured size.
+    /// The Buffer must be stored by the element and passed to paint_text during paint phase.
+    pub fn measure_text(
+        &mut self,
+        text: &str,
+        font_size: f32,
+        line_height: f32,
+        max_width: Option<f32>,
+    ) -> (glyphon::Buffer, Size<f32>) {
+        if let Some(text_system_ptr) = self.text_system {
+            // SAFETY: The text_system pointer is valid for the duration of the layout phase.
+            // It's set by OraWindow::render before calling request_layout.
+            unsafe {
+                (*text_system_ptr).measure_text(text, font_size, line_height, max_width)
+            }
+        } else {
+            // Fallback: rough estimation when TextSystem is not available
+            // This should not happen in production, but provides a safe fallback
+            let char_count = text.chars().count();
+            let width = if let Some(max_w) = max_width {
+                max_w.min(char_count as f32 * font_size * 0.6)
+            } else {
+                char_count as f32 * font_size * 0.6
+            };
+            let lines = if let Some(max_w) = max_width {
+                ((char_count as f32 * font_size * 0.6) / max_w).ceil().max(1.0)
+            } else {
+                1.0
+            };
+            let height = lines * line_height;
+
+            // Create a dummy buffer - this won't be used for rendering
+            let mut font_system = glyphon::FontSystem::new();
+            let metrics = glyphon::Metrics::new(font_size, line_height);
+            let buffer = glyphon::Buffer::new(&mut font_system, metrics);
+
+            (buffer, Size::new(width, height))
         }
     }
 
@@ -174,6 +237,32 @@ impl<'a> PaintContext<'a> {
             width,
             height,
             color,
+        });
+    }
+
+    /// Add a styled rectangle rendering command.
+    pub fn paint_styled_rect(&mut self, style: &Style, bounds: &Rect) {
+        self.paint_commands.push(PaintCommand::StyledRect {
+            bounds: *bounds,
+            style: style.clone(),
+        });
+    }
+
+    /// Add a text rendering command.
+    /// The buffer should be the same Buffer returned from LayoutContext::measure_text()
+    /// to ensure measurement and rendering use the same shaped text.
+    pub fn paint_text(
+        &mut self,
+        buffer: glyphon::Buffer,
+        color: &Color,
+        bounds: &Rect,
+    ) {
+        self.paint_commands.push(PaintCommand::Text {
+            buffer,
+            left: bounds.origin.x,
+            top: bounds.origin.y,
+            bounds: *bounds,
+            color: *color,
         });
     }
 
