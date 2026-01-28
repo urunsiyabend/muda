@@ -1,5 +1,6 @@
 use crate::app::App;
 use crate::context::{AppContext, WindowContext};
+use crate::element::{LayoutContext, PaintContext, PrepaintContext};
 use crate::entity::EntityStorage;
 use crate::platform::gpu::GpuState;
 use crate::window::OraWindow;
@@ -92,23 +93,77 @@ impl ApplicationHandler for OraApp {
             }
             WindowEvent::RedrawRequested => {
                 if let Some(gpu_state) = &mut self.gpu_state {
-                    match gpu_state.render() {
-                        Ok(_) => {
-                            // Request continuous redraw
-                            gpu_state.window.request_redraw();
+                    // Create AppContext to access entity storage
+                    let mut app_context = AppContext::new(std::mem::replace(
+                        &mut self.entity_storage,
+                        EntityStorage::new(),
+                    ));
+
+                    // Render the root view to get element tree
+                    if let Some(mut element_tree) = self.ora_window.render(&mut app_context) {
+                        let window_size = gpu_state.size;
+
+                        // Phase 1: Request layout
+                        let mut layout_cx = LayoutContext::new(
+                            &mut app_context.entity_storage,
+                            window_size,
+                        );
+                        element_tree.request_layout(&mut layout_cx);
+
+                        // Phase 2: Prepaint
+                        let mut prepaint_cx = PrepaintContext::new(
+                            &mut app_context.entity_storage,
+                            window_size,
+                        );
+                        element_tree.prepaint(&mut prepaint_cx);
+
+                        // Phase 3: Paint
+                        let mut paint_cx = PaintContext::new(
+                            &mut app_context.entity_storage,
+                            window_size,
+                        );
+                        element_tree.paint(&mut paint_cx);
+
+                        // Extract paint commands and present
+                        let commands = paint_cx.take_commands();
+                        match gpu_state.present(commands) {
+                            Ok(_) => {
+                                // Request continuous redraw
+                                gpu_state.window.request_redraw();
+                            }
+                            Err(wgpu::SurfaceError::Lost) => {
+                                // Reconfigure the surface if lost
+                                gpu_state.resize(gpu_state.size.0, gpu_state.size.1);
+                            }
+                            Err(wgpu::SurfaceError::OutOfMemory) => {
+                                log::error!("Out of memory");
+                                event_loop.exit();
+                            }
+                            Err(e) => {
+                                log::warn!("Surface error: {:?}", e);
+                            }
                         }
-                        Err(wgpu::SurfaceError::Lost) => {
-                            // Reconfigure the surface if lost
-                            gpu_state.resize(gpu_state.size.0, gpu_state.size.1);
-                        }
-                        Err(wgpu::SurfaceError::OutOfMemory) => {
-                            log::error!("Out of memory");
-                            event_loop.exit();
-                        }
-                        Err(e) => {
-                            log::warn!("Surface error: {:?}", e);
+                    } else {
+                        // No root view, just clear
+                        match gpu_state.present(Vec::new()) {
+                            Ok(_) => {
+                                gpu_state.window.request_redraw();
+                            }
+                            Err(wgpu::SurfaceError::Lost) => {
+                                gpu_state.resize(gpu_state.size.0, gpu_state.size.1);
+                            }
+                            Err(wgpu::SurfaceError::OutOfMemory) => {
+                                log::error!("Out of memory");
+                                event_loop.exit();
+                            }
+                            Err(e) => {
+                                log::warn!("Surface error: {:?}", e);
+                            }
                         }
                     }
+
+                    // Restore entity storage
+                    self.entity_storage = app_context.into_storage();
                 }
             }
             _ => {}

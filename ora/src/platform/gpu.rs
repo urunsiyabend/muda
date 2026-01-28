@@ -98,9 +98,12 @@ impl GpuState {
         }
     }
 
-    /// Render a frame with dark background clear.
-    /// This is a stub implementation - no actual drawing yet, just clear.
-    pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
+    /// Render paint commands to the screen.
+    /// Phase 1 stub: Uses first rect's color as clear color.
+    pub fn render_commands(
+        &mut self,
+        commands: &[crate::element::PaintCommand],
+    ) -> Result<(), wgpu::SurfaceError> {
         let output = self.surface.get_current_texture()?;
         let view = output
             .texture
@@ -112,6 +115,26 @@ impl GpuState {
                 label: Some("ora-render-encoder"),
             });
 
+        // Phase 1 stub rendering: Use first rect's color as clear color
+        // This proves the pipeline works without needing vertex buffers
+        let clear_color = if let Some(crate::element::PaintCommand::Rect { color, .. }) =
+            commands.first()
+        {
+            wgpu::Color {
+                r: color[0] as f64,
+                g: color[1] as f64,
+                b: color[2] as f64,
+                a: color[3] as f64,
+            }
+        } else {
+            wgpu::Color {
+                r: 0.1,
+                g: 0.1,
+                b: 0.12,
+                a: 1.0,
+            }
+        };
+
         {
             let _render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("ora-render-pass"),
@@ -119,12 +142,7 @@ impl GpuState {
                     view: &view,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.1,
-                            g: 0.1,
-                            b: 0.12,
-                            a: 1.0,
-                        }),
+                        load: wgpu::LoadOp::Clear(clear_color),
                         store: wgpu::StoreOp::Store,
                     },
                 })],
@@ -138,5 +156,10 @@ impl GpuState {
         output.present();
 
         Ok(())
+    }
+
+    /// Present the current frame and handle GPU submission.
+    pub fn present(&mut self, commands: Vec<crate::element::PaintCommand>) -> Result<(), wgpu::SurfaceError> {
+        self.render_commands(&commands)
     }
 }
