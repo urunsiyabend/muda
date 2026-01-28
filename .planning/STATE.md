@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-01-28)
 ## Current Position
 
 Phase: 3 of 9 (Reactive State System) -- IN PROGRESS
-Plan: 1 of 4 in current phase (plan 03-01 complete)
-Status: Plan 03-01 complete
-Last activity: 2026-01-29 - Completed 03-01-PLAN.md (Reactive State Foundation)
+Plan: 2 of 4 in current phase (plans 03-01, 03-02 complete)
+Status: Plan 03-02 complete
+Last activity: 2026-01-29 - Completed 03-02-PLAN.md (Observer/Subscription System)
 
-Progress: [█████████████▓░░] 75% Phase 3 (1 of 4 plans complete)
+Progress: [████████████████░] 100% Phase 3 (2 of 4 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 10 (Phase 1: 3, Phase 2: 6, Phase 3: 1)
-- Average duration: ~7m per plan
-- Total execution time: ~1.6 hours
+- Total plans completed: 11 (Phase 1: 3, Phase 2: 6, Phase 3: 2)
+- Average duration: ~6m 30s per plan
+- Total execution time: ~1.7 hours
 
 **By Phase:**
 
@@ -29,12 +29,13 @@ Progress: [█████████████▓░░] 75% Phase 3 (1 of 4
 |-------|-------|-------|----------|
 | 01-foundation-view-system | 3 | 23m 0s | 7m 40s |
 | 02-layout-rendering-pipeline | 6 | ~55m | ~9m 10s |
-| 03-reactive-state-system | 1 | 4m | 4m |
+| 03-reactive-state-system | 2 | 8m | 4m |
 
 **Recent Trend:**
-- Phase 3 Plan 01 executed smoothly with no deviations or issues
+- Phase 3 Plans 01-02 executed smoothly with no deviations
+- Critical architectural change in 03-02: AppContext now persists across frames
 - All 11 existing unit tests continue passing
-- Clean architecture with local effect buffering prevented borrow checker conflicts
+- Observer registry ready for view integration in Plan 04
 
 *Updated after each plan completion*
 
@@ -87,6 +88,11 @@ Recent decisions affecting current work:
 - ModelContext buffers effects locally, drains to AppContext after closure - Avoids aliased mutable borrows (03-01)
 - Update depth tracking ensures flush only at top level (depth == 0) - Batches nested updates, prevents reentrancy (03-01)
 - Model<T> wraps Entity<T> - Reactive entities distinguished from plain entities (03-01)
+- Subscription.detach() pattern for view-lifetime subscriptions - Full Drop cleanup deferred to avoid borrow conflicts during flush (03-02)
+- Borrow-safe observer invocation via take_observers_for/restore_observers - Avoids aliased mutable borrows with &mut AppContext (03-02)
+- AppContext persists across frames in OraApp - Critical change: observer_set and effect_queue must survive frames for reactivity (03-02)
+- Cascade depth limit of 10 with warning at 5 - Prevents infinite loops in observer chains (03-02)
+- Dirty entities tracked in HashSet - Foundation for future view re-render optimization (03-02)
 
 ### Pending Todos
 
@@ -104,10 +110,10 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-01-29
-Stopped at: Completed 03-01-PLAN.md
+Stopped at: Completed 03-02-PLAN.md
 Resume file: None
-Next: Plan 03-02 (Observer/Subscription System)
+Next: Plan 03-03 (Event Subscription System)
 
 ---
 *State initialized: 2026-01-28*
-*Last updated: 2026-01-29 after completing Plan 03-01 (Reactive State Foundation)*
+*Last updated: 2026-01-29 after completing Plan 03-02 (Observer/Subscription System)*
