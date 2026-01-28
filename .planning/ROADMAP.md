@@ -72,10 +72,13 @@ Plans:
   2. cx.notify() and cx.emit() queue effects, which flush after update completes (prevents reentrancy)
   3. Views can subscribe to typed events emitted by entities
   4. Multiple views can observe the same Model<T> and all re-render when it changes
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- (Plans will be created during /gsd:plan-phase 3)
+- [ ] 03-01-PLAN.md -- Effect queue + Model<T> wrapper + ModelContext (Wave 1)
+- [ ] 03-02-PLAN.md -- Observer registry + notify-flush cycle + AppContext persistence (Wave 2)
+- [ ] 03-03-PLAN.md -- Typed event subscriptions + global event bus + Drop cleanup (Wave 3)
+- [ ] 03-04-PLAN.md -- cx.spawn() + async executor + dirty rendering + reactive demo (Wave 4)
 
 ### Phase 4: Event System
 **Goal**: Implement mouse/keyboard event routing, focus management, and two-phase dispatch
@@ -181,7 +184,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 |-------|----------------|--------|-----------|
 | 1. Foundation & View System | 3/3 | Complete | 2026-01-28 |
 | 2. Layout & Rendering Pipeline | 6/6 | Complete | 2026-01-29 |
-| 3. Reactive State System | 0/TBD | Not started | - |
+| 3. Reactive State System | 0/4 | Planned | - |
 | 4. Event System | 0/TBD | Not started | - |
 | 5. Element Library | 0/TBD | Not started | - |
 | 6. Design System | 0/TBD | Not started | - |
@@ -191,4 +194,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 
 ---
 *Roadmap created: 2026-01-28*
-*Last updated: 2026-01-29 after Phase 2 completion (6/6 plans complete)*
+*Last updated: 2026-01-29 after Phase 3 planning (4 plans created)*
