@@ -26,7 +26,7 @@ struct RectInstance {
     window_size: vec2<f32>,
 
     // Padding for 16-byte alignment
-    _pad: vec2<f32>,
+    _pad: f32,
 }
 
 struct VertexOutput {

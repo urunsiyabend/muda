@@ -1,4 +1,4 @@
-use ora::{AnyElement, Element, View, ViewContext};
+use ora::{AnyElement, Element, Style, View, ViewContext};
 
 /// A simple element that renders a colored rectangle.
 struct ColorRect {
@@ -7,6 +7,7 @@ struct ColorRect {
     width: f32,
     height: f32,
     color: [f32; 4],
+    style: Style,
 }
 
 impl ColorRect {
@@ -17,6 +18,7 @@ impl ColorRect {
             width,
             height,
             color,
+            style: Style::default(),
         }
     }
 }
@@ -31,8 +33,8 @@ impl Element for ColorRect {
         &mut self,
         cx: &mut ora::element::LayoutContext,
     ) -> (ora::element::LayoutId, Self::RequestLayoutState) {
-        // Phase 1 stub: just allocate a layout ID
-        (cx.request_layout(), ColorRectState)
+        // Request layout with style
+        (cx.request_layout(&self.style), ColorRectState)
     }
 
     fn prepaint(

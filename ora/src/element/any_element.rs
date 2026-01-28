@@ -66,9 +66,10 @@ impl AnyElement {
         // Request layout for self
         let layout_id = self.inner.request_layout(cx);
 
-        // Request layout for all children
+        // Request layout for all children and register parent-child relationships
         for child in &mut self.children {
-            child.request_layout(cx);
+            let child_id = child.request_layout(cx);
+            cx.add_child(layout_id, child_id);
         }
 
         layout_id

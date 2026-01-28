@@ -1,7 +1,9 @@
 use crate::entity::EntityStorage;
+use crate::layout::{compute_flexbox, AvailableSpace, LayoutInput, LayoutOutput};
+use crate::style::units::{Rect, Size};
+use crate::style::Style;
 
 /// Opaque handle to layout data produced by the layout engine.
-/// The real layout engine will be implemented in Phase 2.
 #[derive(Debug, Clone, Copy)]
 pub struct LayoutId(pub(crate) usize);
 
@@ -24,6 +26,10 @@ pub struct LayoutContext<'a> {
     pub(crate) entity_storage: &'a mut EntityStorage,
     pub(crate) next_layout_id: usize,
     pub(crate) window_size: (u32, u32),
+    pub(crate) layout_outputs: Vec<LayoutOutput>,
+    pub(crate) styles: Vec<Style>,
+    pub(crate) children_map: Vec<Vec<usize>>,
+    pub(crate) intrinsic_sizes: Vec<Option<Size<f32>>>,
 }
 
 impl<'a> LayoutContext<'a> {
@@ -32,15 +38,68 @@ impl<'a> LayoutContext<'a> {
             entity_storage,
             next_layout_id: 0,
             window_size,
+            layout_outputs: Vec::new(),
+            styles: Vec::new(),
+            children_map: Vec::new(),
+            intrinsic_sizes: Vec::new(),
         }
     }
 
-    /// Request layout for an element.
-    /// Real layout constraints will be stored with these IDs in Phase 2.
-    pub fn request_layout(&mut self) -> LayoutId {
+    /// Request layout for an element with its style.
+    /// Returns a LayoutId that can be used to retrieve computed bounds later.
+    pub fn request_layout(&mut self, style: &Style) -> LayoutId {
         let id = LayoutId(self.next_layout_id);
         self.next_layout_id += 1;
+
+        self.styles.push(style.clone());
+        self.intrinsic_sizes.push(None);
+        self.children_map.push(Vec::new());
+        self.layout_outputs.push(LayoutOutput::zero());
+
         id
+    }
+
+    /// Set the intrinsic size for a layout node (e.g., measured text dimensions).
+    pub fn set_intrinsic_size(&mut self, id: LayoutId, size: Size<f32>) {
+        if id.0 < self.intrinsic_sizes.len() {
+            self.intrinsic_sizes[id.0] = Some(size);
+        }
+    }
+
+    /// Register a parent-child relationship for layout computation.
+    pub fn add_child(&mut self, parent: LayoutId, child: LayoutId) {
+        if parent.0 < self.children_map.len() {
+            self.children_map[parent.0].push(child.0);
+        }
+    }
+
+    /// Compute layout for all registered nodes using the flexbox algorithm.
+    pub fn compute(&mut self) {
+        if self.styles.is_empty() {
+            return;
+        }
+
+        let available = LayoutInput::new(
+            AvailableSpace::Definite(self.window_size.0 as f32),
+            AvailableSpace::Definite(self.window_size.1 as f32),
+        );
+
+        let style_refs: Vec<&Style> = self.styles.iter().collect();
+        self.layout_outputs = compute_flexbox(
+            &style_refs,
+            &self.children_map,
+            &self.intrinsic_sizes,
+            0, // Root node
+            available,
+        );
+    }
+
+    /// Get the computed bounds for a layout node.
+    pub fn bounds(&self, id: LayoutId) -> Rect {
+        self.layout_outputs
+            .get(id.0)
+            .map(|output| output.bounds)
+            .unwrap_or_else(Rect::zero)
     }
 
     /// Get the current window size.
@@ -54,14 +113,28 @@ impl<'a> LayoutContext<'a> {
 pub struct PrepaintContext<'a> {
     pub(crate) entity_storage: &'a mut EntityStorage,
     pub(crate) window_size: (u32, u32),
+    pub(crate) layout_outputs: &'a [LayoutOutput],
 }
 
 impl<'a> PrepaintContext<'a> {
-    pub(crate) fn new(entity_storage: &'a mut EntityStorage, window_size: (u32, u32)) -> Self {
+    pub(crate) fn new(
+        entity_storage: &'a mut EntityStorage,
+        window_size: (u32, u32),
+        layout_outputs: &'a [LayoutOutput],
+    ) -> Self {
         Self {
             entity_storage,
             window_size,
+            layout_outputs,
         }
+    }
+
+    /// Get the computed bounds for a layout node.
+    pub fn bounds(&self, id: LayoutId) -> Rect {
+        self.layout_outputs
+            .get(id.0)
+            .map(|output| output.bounds)
+            .unwrap_or_else(Rect::zero)
     }
 
     /// Get the current window size.
@@ -76,14 +149,20 @@ pub struct PaintContext<'a> {
     pub(crate) entity_storage: &'a mut EntityStorage,
     pub(crate) paint_commands: Vec<PaintCommand>,
     pub(crate) window_size: (u32, u32),
+    pub(crate) layout_outputs: &'a [LayoutOutput],
 }
 
 impl<'a> PaintContext<'a> {
-    pub(crate) fn new(entity_storage: &'a mut EntityStorage, window_size: (u32, u32)) -> Self {
+    pub(crate) fn new(
+        entity_storage: &'a mut EntityStorage,
+        window_size: (u32, u32),
+        layout_outputs: &'a [LayoutOutput],
+    ) -> Self {
         Self {
             entity_storage,
             paint_commands: Vec::new(),
             window_size,
+            layout_outputs,
         }
     }
 
@@ -96,6 +175,14 @@ impl<'a> PaintContext<'a> {
             height,
             color,
         });
+    }
+
+    /// Get the computed bounds for a layout node.
+    pub fn bounds(&self, id: LayoutId) -> Rect {
+        self.layout_outputs
+            .get(id.0)
+            .map(|output| output.bounds)
+            .unwrap_or_else(Rect::zero)
     }
 
     /// Get the current window size.

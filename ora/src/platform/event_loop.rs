@@ -110,10 +110,15 @@ impl ApplicationHandler for OraApp {
                         );
                         element_tree.request_layout(&mut layout_cx);
 
+                        // Compute layout using flexbox algorithm
+                        layout_cx.compute();
+                        let layout_outputs = layout_cx.layout_outputs.clone();
+
                         // Phase 2: Prepaint
                         let mut prepaint_cx = PrepaintContext::new(
                             &mut app_context.entity_storage,
                             window_size,
+                            &layout_outputs,
                         );
                         element_tree.prepaint(&mut prepaint_cx);
 
@@ -121,6 +126,7 @@ impl ApplicationHandler for OraApp {
                         let mut paint_cx = PaintContext::new(
                             &mut app_context.entity_storage,
                             window_size,
+                            &layout_outputs,
                         );
                         element_tree.paint(&mut paint_cx);
 
