@@ -10,29 +10,29 @@ See: .planning/PROJECT.md (updated 2026-01-28)
 ## Current Position
 
 Phase: 2 of 9 (Layout & Rendering Pipeline)
-Plan: 4 of 5 in current phase
+Plan: 3 of 6 in current phase (02-03 just completed)
 Status: In progress
-Last activity: 2026-01-29 - Completed 02-04-PLAN.md
+Last activity: 2026-01-29 - Completed 02-03-PLAN.md (GPU Rectangle Rendering)
 
-Progress: [███░░░░░░░] ~33%
+Progress: [██████░░░░] ~67% (6 of 9 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 5
-- Average duration: 6m 24s
-- Total execution time: 0.53 hours
+- Total plans completed: 6
+- Average duration: 6m 50s
+- Total execution time: 0.68 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-foundation-view-system | 3 | 23m 0s | 7m 40s |
-| 02-layout-rendering-pipeline | 2 | 14m 0s | 7m 0s |
+| 02-layout-rendering-pipeline | 3 | 24m 0s | 8m 0s |
 
 **Recent Trend:**
-- Last 5 plans: 01-02 (8m 20s), 01-03 (~10m 0s), 02-01 (5m 0s), 02-04 (9m 0s)
-- Trend: Good velocity, Phase 2 progressing well
+- Last 5 plans: 01-03 (~10m 0s), 02-01 (5m 0s), 02-04 (9m 0s), 02-03 (10m 0s)
+- Trend: Good velocity maintained, Phase 2 at 50% complete (3 of 6 plans)
 
 *Updated after each plan completion*
 
@@ -64,6 +64,11 @@ Recent decisions affecting current work:
 - Per-side border widths (Edges<f32>) - Fine-grained border control matching CSS model (02-01)
 - RGBA floats for Color - 0.0..1.0 range matches GPU shaders, eliminates conversion overhead (02-01)
 - AvailableSpace enum (Definite/MinContent/MaxContent) - Supports three-pass flexbox algorithm (02-01)
+- RectInstance 144-byte struct (16-byte aligned) - Storage buffer compatibility for instanced rendering (02-03)
+- Storage buffers for instance data - Supports 128 MiB (vs 64 KiB uniform limit) for batching 1000+ rectangles (02-03)
+- Shader-based quad generation - vertex_index generates geometry, no vertex buffer needed (02-03)
+- Distance field SDF for rounded corners - Per-corner radius selection in fragment shader (02-03)
+- Closed-form Gaussian shadows - Error function approximation for single-pass rendering (02-03)
 - Downgraded glyphon to 0.7 for wgpu 23 compatibility - glyphon 0.9 requires wgpu 25 (02-04)
 - Framework owns all font resources - Elements don't create FontSystem instances, just provide text content (02-04)
 - Buffer reuse between measure and paint - Same Buffer from measure_text() must be used in add_text_area() (02-04)
@@ -83,10 +88,10 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-01-29
-Stopped at: Completed 02-04-PLAN.md (TextSystem with glyphon integration)
+Stopped at: Completed 02-03-PLAN.md (GPU Rectangle Rendering)
 Resume file: None
-Next: Plan 02-05 (Div & Text Primitives) or 02-02 (Flexbox Layout Engine)
+Next: Plan 02-02 (Flexbox Layout Engine) or 02-05 (Div & Text Primitives)
 
 ---
 *State initialized: 2026-01-28*
-*Last updated: 2026-01-29 after 02-04 completion*
+*Last updated: 2026-01-29 after 02-03 completion*
