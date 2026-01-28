@@ -108,9 +108,10 @@ impl TextArea {
 
         // Update buffer metrics
         self.buffer.set_metrics(&mut self.font_system, metrics);
+        // Use None for width to disable word wrapping - code editors scroll horizontally
         self.buffer.set_size(
             &mut self.font_system,
-            Some(physical_width),
+            None,
             Some(physical_height),
         );
 
@@ -221,7 +222,7 @@ impl TextArea {
             .expect("Failed to render text");
     }
 
-    /// Renders selection backgrounds.
+    /// Renders selection backgrounds with optional scissor clipping.
     pub fn render_selections(
         &self,
         encoder: &mut wgpu::CommandEncoder,
@@ -231,6 +232,7 @@ impl TextArea {
         screen_width: f32,
         screen_height: f32,
         scale_factor: f32,
+        scissor: Option<(u32, u32, u32, u32)>,
     ) {
         // Convert from logical to physical pixels
         let physical_rects: Vec<Rect> = rects.iter().map(|r| {
@@ -243,6 +245,6 @@ impl TextArea {
             )
         }).collect();
         self.rect_renderer
-            .render(encoder, view, queue, &physical_rects, screen_width, screen_height);
+            .render(encoder, view, queue, &physical_rects, screen_width, screen_height, scissor);
     }
 }

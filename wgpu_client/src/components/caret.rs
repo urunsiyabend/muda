@@ -96,7 +96,7 @@ impl Caret {
         Some(Rect::new(x, y, self.width, line_height, theme.palette.get(ColorRole::Caret)))
     }
 
-    /// Renders the caret.
+    /// Renders the caret with optional scissor clipping.
     pub fn render(
         &self,
         encoder: &mut wgpu::CommandEncoder,
@@ -109,6 +109,7 @@ impl Caret {
         screen_width: f32,
         screen_height: f32,
         scale_factor: f32,
+        scissor: Option<(u32, u32, u32, u32)>,
     ) {
         if let Some(rect) = self.calculate_rect(caret, bounds, theme, char_width) {
             // Convert from logical to physical pixels
@@ -119,7 +120,7 @@ impl Caret {
                 rect.height * scale_factor,
                 rect.color,
             );
-            self.rect_renderer.render(encoder, view, queue, &[physical_rect], screen_width, screen_height);
+            self.rect_renderer.render(encoder, view, queue, &[physical_rect], screen_width, screen_height, scissor);
         }
     }
 

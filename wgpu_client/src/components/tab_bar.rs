@@ -240,7 +240,7 @@ impl TabBar {
             })
             .collect();
         self.rect_renderer
-            .render(encoder, view, queue, &physical_rects, screen_width, screen_height);
+            .render(encoder, view, queue, &physical_rects, screen_width, screen_height, None);
     }
 
     /// Renders the tab bar text.

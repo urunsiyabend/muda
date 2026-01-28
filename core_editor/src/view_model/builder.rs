@@ -51,7 +51,7 @@ impl ViewModelBuilder {
     /// * `focus` - The current focus state
     /// * `viewport_height` - The available viewport height for sidebar
     /// * `status_message` - Optional status message to display
-    /// * `open_documents` - List of (title, is_active, is_dirty) for all open documents
+    /// * `open_views` - List of (view_id, title, is_active, is_dirty) for all open views
     pub fn build(
         document: &Document,
         view: &EditorView,
@@ -61,7 +61,7 @@ impl ViewModelBuilder {
         focus: FocusState,
         viewport_height: usize,
         status_message: Option<&str>,
-        open_documents: &[(String, bool, bool)],
+        open_views: &[(u64, String, bool, bool)],
     ) -> RenderModel {
         let viewport = &view.viewport;
         let selection = view.selection_range();
@@ -109,7 +109,7 @@ impl ViewModelBuilder {
         let status = Self::build_status_presentation(document, caret_pos, status_message);
 
         // Build tab bar
-        let tab_bar = Self::build_tab_bar_presentation(open_documents);
+        let tab_bar = Self::build_tab_bar_presentation(open_views);
 
         // Build dialog state from pending action and protection error
         let dialog = Self::build_dialog_presentation(pending_action, protection_error);
@@ -130,12 +130,13 @@ impl ViewModelBuilder {
         }
     }
 
-    /// Builds the tab bar presentation from open documents info.
-    fn build_tab_bar_presentation(open_documents: &[(String, bool, bool)]) -> TabBarPresentation {
-        let tabs: Vec<TabPresentation> = open_documents
+    /// Builds the tab bar presentation from open views info.
+    /// Each tuple contains (view_id, title, is_active, is_dirty).
+    fn build_tab_bar_presentation(open_views: &[(u64, String, bool, bool)]) -> TabBarPresentation {
+        let tabs: Vec<TabPresentation> = open_views
             .iter()
-            .map(|(title, is_active, is_dirty)| {
-                TabPresentation::new(title.clone(), *is_active, *is_dirty)
+            .map(|(view_id, title, is_active, is_dirty)| {
+                TabPresentation::new(*view_id, title.clone(), *is_active, *is_dirty)
             })
             .collect();
 
@@ -498,8 +499,9 @@ mod tests {
         let mut view = EditorView::new(doc.id());
         view.viewport.resize(80, 24); // Set viewport dimensions
         let sidebar = Sidebar::default();
+        let open_views: Vec<(u64, String, bool, bool)> = vec![];
 
-        let model = ViewModelBuilder::build(&doc, &view, None, None, &sidebar, FocusState::Editor, 24, None);
+        let model = ViewModelBuilder::build(&doc, &view, None, None, &sidebar, FocusState::Editor, 24, None, &open_views);
 
         assert_eq!(model.visible_lines.len(), 2);
         assert_eq!(model.visible_lines[0].line_number, 1);
@@ -515,8 +517,9 @@ mod tests {
         view.viewport.resize(80, 24); // Set viewport dimensions
         view.move_caret_to(7, false); // "W" in "World"
         let sidebar = Sidebar::default();
+        let open_views: Vec<(u64, String, bool, bool)> = vec![];
 
-        let model = ViewModelBuilder::build(&doc, &view, None, None, &sidebar, FocusState::Editor, 24, None);
+        let model = ViewModelBuilder::build(&doc, &view, None, None, &sidebar, FocusState::Editor, 24, None, &open_views);
 
         assert_eq!(model.caret.position.row, 1); // Second line
         assert_eq!(model.caret.position.column, 1); // Second char
@@ -531,16 +534,17 @@ mod tests {
         let mut view = EditorView::new(doc.id());
         view.viewport.resize(80, 24);
         let sidebar = Sidebar::default();
+        let open_views: Vec<(u64, String, bool, bool)> = vec![];
 
         // No dialog when no pending action
-        let model_no_dialog = ViewModelBuilder::build(&doc, &view, None, None, &sidebar, FocusState::Editor, 24, None);
+        let model_no_dialog = ViewModelBuilder::build(&doc, &view, None, None, &sidebar, FocusState::Editor, 24, None, &open_views);
         assert!(matches!(model_no_dialog.dialog, DialogPresentation::None));
 
         // Dialog shown when pending action + protection error
         let pending = PendingAction::Exit;
         let unsaved = UnsavedDocument::new(DocumentId::new(), "test.txt");
         let error = ProtectionError::UnsavedChanges(unsaved);
-        let model_with_dialog = ViewModelBuilder::build(&doc, &view, Some(&pending), Some(&error), &sidebar, FocusState::Editor, 24, None);
+        let model_with_dialog = ViewModelBuilder::build(&doc, &view, Some(&pending), Some(&error), &sidebar, FocusState::Editor, 24, None, &open_views);
 
         if let DialogPresentation::UnsavedChangesConfirmation { action_description, unsaved_documents } = model_with_dialog.dialog {
             assert_eq!(action_description, "Exit");
@@ -556,8 +560,9 @@ mod tests {
         let mut view = EditorView::new(doc.id());
         view.viewport.resize(80, 24);
         let sidebar = Sidebar::default();
+        let open_views: Vec<(u64, String, bool, bool)> = vec![];
 
-        let model = ViewModelBuilder::build(&doc, &view, None, None, &sidebar, FocusState::Editor, 24, None);
+        let model = ViewModelBuilder::build(&doc, &view, None, None, &sidebar, FocusState::Editor, 24, None, &open_views);
 
         assert_eq!(model.status.cursor_line, 1);
         assert_eq!(model.status.cursor_column, 1);
@@ -572,8 +577,9 @@ mod tests {
         let mut view = EditorView::new(doc.id());
         view.viewport.resize(80, 24);
         let sidebar = Sidebar::default();
+        let open_views: Vec<(u64, String, bool, bool)> = vec![];
 
-        let model = ViewModelBuilder::build(&doc, &view, None, None, &sidebar, FocusState::Editor, 24, Some("File saved"));
+        let model = ViewModelBuilder::build(&doc, &view, None, None, &sidebar, FocusState::Editor, 24, Some("File saved"), &open_views);
 
         assert_eq!(model.status.message, Some("File saved".to_string()));
     }
@@ -583,16 +589,17 @@ mod tests {
         let doc = Document::from_str("test", None);
         let mut view = EditorView::new(doc.id());
         view.viewport.resize(80, 24);
+        let open_views: Vec<(u64, String, bool, bool)> = vec![];
 
         // Test hidden sidebar
         let sidebar = Sidebar::default();
-        let model = ViewModelBuilder::build(&doc, &view, None, None, &sidebar, FocusState::Editor, 24, None);
+        let model = ViewModelBuilder::build(&doc, &view, None, None, &sidebar, FocusState::Editor, 24, None, &open_views);
         assert!(!model.sidebar.visible);
 
         // Test visible sidebar
         let mut sidebar = Sidebar::default();
         sidebar.visible = true;
-        let model = ViewModelBuilder::build(&doc, &view, None, None, &sidebar, FocusState::Sidebar, 24, None);
+        let model = ViewModelBuilder::build(&doc, &view, None, None, &sidebar, FocusState::Sidebar, 24, None, &open_views);
         assert!(model.sidebar.visible);
         assert!(model.sidebar.focused);
     }

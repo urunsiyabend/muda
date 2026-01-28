@@ -116,6 +116,11 @@ impl FileTree {
     pub fn build_rects(&self) -> Vec<StyledRect> {
         let mut rects = Vec::new();
 
+        // Safety check: don't render with invalid bounds
+        if self.bounds.width <= 0.0 || self.bounds.height <= 0.0 {
+            return rects;
+        }
+
         // Background
         rects.push(
             StyledRect::new(self.bounds)
@@ -260,10 +265,12 @@ impl FileTree {
             let label_x = entry.bounds.x + Self::PADDING_H + indent + Self::CHEVRON_SIZE + 2.0 + Self::ICON_SIZE + Self::ICON_GAP;
             let label_width = entry.bounds.width - label_x + entry.bounds.x - Self::PADDING_H;
 
+            // Use primary color for selected items (bold look),
+            // secondary for non-selected (softer appearance)
             let fg_color = if entry.entry.is_selected {
                 self.palette.fg_primary
             } else {
-                self.palette.fg_primary
+                self.palette.fg_secondary
             };
 
             texts.push(

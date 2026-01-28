@@ -1,9 +1,13 @@
 //! GPU renderer orchestrating all components.
 
-use crate::components::{Bounds, Caret, Dialog, Gutter, SidebarComponent, StatusBar, TabBar, TextArea, UITextRenderer};
+#[cfg(debug_assertions)]
+mod debug;
+
+use crate::components::{Bounds, Caret, Dialog, Gutter, SidebarComponent, StatusBar, TabBar, TextArea, UITextRenderer, safe_scissor_rect};
 use crate::theme::{Theme, ColorRole};
 use crate::ui::{AppLayout, LayoutRegion, CommandPalette, CommandEntry, CommandKind, EditorTabs, TabInfo, PanelManager, PanelKind, StatusLine, FileTree, FileEntry};
 use crate::design_system::StyledRectRenderer;
+use crate::design_system::primitives::TextBlock;
 use core_editor::view_model::RenderModel;
 
 /// Main GPU renderer that coordinates all UI components.
@@ -37,6 +41,10 @@ pub struct GpuRenderer {
     theme: Theme,
     /// Cached measured character width for accurate positioning.
     measured_char_width: f32,
+
+    /// Debug overlay state (only in debug builds).
+    #[cfg(debug_assertions)]
+    debug_overlay: debug::DebugOverlay,
 }
 
 impl GpuRenderer {
@@ -166,6 +174,8 @@ impl GpuRenderer {
             config,
             theme,
             measured_char_width,
+            #[cfg(debug_assertions)]
+            debug_overlay: debug::DebugOverlay::new(),
         })
     }
 
@@ -181,7 +191,7 @@ impl GpuRenderer {
 
     /// Returns the tab bar height in logical pixels.
     pub fn tab_bar_height(&self) -> f32 {
-        self.tab_bar.height()
+        self.editor_tabs.height()
     }
 
     /// Sets the theme.
@@ -260,13 +270,13 @@ impl GpuRenderer {
         self.editor_tabs.on_pointer_move(x, y)
     }
 
-    /// Handle click on editor tabs. Returns (tab_id, is_close_click) if clicked.
-    pub fn editor_tabs_on_click(&mut self, x: f32, y: f32) -> Option<(usize, bool)> {
+    /// Handle click on editor tabs. Returns (view_id, is_close_click) if clicked.
+    pub fn editor_tabs_on_click(&mut self, x: f32, y: f32) -> Option<(u64, bool)> {
         self.editor_tabs.on_click(x, y)
     }
 
-    /// Handle middle click on editor tabs. Returns tab_id if clicked.
-    pub fn editor_tabs_on_middle_click(&mut self, x: f32, y: f32) -> Option<usize> {
+    /// Handle middle click on editor tabs. Returns view_id if clicked.
+    pub fn editor_tabs_on_middle_click(&mut self, x: f32, y: f32) -> Option<u64> {
         self.editor_tabs.on_middle_click(x, y)
     }
 
@@ -341,6 +351,53 @@ impl GpuRenderer {
         self.caret.time_until_next_blink()
     }
 
+    /// Toggle debug overlay visibility (debug builds only).
+    #[cfg(debug_assertions)]
+    pub fn toggle_debug_overlay(&mut self) {
+        self.debug_overlay.toggle();
+    }
+
+    /// Toggle debug overlay visibility (no-op in release builds).
+    #[cfg(not(debug_assertions))]
+    pub fn toggle_debug_overlay(&mut self) {
+        // No-op in release builds
+    }
+
+    /// Collects all UI text blocks from visible components for batched rendering.
+    ///
+    /// This method gathers text from all UI components that need to be rendered
+    /// via the shared UITextRenderer. By collecting all text first and making a
+    /// single prepare() call, we avoid the glyphon issue where multiple prepare()
+    /// calls overwrite the glyph vertex buffer.
+    fn collect_all_ui_texts(&self, model: &RenderModel) -> Vec<TextBlock> {
+        let mut all_texts = Vec::with_capacity(256);
+
+        // Collect sidebar/file tree texts
+        if model.sidebar.visible {
+            all_texts.extend(self.file_tree.build_texts());
+        }
+
+        // Collect tab bar texts
+        if model.tab_bar.visible {
+            all_texts.extend(self.editor_tabs.build_texts());
+        }
+
+        // Collect status line texts
+        all_texts.extend(self.status_line.build_texts());
+
+        // Collect panel texts (if visible)
+        if self.panel_manager.is_visible() {
+            all_texts.extend(self.panel_manager.build_texts());
+        }
+
+        // Collect command palette texts (if visible)
+        if self.command_palette.is_visible() {
+            all_texts.extend(self.command_palette.build_texts());
+        }
+
+        all_texts
+    }
+
     /// Renders a frame from the given RenderModel.
     pub fn render(&mut self, model: &RenderModel, scale_factor: f32) -> Result<(), wgpu::SurfaceError> {
         let output = self.surface.get_current_texture()?;
@@ -373,7 +430,11 @@ impl GpuRenderer {
         );
 
         // Update new FileTree with sidebar entries
+        // IMPORTANT: set_bounds MUST be called BEFORE update_entries because
+        // update_entries calls layout_entries() which depends on self.bounds
         if model.sidebar.visible {
+            self.file_tree.set_bounds(layout.sidebar);
+            self.file_tree.set_focused(model.sidebar.focused);
             let file_entries: Vec<FileEntry> = model.sidebar.entries.iter().enumerate().map(|(i, entry)| {
                 FileEntry {
                     id: i,
@@ -386,8 +447,6 @@ impl GpuRenderer {
                 }
             }).collect();
             self.file_tree.update_entries(file_entries);
-            self.file_tree.set_bounds(layout.sidebar);
-            self.file_tree.set_focused(model.sidebar.focused);
         }
 
         self.gutter.prepare(
@@ -441,9 +500,9 @@ impl GpuRenderer {
 
         // Update new EditorTabs with tab data
         if model.tab_bar.visible {
-            let tab_infos: Vec<TabInfo> = model.tab_bar.tabs.iter().enumerate().map(|(i, tab)| {
+            let tab_infos: Vec<TabInfo> = model.tab_bar.tabs.iter().map(|tab| {
                 TabInfo {
-                    id: i,
+                    view_id: tab.view_id,
                     title: tab.title.clone(),
                     path: None,
                     is_dirty: tab.is_dirty,
@@ -453,6 +512,25 @@ impl GpuRenderer {
             self.editor_tabs.update_tabs(tab_infos);
             self.editor_tabs.set_bounds(layout.tab_bar);
         }
+
+        // =======================================================================
+        // CRITICAL FIX: Collect ALL UI text blocks FIRST, then prepare ONCE
+        // =======================================================================
+        // Glyphon requires a single prepare() call per frame per TextRenderer.
+        // Multiple prepare() calls overwrite the glyph vertex buffer, causing
+        // earlier text to vanish. We collect all text blocks from all components
+        // before making the single prepare() call.
+        let all_ui_texts = self.collect_all_ui_texts(model);
+
+        // Single prepare() call for ALL UI text (sidebar, tabs, status, panel, palette)
+        self.ui_text_renderer.prepare(
+            &self.device,
+            &self.queue,
+            &all_ui_texts,
+            scale_factor,
+            self.config.width,
+            self.config.height,
+        );
 
         // Build all rectangles
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -477,74 +555,39 @@ impl GpuRenderer {
             });
         }
 
-        // Render sidebar/file tree using new design system
+        // =======================================================================
+        // PHASE 1: Render all UI backgrounds/rectangles in a single pass
+        // =======================================================================
+        // CRITICAL: We must collect ALL rects first, then prepare ONCE, then render.
+        // This is because queue.write_buffer() executes immediately, but render passes
+        // execute later when the command buffer is submitted. Multiple prepare() calls
+        // would overwrite the GPU buffer before previous passes can use it.
+
+        // Collect all UI rects from all components
+        let mut all_ui_rects: Vec<crate::design_system::StyledRect> = Vec::new();
+
+        // Sidebar/file tree rects
         if model.sidebar.visible {
-            let tree_rects = self.file_tree.build_rects();
-            let tree_texts = self.file_tree.build_texts();
-
-            self.styled_rect_renderer.clear();
-            self.styled_rect_renderer.push_all(&tree_rects, logical_width, logical_height);
-            self.styled_rect_renderer.prepare(&self.queue);
-
-            {
-                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("sidebar_rect_pass"),
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &view,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Load,
-                            store: wgpu::StoreOp::Store,
-                        },
-                    })],
-                    depth_stencil_attachment: None,
-                    timestamp_writes: None,
-                    occlusion_query_set: None,
-                });
-                self.styled_rect_renderer.render(&mut pass);
-            }
-
-            self.ui_text_renderer.prepare(
-                &self.device,
-                &self.queue,
-                &tree_texts,
-                scale_factor,
-                self.config.width,
-                self.config.height,
-            );
-
-            {
-                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("sidebar_text_pass"),
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &view,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Load,
-                            store: wgpu::StoreOp::Store,
-                        },
-                    })],
-                    depth_stencil_attachment: None,
-                    timestamp_writes: None,
-                    occlusion_query_set: None,
-                });
-                self.ui_text_renderer.render(&mut pass);
-            }
+            all_ui_rects.extend(self.file_tree.build_rects());
         }
 
-        // Render tab bar using new EditorTabs component
+        // Tab bar rects
         if model.tab_bar.visible {
-            let tab_rects = self.editor_tabs.build_rects();
-            let tab_texts = self.editor_tabs.build_texts();
+            all_ui_rects.extend(self.editor_tabs.build_rects());
+        }
 
-            // Render tab backgrounds using styled rect renderer
+        // Status line rects
+        all_ui_rects.extend(self.status_line.build_rects());
+
+        // Render all UI background rects in a single pass
+        if !all_ui_rects.is_empty() {
             self.styled_rect_renderer.clear();
-            self.styled_rect_renderer.push_all(&tab_rects, logical_width, logical_height);
+            self.styled_rect_renderer.push_all(&all_ui_rects, logical_width, logical_height);
             self.styled_rect_renderer.prepare(&self.queue);
 
             {
                 let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("tab_bar_rect_pass"),
+                    label: Some("ui_rect_pass"),
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                         view: &view,
                         resolve_target: None,
@@ -557,35 +600,8 @@ impl GpuRenderer {
                     timestamp_writes: None,
                     occlusion_query_set: None,
                 });
+                // No scissor needed - rects are already positioned within their bounds
                 self.styled_rect_renderer.render(&mut pass);
-            }
-
-            // Render tab text using UI text renderer
-            self.ui_text_renderer.prepare(
-                &self.device,
-                &self.queue,
-                &tab_texts,
-                scale_factor,
-                self.config.width,
-                self.config.height,
-            );
-
-            {
-                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("tab_bar_text_pass"),
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &view,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Load,
-                            store: wgpu::StoreOp::Store,
-                        },
-                    })],
-                    depth_stencil_attachment: None,
-                    timestamp_writes: None,
-                    occlusion_query_set: None,
-                });
-                self.ui_text_renderer.render(&mut pass);
             }
         }
 
@@ -595,68 +611,15 @@ impl GpuRenderer {
         }
 
         // Render current line highlight first (below selection)
+        // Use scissor rect to prevent overflow into tab bar
+        let text_area_scissor = safe_scissor_rect(layout.text_area, scale_factor, self.config.width, self.config.height);
         let (current_line_rects, selection_rects) = self.text_area.build_selection_rects(model, layout.text_area, &self.theme, self.measured_char_width);
-        self.text_area.render_selections(&mut encoder, &view, &self.queue, &current_line_rects, screen_width, screen_height, scale_factor);
+        self.text_area.render_selections(&mut encoder, &view, &self.queue, &current_line_rects, screen_width, screen_height, scale_factor, Some(text_area_scissor));
 
         // Render selection backgrounds on top
-        self.text_area.render_selections(&mut encoder, &view, &self.queue, &selection_rects, screen_width, screen_height, scale_factor);
+        self.text_area.render_selections(&mut encoder, &view, &self.queue, &selection_rects, screen_width, screen_height, scale_factor, Some(text_area_scissor));
 
-        // Render status line using new design system
-        {
-            let status_rects = self.status_line.build_rects();
-            let status_texts = self.status_line.build_texts();
-
-            self.styled_rect_renderer.clear();
-            self.styled_rect_renderer.push_all(&status_rects, logical_width, logical_height);
-            self.styled_rect_renderer.prepare(&self.queue);
-
-            {
-                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("status_rect_pass"),
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &view,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Load,
-                            store: wgpu::StoreOp::Store,
-                        },
-                    })],
-                    depth_stencil_attachment: None,
-                    timestamp_writes: None,
-                    occlusion_query_set: None,
-                });
-                self.styled_rect_renderer.render(&mut pass);
-            }
-
-            self.ui_text_renderer.prepare(
-                &self.device,
-                &self.queue,
-                &status_texts,
-                scale_factor,
-                self.config.width,
-                self.config.height,
-            );
-
-            {
-                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("status_text_pass"),
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &view,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Load,
-                            store: wgpu::StoreOp::Store,
-                        },
-                    })],
-                    depth_stencil_attachment: None,
-                    timestamp_writes: None,
-                    occlusion_query_set: None,
-                });
-                self.ui_text_renderer.render(&mut pass);
-            }
-        }
-
-        // Render caret
+        // Render caret (with scissor to prevent overflow into tab bar)
         self.caret.render(
             &mut encoder,
             &view,
@@ -668,9 +631,31 @@ impl GpuRenderer {
             screen_width,
             screen_height,
             scale_factor,
+            Some(text_area_scissor),
         );
 
-        // Render text (requires a render pass)
+        // Render gutter text (separate pass with gutter scissor)
+        if model.gutter.visible {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("gutter_text_pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            let (sx, sy, sw, sh) = safe_scissor_rect(layout.gutter, scale_factor, self.config.width, self.config.height);
+            pass.set_scissor_rect(sx, sy, sw, sh);
+            self.gutter.render(&mut pass);
+        }
+
+        // Render text area (requires a render pass with text_area scissor)
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("text_pass"),
@@ -686,22 +671,14 @@ impl GpuRenderer {
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
-
-            // Sidebar is now rendered via FileTree with styled_rect_renderer and ui_text_renderer
-            // Tab bar is now rendered via EditorTabs with styled_rect_renderer and ui_text_renderer
-            if model.gutter.visible {
-                self.gutter.render(&mut pass);
-            }
+            let (sx, sy, sw, sh) = safe_scissor_rect(layout.text_area, scale_factor, self.config.width, self.config.height);
+            pass.set_scissor_rect(sx, sy, sw, sh);
             self.text_area.render(&mut pass);
-            // Status bar is now rendered via StatusLine with styled_rect_renderer and ui_text_renderer
         }
 
-        // Render bottom panel (if visible)
+        // Render bottom panel background rects (if visible)
         if self.panel_manager.is_visible() {
             let panel_rects = self.panel_manager.build_rects();
-            let panel_texts = self.panel_manager.build_texts();
-
-            // Render panel backgrounds
             self.styled_rect_renderer.clear();
             self.styled_rect_renderer.push_all(&panel_rects, logical_width, logical_height);
             self.styled_rect_renderer.prepare(&self.queue);
@@ -721,35 +698,9 @@ impl GpuRenderer {
                     timestamp_writes: None,
                     occlusion_query_set: None,
                 });
+                let (sx, sy, sw, sh) = safe_scissor_rect(layout.panel, scale_factor, self.config.width, self.config.height);
+                pass.set_scissor_rect(sx, sy, sw, sh);
                 self.styled_rect_renderer.render(&mut pass);
-            }
-
-            // Render panel text
-            self.ui_text_renderer.prepare(
-                &self.device,
-                &self.queue,
-                &panel_texts,
-                scale_factor,
-                self.config.width,
-                self.config.height,
-            );
-
-            {
-                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("panel_text_pass"),
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &view,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Load,
-                            store: wgpu::StoreOp::Store,
-                        },
-                    })],
-                    depth_stencil_attachment: None,
-                    timestamp_writes: None,
-                    occlusion_query_set: None,
-                });
-                self.ui_text_renderer.render(&mut pass);
             }
         }
 
@@ -771,7 +722,7 @@ impl GpuRenderer {
             let dialog_rects = self.dialog.build_rects(&model.dialog, logical_width, logical_height, &self.theme);
             self.dialog.render_background(&mut encoder, &view, &self.queue, &dialog_rects, screen_width, screen_height, scale_factor);
 
-            // Dialog text pass
+            // Dialog text pass (full screen scissor for overlay)
             {
                 let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("dialog_text_pass"),
@@ -787,33 +738,18 @@ impl GpuRenderer {
                     timestamp_writes: None,
                     occlusion_query_set: None,
                 });
-
+                pass.set_scissor_rect(0, 0, self.config.width, self.config.height);
                 self.dialog.render(&mut pass);
             }
         }
 
-        // Render command palette overlay (on top of everything except dialog)
+        // Render command palette background rects (if visible)
         if self.command_palette.is_visible() {
-            // Build primitives from command palette
             let palette_rects = self.command_palette.build_rects();
-            let palette_texts = self.command_palette.build_texts();
-
-            // Prepare styled rect renderer
             self.styled_rect_renderer.clear();
             self.styled_rect_renderer.push_all(&palette_rects, logical_width, logical_height);
             self.styled_rect_renderer.prepare(&self.queue);
 
-            // Prepare UI text renderer
-            self.ui_text_renderer.prepare(
-                &self.device,
-                &self.queue,
-                &palette_texts,
-                scale_factor,
-                self.config.width,
-                self.config.height,
-            );
-
-            // Render styled rects (backdrop, container, input box, etc.)
             {
                 let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("command_palette_rect_pass"),
@@ -829,29 +765,61 @@ impl GpuRenderer {
                     timestamp_writes: None,
                     occlusion_query_set: None,
                 });
-
+                pass.set_scissor_rect(0, 0, self.config.width, self.config.height);
                 self.styled_rect_renderer.render(&mut pass);
             }
+        }
 
-            // Render text (query, entries)
-            {
-                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("command_palette_text_pass"),
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &view,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Load,
-                            store: wgpu::StoreOp::Store,
-                        },
-                    })],
-                    depth_stencil_attachment: None,
-                    timestamp_writes: None,
-                    occlusion_query_set: None,
-                });
+        // =======================================================================
+        // PHASE 2: Render ALL UI text in a SINGLE pass
+        // =======================================================================
+        // The ui_text_renderer was prepared once at the start with all text blocks.
+        // Now we render them all together.
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("ui_text_pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
 
-                self.ui_text_renderer.render(&mut pass);
-            }
+            self.ui_text_renderer.render(&mut pass);
+        }
+
+        // =======================================================================
+        // PHASE 3: Debug overlay (only in debug builds)
+        // =======================================================================
+        #[cfg(debug_assertions)]
+        if self.debug_overlay.enabled {
+            let debug_rects = self.build_debug_overlay_rects(&layout);
+            // Render debug rects using existing rect renderer
+            self.styled_rect_renderer.clear();
+            self.styled_rect_renderer.push_all(&debug_rects, logical_width, logical_height);
+            self.styled_rect_renderer.prepare(&self.queue);
+
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("debug_overlay_pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            self.styled_rect_renderer.render(&mut pass);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
@@ -865,7 +833,7 @@ impl GpuRenderer {
         let screen_width = self.config.width as f32 / scale_factor;
         let screen_height = self.config.height as f32 / scale_factor;
         let status_height = self.status_bar.height();
-        let tab_bar_height = if model.tab_bar.visible { self.tab_bar.height() } else { 0.0 };
+        let tab_bar_height = if model.tab_bar.visible { self.editor_tabs.height() } else { 0.0 };
         let panel_height = self.panel_manager.height();
 
         // Total bounds
@@ -914,6 +882,63 @@ impl GpuRenderer {
             panel,
             status_bar,
         }
+    }
+
+    /// Build debug overlay rectangles showing component bounds.
+    #[cfg(debug_assertions)]
+    fn build_debug_overlay_rects(&self, layout: &Layout) -> Vec<crate::design_system::StyledRect> {
+        use crate::design_system::StyledRect;
+
+        let mut rects = Vec::new();
+        let thickness = self.debug_overlay.config.border_thickness;
+
+        if self.debug_overlay.config.show_bounds {
+            // Sidebar bounds (red)
+            if layout.sidebar.width > 0.0 {
+                for rect in debug::build_bounds_border(layout.sidebar, debug::colors::SIDEBAR, thickness) {
+                    rects.push(StyledRect::new(Bounds::new(rect.x, rect.y, rect.width, rect.height))
+                        .with_fill(rect.color));
+                }
+            }
+
+            // Tab bar bounds (green)
+            if layout.tab_bar.height > 0.0 {
+                for rect in debug::build_bounds_border(layout.tab_bar, debug::colors::TAB_BAR, thickness) {
+                    rects.push(StyledRect::new(Bounds::new(rect.x, rect.y, rect.width, rect.height))
+                        .with_fill(rect.color));
+                }
+            }
+
+            // Gutter bounds (yellow)
+            if layout.gutter.width > 0.0 {
+                for rect in debug::build_bounds_border(layout.gutter, debug::colors::GUTTER, thickness) {
+                    rects.push(StyledRect::new(Bounds::new(rect.x, rect.y, rect.width, rect.height))
+                        .with_fill(rect.color));
+                }
+            }
+
+            // Text area bounds (blue)
+            for rect in debug::build_bounds_border(layout.text_area, debug::colors::TEXT_AREA, thickness) {
+                rects.push(StyledRect::new(Bounds::new(rect.x, rect.y, rect.width, rect.height))
+                    .with_fill(rect.color));
+            }
+
+            // Panel bounds (cyan)
+            if layout.panel.height > 0.0 {
+                for rect in debug::build_bounds_border(layout.panel, debug::colors::PANEL, thickness) {
+                    rects.push(StyledRect::new(Bounds::new(rect.x, rect.y, rect.width, rect.height))
+                        .with_fill(rect.color));
+                }
+            }
+
+            // Status bar bounds (magenta)
+            for rect in debug::build_bounds_border(layout.status_bar, debug::colors::STATUS_BAR, thickness) {
+                rects.push(StyledRect::new(Bounds::new(rect.x, rect.y, rect.width, rect.height))
+                    .with_fill(rect.color));
+            }
+        }
+
+        rects
     }
 }
 

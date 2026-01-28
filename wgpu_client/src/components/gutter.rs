@@ -171,7 +171,7 @@ impl Gutter {
             theme.palette.get(ColorRole::GutterBg),
         );
         self.rect_renderer
-            .render(encoder, view, queue, &[rect], screen_width, screen_height);
+            .render(encoder, view, queue, &[rect], screen_width, screen_height, None);
     }
 
     /// Renders the gutter text.

@@ -163,7 +163,7 @@ impl StatusBar {
             theme.palette.get(ColorRole::StatusBarBg),
         );
         self.rect_renderer
-            .render(encoder, view, queue, &[rect], screen_width, screen_height);
+            .render(encoder, view, queue, &[rect], screen_width, screen_height, None);
     }
 
     /// Renders the status bar text.

@@ -19,6 +19,18 @@ impl ViewId {
         static COUNTER: AtomicU64 = AtomicU64::new(1);
         Self(COUNTER.fetch_add(1, Ordering::Relaxed))
     }
+
+    /// Creates a ViewId from a raw u64 value.
+    /// Used for reconstructing ViewId from serialized data (e.g., tab clicks).
+    pub fn from_raw(value: u64) -> Self {
+        Self(value)
+    }
+
+    /// Returns the underlying u64 value.
+    /// Used for passing view ID through UI layers that don't depend on core_editor types.
+    pub fn as_u64(self) -> u64 {
+        self.0
+    }
 }
 
 impl Default for ViewId {

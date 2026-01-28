@@ -297,17 +297,40 @@ impl WgpuApp {
         let tab_bar_height = renderer.tab_bar_height();
         let screen_height = window.inner_size().height as f32 / scale_factor;
 
-        let x = x as f32;
-        let y = y as f32;
+        // Convert from physical pixels (winit) to logical pixels (layout system)
+        let x = x as f32 / scale_factor;
+        let y = y as f32 / scale_factor;
 
         // Check if click is in status bar (ignore)
         if y > screen_height - status_height {
             return;
         }
 
-        // Check if click is in sidebar
+        // Check if click is in sidebar - use FileTree's hit detection for correct bounds
         if self.editor.sidebar.visible && x < sidebar_width {
-            self.handle_sidebar_click(x, y, is_double_click, theme.font_size);
+            drop(renderer);
+            if let Some(renderer) = &mut self.renderer {
+                if let Some((entry_id, _is_chevron)) = renderer.file_tree_on_click(x, y) {
+                    // Select the entry (FileTree returns the correct entry index)
+                    self.editor.sidebar.select_index(entry_id);
+                    self.editor.focus_sidebar();
+
+                    // On double-click, open the entry
+                    if is_double_click {
+                        if let Some(entry) = self.editor.sidebar.selected_entry() {
+                            if entry.is_dir {
+                                let path = entry.path.clone();
+                                self.editor.sidebar.set_base_directory(path);
+                            } else {
+                                let path = entry.path.clone();
+                                let _ = self.editor.request_open_file(path);
+                                self.cached_viewport = None;
+                            }
+                        }
+                    }
+                    self.request_redraw();
+                }
+            }
             return;
         }
 
@@ -316,29 +339,31 @@ impl WgpuApp {
             // Handle tab clicks - we need to get the result and drop the renderer borrow first
             drop(renderer);
             if let Some(renderer) = &mut self.renderer {
-                let lx = x / scale_factor;
-                let ly = y / scale_factor;
-                if let Some((tab_idx, is_close)) = renderer.editor_tabs_on_click(lx, ly) {
-                    // Get the view IDs in order to map tab index to ViewId
-                    let view_ids: Vec<_> = self.editor.workspace.views().map(|(id, _)| *id).collect();
-                    if let Some(&view_id) = view_ids.get(tab_idx) {
-                        if is_close {
-                            // Close tab - close the view (document protection will be checked)
-                            if view_ids.len() > 1 {
-                                // Switch to another tab first if multiple tabs exist
-                                let next_idx = if tab_idx + 1 < view_ids.len() { tab_idx + 1 } else { tab_idx.saturating_sub(1) };
-                                if let Some(&next_view_id) = view_ids.get(next_idx) {
-                                    self.editor.workspace.set_active_view(next_view_id);
-                                }
-                                self.editor.workspace.close_view(view_id);
+                // x, y are already converted to logical pixels at the start of this function
+                if let Some((view_id_raw, is_close)) = renderer.editor_tabs_on_click(x, y) {
+                    // Convert raw u64 back to ViewId
+                    let view_id = core_editor::ViewId::from_raw(view_id_raw);
+
+                    if is_close {
+                        // Close tab - close the view
+                        let view_count = self.editor.workspace.views().count();
+                        if view_count > 1 {
+                            // Find the next view to switch to (must collect before mutating)
+                            let next_id: Option<core_editor::ViewId> = self.editor.workspace.views()
+                                .find(|(id, _)| **id != view_id)
+                                .map(|(id, _)| *id);
+
+                            // Switch to another view first
+                            if let Some(next_id) = next_id {
+                                self.editor.workspace.set_active_view(next_id);
                             }
-                            // If only one tab, don't close it
-                        } else {
-                            // Switch to the clicked tab
-                            self.editor.workspace.set_active_view(view_id);
+                            self.editor.workspace.close_view(view_id);
                         }
-                        self.request_redraw();
+                    } else {
+                        // Switch to the clicked tab
+                        self.editor.workspace.set_active_view(view_id);
                     }
+                    self.request_redraw();
                 }
             }
             return;
@@ -347,43 +372,6 @@ impl WgpuApp {
         // Click is in editor area - adjust y for tab bar
         let char_width = renderer.char_width();
         self.handle_editor_click(x, y - tab_bar_height, sidebar_width, char_width, theme.line_height_px());
-    }
-
-    /// Handles click in the sidebar.
-    fn handle_sidebar_click(&mut self, _x: f32, y: f32, is_double_click: bool, font_size: f32) {
-        let line_height = font_size * 0.9 * 1.4;
-        let top_padding = 8.0;
-
-        // Calculate which entry was clicked
-        let click_y = y - top_padding;
-        if click_y < 0.0 {
-            return;
-        }
-
-        let entry_index = (click_y / line_height) as usize + self.editor.sidebar.scroll_offset;
-
-        if entry_index < self.editor.sidebar.entries.len() {
-            // Select the entry
-            self.editor.sidebar.select_index(entry_index);
-            self.editor.focus_sidebar();
-            self.request_redraw();
-
-            // On double-click, open the entry
-            if is_double_click {
-                if let Some(entry) = self.editor.sidebar.selected_entry() {
-                    if entry.is_dir {
-                        let path = entry.path.clone();
-                        self.editor.sidebar.set_base_directory(path);
-                    } else {
-                        let path = entry.path.clone();
-                        let _ = self.editor.request_open_file(path);
-                        // Invalidate cached viewport so the new view gets proper dimensions
-                        self.cached_viewport = None;
-                    }
-                }
-                self.request_redraw();
-            }
-        }
     }
 
     /// Handles drag selection - extends selection as mouse moves.
@@ -398,8 +386,9 @@ impl WgpuApp {
         let tab_bar_height = renderer.tab_bar_height();
         let screen_height = window.inner_size().height as f32 / scale_factor;
 
-        let x = x as f32;
-        let y = y as f32;
+        // Convert from physical pixels (winit) to logical pixels (layout system)
+        let x = x as f32 / scale_factor;
+        let y = y as f32 / scale_factor;
 
         // Only handle drag in editor area
         if y > screen_height - status_height {
@@ -672,6 +661,7 @@ impl ApplicationHandler for WgpuApp {
 
                 // Handle hover state for EditorTabs
                 if let (Some(window), Some(renderer)) = (&self.window, &mut self.renderer) {
+                    // Convert from physical pixels (winit) to logical pixels (layout system)
                     let scale_factor = window.scale_factor() as f32;
                     let lx = position.x as f32 / scale_factor;
                     let ly = position.y as f32 / scale_factor;
@@ -792,6 +782,18 @@ impl ApplicationHandler for WgpuApp {
                         }
                     }
                     return; // Block all other input when dialog is open
+                }
+
+                // Handle F12 to toggle debug overlay (debug builds only)
+                if event.state == ElementState::Pressed {
+                    use winit::keyboard::{Key, NamedKey};
+                    if let Key::Named(NamedKey::F12) = &event.logical_key {
+                        if let Some(renderer) = &mut self.renderer {
+                            renderer.toggle_debug_overlay();
+                            self.request_redraw();
+                        }
+                        return;
+                    }
                 }
 
                 // Check if command palette is visible

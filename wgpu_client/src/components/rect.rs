@@ -122,6 +122,7 @@ impl RectRenderer {
     /// Renders a batch of rectangles.
     ///
     /// Coordinates are in normalized device coordinates (-1 to 1).
+    /// Optional scissor rect clips rendering to specified bounds (x, y, width, height in physical pixels).
     pub fn render(
         &self,
         encoder: &mut wgpu::CommandEncoder,
@@ -130,6 +131,7 @@ impl RectRenderer {
         rects: &[Rect],
         screen_width: f32,
         screen_height: f32,
+        scissor: Option<(u32, u32, u32, u32)>,
     ) {
         if rects.is_empty() {
             return;
@@ -187,6 +189,12 @@ impl RectRenderer {
         pass.set_pipeline(&self.pipeline);
         pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+
+        // Apply scissor rect if provided
+        if let Some((sx, sy, sw, sh)) = scissor {
+            pass.set_scissor_rect(sx, sy, sw, sh);
+        }
+
         pass.draw_indexed(0..(rect_count * 6) as u32, 0, 0..1);
     }
 }

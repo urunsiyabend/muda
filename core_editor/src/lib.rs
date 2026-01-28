@@ -16,3 +16,6 @@ pub mod events;
 pub mod syntax;
 pub mod view;
 pub mod view_model;
+
+// Re-export commonly used types at crate root for convenience
+pub use view::ViewId;

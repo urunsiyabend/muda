@@ -18,7 +18,8 @@ use crate::design_system::{
 /// Tab data for display.
 #[derive(Clone, Debug)]
 pub struct TabInfo {
-    pub id: usize,
+    /// The view ID from core_editor (used to switch views on click).
+    pub view_id: u64,
     pub title: String,
     pub path: Option<String>,
     pub is_dirty: bool,
@@ -92,7 +93,7 @@ impl EditorTabs {
         // Preserve interaction state for existing tabs
         let mut new_tabs: Vec<TabState> = tabs.into_iter().map(|info| {
             // Try to find existing tab state
-            if let Some(existing) = self.tabs.iter().find(|t| t.info.id == info.id) {
+            if let Some(existing) = self.tabs.iter().find(|t| t.info.view_id == info.view_id) {
                 let mut state = TabState::new(info.clone());
                 // Preserve hover state if still hovered
                 if existing.interaction.is_hovered() {
@@ -225,17 +226,34 @@ impl EditorTabs {
                     );
                 }
 
-                // X mark (simplified)
+                // X mark - two diagonal strokes forming an X
+                // Since we can't rotate rects, we approximate with two small rects
+                // positioned to suggest diagonal lines (forming a + that reads as X at small size)
                 let cx = close_x + Self::CLOSE_SIZE / 2.0;
                 let cy = close_y + Self::CLOSE_SIZE / 2.0;
+                let x_color = if tab.close_hovered { self.palette.error } else { self.palette.fg_secondary };
+
+                // Diagonal stroke 1 (top-left to bottom-right approximation)
+                // We draw a small rotated-looking cross by offsetting two perpendicular lines
                 rects.push(
                     StyledRect::new(Bounds {
                         x: cx - 4.0,
-                        y: cy - 0.5,
+                        y: cy - 0.75,
                         width: 8.0,
-                        height: 1.0,
+                        height: 1.5,
                     })
-                    .with_fill(if tab.close_hovered { self.palette.error } else { self.palette.fg_muted })
+                    .with_fill(x_color)
+                );
+
+                // Diagonal stroke 2 (perpendicular to form X)
+                rects.push(
+                    StyledRect::new(Bounds {
+                        x: cx - 0.75,
+                        y: cy - 4.0,
+                        width: 1.5,
+                        height: 8.0,
+                    })
+                    .with_fill(x_color)
                 );
             }
 
@@ -341,8 +359,8 @@ impl EditorTabs {
         changed
     }
 
-    /// Handle click. Returns (tab_id, is_close_click) if clicked on a tab.
-    pub fn on_click(&mut self, x: f32, y: f32) -> Option<(usize, bool)> {
+    /// Handle click. Returns (view_id, is_close_click) if clicked on a tab.
+    pub fn on_click(&mut self, x: f32, y: f32) -> Option<(u64, bool)> {
         if y < self.bounds.y || y >= self.bounds.y + self.bounds.height {
             return None;
         }
@@ -355,7 +373,7 @@ impl EditorTabs {
                 let on_close = x >= close_x && x < close_x + Self::CLOSE_SIZE &&
                               y >= close_y && y < close_y + Self::CLOSE_SIZE;
 
-                return Some((tab.info.id, on_close));
+                return Some((tab.info.view_id, on_close));
             }
         }
 
@@ -363,14 +381,14 @@ impl EditorTabs {
     }
 
     /// Handle middle click to close tab.
-    pub fn on_middle_click(&mut self, x: f32, y: f32) -> Option<usize> {
+    pub fn on_middle_click(&mut self, x: f32, y: f32) -> Option<u64> {
         if y < self.bounds.y || y >= self.bounds.y + self.bounds.height {
             return None;
         }
 
         for tab in &self.tabs {
             if x >= tab.bounds.x && x < tab.bounds.x + tab.bounds.width {
-                return Some(tab.info.id);
+                return Some(tab.info.view_id);
             }
         }
 

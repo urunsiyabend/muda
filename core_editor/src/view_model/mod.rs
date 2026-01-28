@@ -305,6 +305,8 @@ pub struct SidebarPresentation {
 /// Presentation data for a single tab in the tab bar.
 #[derive(Clone, Debug)]
 pub struct TabPresentation {
+    /// The view ID for this tab (used for switching views on click).
+    pub view_id: u64,
     /// The display title (filename or "[New File]").
     pub title: String,
     /// Whether this tab is currently active.
@@ -314,8 +316,8 @@ pub struct TabPresentation {
 }
 
 impl TabPresentation {
-    pub fn new(title: String, is_active: bool, is_dirty: bool) -> Self {
-        Self { title, is_active, is_dirty }
+    pub fn new(view_id: u64, title: String, is_active: bool, is_dirty: bool) -> Self {
+        Self { view_id, title, is_active, is_dirty }
     }
 }
 

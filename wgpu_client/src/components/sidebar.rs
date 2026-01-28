@@ -223,7 +223,7 @@ impl SidebarComponent {
                 r.color,
             )
         }).collect();
-        self.rect_renderer.render(encoder, view, queue, &physical_rects, screen_width, screen_height);
+        self.rect_renderer.render(encoder, view, queue, &physical_rects, screen_width, screen_height, None);
     }
 
     /// Renders the sidebar text.

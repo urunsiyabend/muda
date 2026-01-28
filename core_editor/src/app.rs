@@ -626,18 +626,19 @@ impl App {
     // Render Model
     // =========================================================================
 
-    /// Returns information about all open documents for the tab bar.
-    /// Returns a list of (title, is_active, is_dirty) tuples.
-    fn get_open_documents_info(&self) -> Vec<(String, bool, bool)> {
-        let active_doc_id = self.workspace.active_view()
-            .map(|v| v.document_id());
+    /// Returns information about all open views for the tab bar.
+    /// Returns a list of (view_id, title, is_active, is_dirty) tuples.
+    fn get_open_views_info(&self) -> Vec<(u64, String, bool, bool)> {
+        let active_view_id = self.workspace.active_view_id();
 
-        self.workspace.documents()
-            .map(|(doc_id, doc)| {
+        self.workspace.views()
+            .filter_map(|(view_id, view)| {
+                // Get the document for this view
+                let doc = self.workspace.document(view.document_id())?;
                 let title = doc.title();
-                let is_active = Some(*doc_id) == active_doc_id;
+                let is_active = Some(*view_id) == active_view_id;
                 let is_dirty = doc.is_dirty();
-                (title, is_active, is_dirty)
+                Some((view_id.as_u64(), title, is_active, is_dirty))
             })
             .collect()
     }
@@ -645,7 +646,7 @@ impl App {
     /// Builds a render-ready model for the UI.
     pub fn build_render_model(&mut self, viewport_height: usize) -> RenderModel {
         let status_message = self.status_message.as_deref();
-        let open_documents = self.get_open_documents_info();
+        let open_views = self.get_open_views_info();
 
         let model = match (
             self.workspace.active_document(),
@@ -660,7 +661,7 @@ impl App {
                 self.focus,
                 viewport_height,
                 status_message,
-                &open_documents,
+                &open_views,
             ),
             _ => {
                 // Even without a document, we might want to show the sidebar
