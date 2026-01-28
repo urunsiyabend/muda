@@ -1,8 +1,10 @@
-use crate::effect::EffectQueue;
+use crate::effect::{EffectQueue, EntityId};
 use crate::entity::{Entity, EntityStorage, Model};
 use crate::entity::model::{ModelContext, PendingEffect};
+use crate::subscription::{ObserverSet, Subscription};
 use crate::view::View;
 use crate::window::OraWindow;
+use std::collections::HashSet;
 use std::sync::Arc;
 use winit::window::Window;
 
@@ -11,6 +13,8 @@ use winit::window::Window;
 pub struct AppContext {
     pub(crate) entity_storage: EntityStorage,
     pub(crate) effect_queue: EffectQueue,
+    pub(crate) observer_set: ObserverSet,
+    pub(crate) dirty_entities: HashSet<EntityId>,
     pub(crate) update_depth: usize,
 }
 
@@ -19,12 +23,10 @@ impl AppContext {
         Self {
             entity_storage,
             effect_queue: EffectQueue::new(),
+            observer_set: ObserverSet::new(),
+            dirty_entities: HashSet::new(),
             update_depth: 0,
         }
-    }
-
-    pub(crate) fn into_storage(self) -> EntityStorage {
-        self.entity_storage
     }
 
     /// Insert a new entity and return a handle to it.
@@ -97,12 +99,85 @@ impl AppContext {
         result
     }
 
+    /// Observe a model and register a callback to be invoked when it calls cx.notify().
+    /// Returns a Subscription handle. Call .detach() to make it persist for the view's lifetime.
+    pub fn observe<T: 'static>(
+        &mut self,
+        model: &Model<T>,
+        callback: impl FnMut(&mut AppContext) + 'static,
+    ) -> Subscription {
+        let entity_id = model.entity_id();
+        let id = self.observer_set.add_observer(entity_id, Box::new(callback));
+
+        // For now, return a Subscription with no cleanup (caller expected to call .detach())
+        // Full cleanup with deferred queue is a refinement for Plan 03
+        Subscription::new(id, Box::new(|| {
+            // Cleanup would go here - deferred to Plan 03
+        }))
+    }
+
+    /// Check if any entities are marked dirty and need re-render.
+    pub fn has_dirty_entities(&self) -> bool {
+        !self.dirty_entities.is_empty()
+    }
+
+    /// Clear the dirty entity set.
+    pub fn clear_dirty(&mut self) {
+        self.dirty_entities.clear();
+    }
+
     /// Flush all queued effects.
-    /// Stub implementation for Plan 01 - real implementation in Plan 02.
+    /// Processes notify and emit effects, invoking observer callbacks and marking entities dirty.
+    /// Supports cascading effects with a depth limit to prevent infinite loops.
     fn flush_effects(&mut self) {
-        let notify_count = self.effect_queue.drain_notify().len();
-        let emit_count = self.effect_queue.drain_emit().len();
-        log::trace!("flush_effects: {} notify, {} emit pending (stub, discarding)", notify_count, emit_count);
+        const DEPTH_LIMIT: usize = 10;
+
+        let mut depth = 0;
+        loop {
+            depth += 1;
+            if depth > DEPTH_LIMIT {
+                panic!(
+                    "Effect cascade depth limit exceeded ({}). Possible infinite loop in observers.",
+                    DEPTH_LIMIT
+                );
+            }
+            if depth > 5 {
+                log::warn!("Effect cascade depth {} (limit: {})", depth, DEPTH_LIMIT);
+            }
+
+            // Priority 1: Process all notify effects
+            let notified = self.effect_queue.drain_notify();
+            if notified.is_empty() && self.effect_queue.is_empty() {
+                break; // All queues empty
+            }
+
+            for entity_id in notified {
+                // Mark entity as dirty
+                self.dirty_entities.insert(entity_id);
+
+                // Invoke observers - take observers out, invoke, put back
+                // This avoids aliased mutable borrows
+                let mut observers = self.observer_set.take_observers_for(entity_id);
+
+                // Invoke each observer callback with mutable AppContext
+                // Each observer may queue more effects
+                for (_id, callback) in observers.iter_mut() {
+                    callback(self);
+                }
+
+                // Restore observers back to the set
+                self.observer_set.restore_observers(entity_id, observers);
+            }
+
+            // Priority 2: Process all emit effects (Plan 03 will implement)
+            let _emitted = self.effect_queue.drain_emit();
+            // TODO(Plan 03): dispatch to subscribers
+
+            // If new effects were queued during processing, loop again
+            if self.effect_queue.is_empty() {
+                break;
+            }
+        }
     }
 }
 

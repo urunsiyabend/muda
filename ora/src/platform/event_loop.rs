@@ -15,7 +15,7 @@ pub struct OraApp {
     app_config: Option<App>,
     gpu_state: Option<GpuState>,
     ora_window: OraWindow,
-    entity_storage: EntityStorage,
+    app_context: AppContext,
 }
 
 impl OraApp {
@@ -24,7 +24,7 @@ impl OraApp {
             app_config: Some(app),
             gpu_state: None,
             ora_window: OraWindow::new(),
-            entity_storage: EntityStorage::new(),
+            app_context: AppContext::new(EntityStorage::new()),
         }
     }
 }
@@ -56,18 +56,13 @@ impl ApplicationHandler for OraApp {
 
         // Call on_open callback if present
         if let Some(on_open) = app_config.on_open {
-            let mut app_context = AppContext::new(std::mem::replace(
-                &mut self.entity_storage,
-                EntityStorage::new(),
-            ));
             let winit_window = &self.gpu_state.as_ref().unwrap().window;
             let mut window_context = WindowContext::new(
-                &mut app_context,
+                &mut self.app_context,
                 &mut self.ora_window,
                 winit_window,
             );
             on_open(&mut window_context);
-            self.entity_storage = app_context.into_storage();
         }
 
         // Request initial redraw
@@ -93,19 +88,13 @@ impl ApplicationHandler for OraApp {
             }
             WindowEvent::RedrawRequested => {
                 if let Some(gpu_state) = &mut self.gpu_state {
-                    // Create AppContext to access entity storage
-                    let mut app_context = AppContext::new(std::mem::replace(
-                        &mut self.entity_storage,
-                        EntityStorage::new(),
-                    ));
-
                     // Render the root view to get element tree
-                    if let Some(mut element_tree) = self.ora_window.render(&mut app_context) {
+                    if let Some(mut element_tree) = self.ora_window.render(&mut self.app_context) {
                         let window_size = gpu_state.size;
 
                         // Phase 1: Request layout with text measurement
                         let mut layout_cx = LayoutContext::new(
-                            &mut app_context.entity_storage,
+                            &mut self.app_context.entity_storage,
                             window_size,
                         );
 
@@ -120,7 +109,7 @@ impl ApplicationHandler for OraApp {
 
                         // Phase 2: Prepaint
                         let mut prepaint_cx = PrepaintContext::new(
-                            &mut app_context.entity_storage,
+                            &mut self.app_context.entity_storage,
                             window_size,
                             &layout_outputs,
                         );
@@ -128,7 +117,7 @@ impl ApplicationHandler for OraApp {
 
                         // Phase 3: Paint
                         let mut paint_cx = PaintContext::new(
-                            &mut app_context.entity_storage,
+                            &mut self.app_context.entity_storage,
                             window_size,
                             &layout_outputs,
                         );
@@ -171,9 +160,6 @@ impl ApplicationHandler for OraApp {
                             }
                         }
                     }
-
-                    // Restore entity storage
-                    self.entity_storage = app_context.into_storage();
                 }
             }
             _ => {}
