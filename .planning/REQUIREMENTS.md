@@ -9,25 +9,25 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Core Framework
 
-- [ ] **CORE-01**: ora crate provides `ora::run(app)` entry point that owns the winit event loop and application lifecycle
-- [ ] **CORE-02**: Single window creation with wgpu surface setup, resize handling, and vsync
+- [x] **CORE-01**: ora crate provides `ora::run(app)` entry point that owns the winit event loop and application lifecycle
+- [x] **CORE-02**: Single window creation with wgpu surface setup, resize handling, and vsync
 - [ ] **CORE-03**: Entity/Model reactive state system — state lives in `Model<T>`, views observe models and re-render on change
 - [ ] **CORE-04**: Effect queue system — `cx.notify()` and `cx.emit()` queue effects, flushed after update completes (prevents reentrancy)
-- [ ] **CORE-05**: Context types provide scoped access to application state (`AppContext`, `ViewContext`, `WindowContext`)
+- [x] **CORE-05**: Context types provide scoped access to application state (`AppContext`, `ViewContext`, `WindowContext`)
 
 ### View System
 
-- [ ] **VIEW-01**: `View` trait with `render(&mut self, cx: &mut ViewContext) -> impl Element` method
-- [ ] **VIEW-02**: Framework manages element tree lifecycle — reconstructs tree on state change, diffs for efficient re-rendering
+- [x] **VIEW-01**: `View` trait with `render(&mut self, cx: &mut ViewContext) -> impl Element` method
+- [x] **VIEW-02**: Framework manages element tree lifecycle — reconstructs tree on state change, diffs for efficient re-rendering
 - [ ] **VIEW-03**: Views can observe `Model<T>` entities and automatically re-render when observed state changes
 - [ ] **VIEW-04**: Views can subscribe to typed events emitted by entities
 
 ### Element System
 
-- [ ] **ELEM-01**: `Element` trait with three-phase lifecycle: `request_layout()`, `prepaint()`, `paint()`
+- [x] **ELEM-01**: `Element` trait with three-phase lifecycle: `request_layout()`, `prepaint()`, `paint()`
 - [ ] **ELEM-02**: Styled `Div` primitive — GPU-rendered rectangle with background, border, padding, margin, border-radius
 - [ ] **ELEM-03**: Styled `Text` primitive — `Text::new("hello").size(14)` API, framework manages glyphon internally
-- [ ] **ELEM-04**: Elements can have children (composable tree structure)
+- [x] **ELEM-04**: Elements can have children (composable tree structure)
 - [ ] **ELEM-05**: Tailwind-style builder API — `div().flex().gap(4).bg(color).padding(8)` fluent syntax
 - [ ] **ELEM-06**: Automatic scissor clipping — framework manages clip rects per element, children cannot render outside parent bounds
 
@@ -155,19 +155,19 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CORE-01 | Phase 1 | Pending |
-| CORE-02 | Phase 1 | Pending |
+| CORE-01 | Phase 1 | Complete |
+| CORE-02 | Phase 1 | Complete |
 | CORE-03 | Phase 3 | Pending |
 | CORE-04 | Phase 3 | Pending |
-| CORE-05 | Phase 1 | Pending |
-| VIEW-01 | Phase 1 | Pending |
-| VIEW-02 | Phase 1 | Pending |
+| CORE-05 | Phase 1 | Complete |
+| VIEW-01 | Phase 1 | Complete |
+| VIEW-02 | Phase 1 | Complete |
 | VIEW-03 | Phase 3 | Pending |
 | VIEW-04 | Phase 3 | Pending |
-| ELEM-01 | Phase 1 | Pending |
+| ELEM-01 | Phase 1 | Complete |
 | ELEM-02 | Phase 2 | Pending |
 | ELEM-03 | Phase 2 | Pending |
-| ELEM-04 | Phase 1 | Pending |
+| ELEM-04 | Phase 1 | Complete |
 | ELEM-05 | Phase 5 | Pending |
 | ELEM-06 | Phase 2 | Pending |
 | LAYOUT-01 | Phase 2 | Pending |
