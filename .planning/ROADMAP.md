@@ -53,10 +53,15 @@ Plans:
   5. Rendering uses three-phase pipeline (layout computation, prepaint hitbox registration, paint scene construction)
   6. GPU batching groups all rectangles into minimal draw calls using instanced rendering
   7. Automatic scissor clipping prevents children from rendering outside parent bounds
-**Plans**: TBD
+**Plans**: 6 plans
 
 Plans:
-- (Plans will be created during /gsd:plan-phase 2)
+- [ ] 02-01-PLAN.md -- Style types & layout data structures (Wave 1)
+- [ ] 02-02-PLAN.md -- Flexbox layout algorithm (Wave 2)
+- [ ] 02-03-PLAN.md -- Rectangle GPU pipeline + shaders (Wave 2)
+- [ ] 02-04-PLAN.md -- Text rendering system + glyphon integration (Wave 2)
+- [ ] 02-05-PLAN.md -- Div + Text elements with layout integration (Wave 3)
+- [ ] 02-06-PLAN.md -- Scissor clipping, render pass integration, event loop updates, demo (Wave 4)
 
 ### Phase 3: Reactive State System
 **Goal**: Add observation mechanism, effect queue, and Model change tracking for reactive UI updates
@@ -175,7 +180,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation & View System | 3/3 | Complete | 2026-01-28 |
-| 2. Layout & Rendering Pipeline | 0/TBD | Not started | - |
+| 2. Layout & Rendering Pipeline | 0/6 | Planned | - |
 | 3. Reactive State System | 0/TBD | Not started | - |
 | 4. Event System | 0/TBD | Not started | - |
 | 5. Element Library | 0/TBD | Not started | - |
