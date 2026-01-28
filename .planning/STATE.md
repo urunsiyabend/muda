@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-01-28)
 ## Current Position
 
 Phase: 3 of 9 (Reactive State System) -- IN PROGRESS
-Plan: 2 of 4 in current phase (plans 03-01, 03-02 complete)
-Status: Plan 03-02 complete
-Last activity: 2026-01-29 - Completed 03-02-PLAN.md (Observer/Subscription System)
+Plan: 3 of 4 in current phase (plans 03-01, 03-02, 03-03 complete)
+Status: Plan 03-03 complete
+Last activity: 2026-01-29 - Completed 03-03-PLAN.md (Event Subscription System)
 
-Progress: [████████████████░] 100% Phase 3 (2 of 4 plans complete)
+Progress: [████████████████████░] 75% Phase 3 (3 of 4 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 11 (Phase 1: 3, Phase 2: 6, Phase 3: 2)
-- Average duration: ~6m 30s per plan
-- Total execution time: ~1.7 hours
+- Total plans completed: 12 (Phase 1: 3, Phase 2: 6, Phase 3: 3)
+- Average duration: ~6m 15s per plan
+- Total execution time: ~1.8 hours
 
 **By Phase:**
 
@@ -29,13 +29,14 @@ Progress: [████████████████░] 100% Phase 3 (2 
 |-------|-------|-------|----------|
 | 01-foundation-view-system | 3 | 23m 0s | 7m 40s |
 | 02-layout-rendering-pipeline | 6 | ~55m | ~9m 10s |
-| 03-reactive-state-system | 2 | 8m | 4m |
+| 03-reactive-state-system | 3 | 13m | 4m 20s |
 
 **Recent Trend:**
-- Phase 3 Plans 01-02 executed smoothly with no deviations
+- Phase 3 Plans 01-03 executed smoothly with no deviations
+- Plan 03-03: Typed event subscription system with thread-local cleanup
 - Critical architectural change in 03-02: AppContext now persists across frames
 - All 11 existing unit tests continue passing
-- Observer registry ready for view integration in Plan 04
+- Event subscription system ready for view integration in Plan 04
 
 *Updated after each plan completion*
 
@@ -93,6 +94,11 @@ Recent decisions affecting current work:
 - AppContext persists across frames in OraApp - Critical change: observer_set and effect_queue must survive frames for reactivity (03-02)
 - Cascade depth limit of 10 with warning at 5 - Prevents infinite loops in observer chains (03-02)
 - Dirty entities tracked in HashSet - Foundation for future view re-render optimization (03-02)
+- Thread-local PENDING_CLEANUPS for Subscription Drop - CleanupAction enum avoids AppContext access during Drop (03-03)
+- SubscriberSet nested HashMap (EntityId -> TypeId -> Vec) - Efficient typed event subscription registry (03-03)
+- GlobalEventBus separate from SubscriberSet - App-wide events without emitter entity (03-03)
+- global_emit_queue in EffectQueue - Separate queue for global events avoids sentinel entity ID (03-03)
+- Type-erased event dispatch with downcast_ref - Subscribers receive &dyn Any and downcast to concrete types (03-03)
 
 ### Pending Todos
 
@@ -110,10 +116,10 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-01-29
-Stopped at: Completed 03-02-PLAN.md
+Stopped at: Completed 03-03-PLAN.md
 Resume file: None
-Next: Plan 03-03 (Event Subscription System)
+Next: Plan 03-04 (View Integration)
 
 ---
 *State initialized: 2026-01-28*
-*Last updated: 2026-01-29 after completing Plan 03-02 (Observer/Subscription System)*
+*Last updated: 2026-01-29 after completing Plan 03-03 (Event Subscription System)*
