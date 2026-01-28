@@ -1,27 +1,39 @@
 use crate::style::{Background, Gradient, Rect, Style};
 
-/// GPU instance data for a single rectangle
-/// CRITICAL: This layout must match the WGSL RectInstance struct byte-for-byte
+/// GPU instance data for a single rectangle.
+/// CRITICAL: This layout must match the WGSL RectInstance struct byte-for-byte.
+///
+/// WGSL alignment rules differ from Rust's #[repr(C)]:
+/// - vec2<f32> requires 8-byte alignment in WGSL, but [f32; 2] only needs 4 in Rust
+/// - vec4<f32> requires 16-byte alignment in WGSL
+/// - Struct stride (array element size) rounds up to max member alignment (16)
+///
+/// Explicit _pad fields ensure Rust layout matches WGSL layout exactly.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct RectInstance {
-    pub position: [f32; 2],           // Top-left position in pixels
-    pub size: [f32; 2],               // Width, height in pixels
-    pub color: [f32; 4],              // Background RGBA
-    pub border_color: [f32; 4],       // Border RGBA
-    pub border_widths: [f32; 4],      // top, right, bottom, left
-    pub corners: [f32; 4],            // TL, TR, BR, BL radius
-    pub shadow_offset: [f32; 2],      // Shadow offset x, y
-    pub shadow_blur: f32,             // Shadow blur radius
-    pub shadow_spread: f32,           // Shadow spread distance
-    pub shadow_color: [f32; 4],       // Shadow RGBA
-    pub gradient_end_color: [f32; 4], // Gradient end color (if different enables gradient)
-    pub gradient_angle: f32,          // Gradient angle in radians
-    pub window_size: [f32; 2],        // Window dimensions for NDC conversion
-    pub _pad: f32,                    // Padding for alignment
+    pub position: [f32; 2],           // offset 0   (WGSL vec2, align 8)
+    pub size: [f32; 2],               // offset 8   (WGSL vec2, align 8)
+    pub color: [f32; 4],              // offset 16  (WGSL vec4, align 16)
+    pub border_color: [f32; 4],       // offset 32  (WGSL vec4, align 16)
+    pub border_widths: [f32; 4],      // offset 48  (WGSL vec4, align 16)
+    pub corners: [f32; 4],            // offset 64  (WGSL vec4, align 16)
+    pub shadow_offset: [f32; 2],      // offset 80  (WGSL vec2, align 8)
+    pub shadow_blur: f32,             // offset 88  (WGSL f32, align 4)
+    pub shadow_spread: f32,           // offset 92  (WGSL f32, align 4)
+    pub shadow_color: [f32; 4],       // offset 96  (WGSL vec4, align 16)
+    pub gradient_end_color: [f32; 4], // offset 112 (WGSL vec4, align 16)
+    pub gradient_angle: f32,          // offset 128 (WGSL f32, align 4)
+    pub _pad1: f32,                   // offset 132 (explicit pad for vec2 alignment)
+    pub window_size: [f32; 2],        // offset 136 (WGSL vec2, align 8)
+    pub _pad2: [f32; 4],              // offset 144 (pad to WGSL struct stride of 160)
 }
 
-// Compile-time assertion to ensure proper alignment
+// Compile-time assertions for GPU struct compatibility
+const _: () = assert!(
+    std::mem::size_of::<RectInstance>() == 160,
+    "RectInstance must be exactly 160 bytes to match WGSL struct stride"
+);
 const _: () = assert!(
     std::mem::size_of::<RectInstance>() % 16 == 0,
     "RectInstance must be 16-byte aligned for GPU"
@@ -50,8 +62,9 @@ impl RectInstance {
             shadow_color: [0.0, 0.0, 0.0, 0.0],
             gradient_end_color: [0.0, 0.0, 0.0, 0.0],
             gradient_angle: 0.0,
+            _pad1: 0.0,
             window_size: [window_size.0 as f32, window_size.1 as f32],
-            _pad: 0.0,
+            _pad2: [0.0; 4],
         }
     }
 
@@ -111,8 +124,9 @@ impl RectInstance {
             shadow_color,
             gradient_end_color,
             gradient_angle,
+            _pad1: 0.0,
             window_size: [window_size.0 as f32, window_size.1 as f32],
-            _pad: 0.0,
+            _pad2: [0.0; 4],
         }
     }
 }
@@ -291,11 +305,11 @@ mod tests {
             "RectInstance must be 16-byte aligned"
         );
 
-        // Verify size is reasonable (should be around 128 bytes)
+        // Must be exactly 160 bytes to match WGSL struct stride
         let size = std::mem::size_of::<RectInstance>();
-        assert!(
-            size >= 100 && size <= 256,
-            "RectInstance size seems wrong: {} bytes",
+        assert_eq!(
+            size, 160,
+            "RectInstance must be exactly 160 bytes, got {} bytes",
             size
         );
     }

@@ -3,30 +3,33 @@
 
 struct RectInstance {
     // Rectangle geometry
-    position: vec2<f32>,         // Top-left position in pixels
-    size: vec2<f32>,             // Width, height in pixels
+    position: vec2<f32>,         // offset 0   — Top-left position in pixels
+    size: vec2<f32>,             // offset 8   — Width, height in pixels
 
     // Visual properties
-    color: vec4<f32>,            // Background RGBA
-    border_color: vec4<f32>,     // Border RGBA
-    border_widths: vec4<f32>,    // top, right, bottom, left
-    corners: vec4<f32>,          // TL, TR, BR, BL border-radius
+    color: vec4<f32>,            // offset 16  — Background RGBA
+    border_color: vec4<f32>,     // offset 32  — Border RGBA
+    border_widths: vec4<f32>,    // offset 48  — top, right, bottom, left
+    corners: vec4<f32>,          // offset 64  — TL, TR, BR, BL border-radius
 
     // Shadow
-    shadow_offset: vec2<f32>,
-    shadow_blur: f32,
-    shadow_spread: f32,
-    shadow_color: vec4<f32>,
+    shadow_offset: vec2<f32>,    // offset 80
+    shadow_blur: f32,            // offset 88
+    shadow_spread: f32,          // offset 92
+    shadow_color: vec4<f32>,     // offset 96
 
     // Gradient (if enabled)
-    gradient_end_color: vec4<f32>, // If different from color, enables gradient
-    gradient_angle: f32,
+    gradient_end_color: vec4<f32>, // offset 112 — If different from color, enables gradient
+    gradient_angle: f32,         // offset 128
+
+    // Explicit padding to align window_size to vec2 boundary (8 bytes)
+    _pad1: f32,                  // offset 132
 
     // Viewport for NDC conversion
-    window_size: vec2<f32>,
+    window_size: vec2<f32>,      // offset 136
 
-    // Padding for 16-byte alignment
-    _pad: f32,
+    // Padding to match struct stride (160 bytes, multiple of max alignment 16)
+    _pad2: vec4<f32>,            // offset 144
 }
 
 struct VertexOutput {
