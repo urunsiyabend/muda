@@ -8,7 +8,7 @@ mod context;
 
 pub use app::App;
 pub use context::{AppContext, ViewContext, WindowContext};
-pub use element::{AnyElement, Element};
+pub use element::{AnyElement, Element, LayoutContext, LayoutId, PaintContext, PrepaintContext};
 pub use view::View;
 
 /// Run the application.
