@@ -9,3 +9,5 @@ wgpu = "23"
 generational-arena = "0.2"
 pollster = "0.4"
 log = "0.4"
+bytemuck = { version = "1", features = ["derive"] }
+glyphon = "0.9"
