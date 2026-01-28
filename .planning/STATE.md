@@ -5,34 +5,34 @@
 See: .planning/PROJECT.md (updated 2026-01-28)
 
 **Core value:** A single, authoritative UI toolkit that eliminates duplicated styling, enforces consistent design tokens, and provides a scalable GPUI-like component model for the entire GPU client.
-**Current focus:** Phase 1: Foundation & View System
+**Current focus:** Phase 2 complete, ready for Phase 3: Reactive State System
 
 ## Current Position
 
-Phase: 2 of 9 (Layout & Rendering Pipeline)
-Plan: 5 of 6 in current phase (02-05 just completed)
-Status: In progress
-Last activity: 2026-01-29 - Completed 02-05-PLAN.md (Div & Text Primitives)
+Phase: 2 of 9 (Layout & Rendering Pipeline) -- COMPLETE
+Plan: 6 of 6 in current phase (all complete)
+Status: Phase 2 complete, ready for Phase 3
+Last activity: 2026-01-29 - Completed Phase 2 checkpoint (02-06, human-verified)
 
-Progress: [████████░░] ~78% (7 of 9 plans complete)
+Progress: [██████████] 100% Phase 2 (6 of 6 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 7
-- Average duration: 6m 26s
-- Total execution time: 0.75 hours
+- Total plans completed: 9 (Phase 1: 3, Phase 2: 6)
+- Average duration: ~7m per plan
+- Total execution time: ~1.5 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-foundation-view-system | 3 | 23m 0s | 7m 40s |
-| 02-layout-rendering-pipeline | 4 | 29m 0s | 7m 15s |
+| 02-layout-rendering-pipeline | 6 | ~55m | ~9m 10s |
 
 **Recent Trend:**
-- Last 5 plans: 02-01 (5m 0s), 02-04 (9m 0s), 02-03 (10m 0s), 02-05 (5m 0s)
-- Trend: Excellent velocity, Phase 2 at 67% complete (4 of 6 plans)
+- Phase 2 required significant debugging during checkpoint (struct alignment, gradient detection, text viewport, border detection, flexbox stretch)
+- All 11 unit tests passing
 
 *Updated after each plan completion*
 
@@ -64,7 +64,7 @@ Recent decisions affecting current work:
 - Per-side border widths (Edges<f32>) - Fine-grained border control matching CSS model (02-01)
 - RGBA floats for Color - 0.0..1.0 range matches GPU shaders, eliminates conversion overhead (02-01)
 - AvailableSpace enum (Definite/MinContent/MaxContent) - Supports three-pass flexbox algorithm (02-01)
-- RectInstance 144-byte struct (16-byte aligned) - Storage buffer compatibility for instanced rendering (02-03)
+- RectInstance 160-byte struct (16-byte aligned) - Storage buffer compatibility for instanced rendering (02-03)
 - Storage buffers for instance data - Supports 128 MiB (vs 64 KiB uniform limit) for batching 1000+ rectangles (02-03)
 - Shader-based quad generation - vertex_index generates geometry, no vertex buffer needed (02-03)
 - Distance field SDF for rounded corners - Per-corner radius selection in fragment shader (02-03)
@@ -76,6 +76,10 @@ Recent decisions affecting current work:
 - TextState stores Buffer in Option - Taken during paint to move into PaintCommand::Text (02-05)
 - PaintCommand::Text carries glyphon::Buffer directly - Simplifies rendering pipeline coordination (02-05)
 - LayoutContext uses raw pointer to TextSystem - Necessary for measure_text() integration with borrow checker (02-05)
+- Flexbox stretch checks Length::Auto (not resolved zero) - CSS stretch applies to auto-sized children regardless of content measurement (02-06)
+- gradient_end_color == color for solid backgrounds - Prevents false gradient detection in shader (02-06)
+- Viewport must be updated every frame - glyphon requires Resolution update before prepare() (02-06)
+- Distance-to-each-edge border detection - Robust per-side border width selection in shader (02-06)
 
 ### Pending Todos
 
@@ -88,14 +92,15 @@ None yet.
 ### Known Issues
 
 - Windows resize flickering: Brief black/white flicker during window resize on Windows is expected wgpu/winit swap chain reconfiguration behavior, not an ora bug (01-03)
+- Scissor clipping infrastructure exists (PaintContext push_clip/pop_clip, SetScissor/ResetScissor PaintCommands) but not wired end-to-end: Div doesn't call push_clip for overflow:hidden, and GPU render_frame logs scissor commands instead of applying them (02-06). Will be completed when needed for overflow:hidden use cases.
 
 ## Session Continuity
 
 Last session: 2026-01-29
-Stopped at: Completed 02-05-PLAN.md (Div & Text Primitives)
+Stopped at: Phase 2 complete, checkpoint approved
 Resume file: None
-Next: Plan 02-02 (Flexbox Layout Engine) or 02-06 (Rendering Pipeline Integration)
+Next: Phase 3 (Reactive State System)
 
 ---
 *State initialized: 2026-01-28*
-*Last updated: 2026-01-29 after 02-05 completion*
+*Last updated: 2026-01-29 after Phase 2 completion (6/6 plans, checkpoint approved)*

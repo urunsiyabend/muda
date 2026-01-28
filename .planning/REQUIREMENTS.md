@@ -25,28 +25,28 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Element System
 
 - [x] **ELEM-01**: `Element` trait with three-phase lifecycle: `request_layout()`, `prepaint()`, `paint()`
-- [ ] **ELEM-02**: Styled `Div` primitive — GPU-rendered rectangle with background, border, padding, margin, border-radius
-- [ ] **ELEM-03**: Styled `Text` primitive — `Text::new("hello").size(14)` API, framework manages glyphon internally
+- [x] **ELEM-02**: Styled `Div` primitive — GPU-rendered rectangle with background, border, padding, margin, border-radius
+- [x] **ELEM-03**: Styled `Text` primitive — `Text::new("hello").size(14)` API, framework manages glyphon internally
 - [x] **ELEM-04**: Elements can have children (composable tree structure)
 - [ ] **ELEM-05**: Tailwind-style builder API — `div().flex().gap(4).bg(color).padding(8)` fluent syntax
-- [ ] **ELEM-06**: Automatic scissor clipping — framework manages clip rects per element, children cannot render outside parent bounds
+- [~] **ELEM-06**: Automatic scissor clipping — framework manages clip rects per element, children cannot render outside parent bounds (API infrastructure implemented: PaintContext push_clip/pop_clip, PaintCommand SetScissor/ResetScissor; GPU execution and Div integration deferred)
 
 ### Layout
 
-- [ ] **LAYOUT-01**: Simple stack/flex layout engine — row and column containers with basic alignment (start, center, end, stretch)
-- [ ] **LAYOUT-02**: Gap support — spacing between children in row/column containers
-- [ ] **LAYOUT-03**: Flex-grow and flex-shrink — proportional space distribution among children
-- [ ] **LAYOUT-04**: Fixed and percentage sizing — elements can specify width/height as fixed pixels or percentage of parent
-- [ ] **LAYOUT-05**: Padding and margin — per-element spacing that affects layout calculations
+- [x] **LAYOUT-01**: Simple stack/flex layout engine — row and column containers with basic alignment (start, center, end, stretch)
+- [x] **LAYOUT-02**: Gap support — spacing between children in row/column containers
+- [x] **LAYOUT-03**: Flex-grow and flex-shrink — proportional space distribution among children
+- [x] **LAYOUT-04**: Fixed and percentage sizing — elements can specify width/height as fixed pixels or percentage of parent
+- [x] **LAYOUT-05**: Padding and margin — per-element spacing that affects layout calculations
 
 ### Rendering
 
-- [ ] **REND-01**: ora owns wgpu Instance, Device, Queue, Surface — creates and manages GPU resources
-- [ ] **REND-02**: Three-phase rendering pipeline — layout computation, prepaint (hitbox registration), paint (scene construction)
-- [ ] **REND-03**: Text rendering via wrapped glyphon — single FontSystem, TextAtlas, SwashCache managed by framework
-- [ ] **REND-04**: Single-batch text rendering — all text from all views collected and rendered in one glyphon prepare/render pass
-- [ ] **REND-05**: Draw call batching — all rectangles batched into minimal draw calls using instanced rendering
-- [ ] **REND-06**: Render pass structure — UI backgrounds, editor content, UI text, overlays as ordered phases
+- [x] **REND-01**: ora owns wgpu Instance, Device, Queue, Surface — creates and manages GPU resources
+- [x] **REND-02**: Three-phase rendering pipeline — layout computation, prepaint (hitbox registration), paint (scene construction)
+- [x] **REND-03**: Text rendering via wrapped glyphon — single FontSystem, TextAtlas, SwashCache managed by framework
+- [x] **REND-04**: Single-batch text rendering — all text from all views collected and rendered in one glyphon prepare/render pass
+- [x] **REND-05**: Draw call batching — all rectangles batched into minimal draw calls using instanced rendering
+- [x] **REND-06**: Render pass structure — UI backgrounds, editor content, UI text, overlays as ordered phases
 
 ### Events
 
@@ -165,22 +165,22 @@ Which phases cover which requirements. Updated during roadmap creation.
 | VIEW-03 | Phase 3 | Pending |
 | VIEW-04 | Phase 3 | Pending |
 | ELEM-01 | Phase 1 | Complete |
-| ELEM-02 | Phase 2 | Pending |
-| ELEM-03 | Phase 2 | Pending |
+| ELEM-02 | Phase 2 | Complete |
+| ELEM-03 | Phase 2 | Complete |
 | ELEM-04 | Phase 1 | Complete |
 | ELEM-05 | Phase 5 | Pending |
-| ELEM-06 | Phase 2 | Pending |
-| LAYOUT-01 | Phase 2 | Pending |
-| LAYOUT-02 | Phase 2 | Pending |
-| LAYOUT-03 | Phase 2 | Pending |
-| LAYOUT-04 | Phase 2 | Pending |
-| LAYOUT-05 | Phase 2 | Pending |
-| REND-01 | Phase 2 | Pending |
-| REND-02 | Phase 2 | Pending |
-| REND-03 | Phase 2 | Pending |
-| REND-04 | Phase 2 | Pending |
-| REND-05 | Phase 2 | Pending |
-| REND-06 | Phase 2 | Pending |
+| ELEM-06 | Phase 2 | Partial (API ready, GPU deferred) |
+| LAYOUT-01 | Phase 2 | Complete |
+| LAYOUT-02 | Phase 2 | Complete |
+| LAYOUT-03 | Phase 2 | Complete |
+| LAYOUT-04 | Phase 2 | Complete |
+| LAYOUT-05 | Phase 2 | Complete |
+| REND-01 | Phase 2 | Complete |
+| REND-02 | Phase 2 | Complete |
+| REND-03 | Phase 2 | Complete |
+| REND-04 | Phase 2 | Complete |
+| REND-05 | Phase 2 | Complete |
+| REND-06 | Phase 2 | Complete |
 | EVT-01 | Phase 4 | Pending |
 | EVT-02 | Phase 4 | Pending |
 | EVT-03 | Phase 4 | Pending |
@@ -228,4 +228,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-01-28*
-*Last updated: 2026-01-28 after roadmap creation with phase mappings*
+*Last updated: 2026-01-29 after Phase 2 completion (LAYOUT-01..05, REND-01..06, ELEM-02..03 complete; ELEM-06 partial)*

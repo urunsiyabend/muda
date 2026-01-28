@@ -13,7 +13,7 @@ Build ora as a standalone GPUI-inspired UI framework crate that owns the GPU ren
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation & View System** - App lifecycle, Entity/Model, View trait, Element trait basics
-- [ ] **Phase 2: Layout & Rendering Pipeline** - Simple stack/flex layout, GPU batching, text rendering via glyphon
+- [x] **Phase 2: Layout & Rendering Pipeline** - Simple stack/flex layout, GPU batching, text rendering via glyphon
 - [ ] **Phase 3: Reactive State System** - Observation, effect queue, Model change tracking
 - [ ] **Phase 4: Event System** - Mouse/keyboard routing, focus management, two-phase dispatch
 - [ ] **Phase 5: Element Library** - Styled primitives (Div, Text), builder API, layout containers
@@ -56,12 +56,12 @@ Plans:
 **Plans**: 6 plans
 
 Plans:
-- [ ] 02-01-PLAN.md -- Style types & layout data structures (Wave 1)
-- [ ] 02-02-PLAN.md -- Flexbox layout algorithm (Wave 2)
-- [ ] 02-03-PLAN.md -- Rectangle GPU pipeline + shaders (Wave 2)
-- [ ] 02-04-PLAN.md -- Text rendering system + glyphon integration (Wave 2)
-- [ ] 02-05-PLAN.md -- Div + Text elements with layout integration (Wave 3)
-- [ ] 02-06-PLAN.md -- Scissor clipping, render pass integration, event loop updates, demo (Wave 4)
+- [x] 02-01-PLAN.md -- Style types & layout data structures (Wave 1)
+- [x] 02-02-PLAN.md -- Flexbox layout algorithm (Wave 2)
+- [x] 02-03-PLAN.md -- Rectangle GPU pipeline + shaders (Wave 2)
+- [x] 02-04-PLAN.md -- Text rendering system + glyphon integration (Wave 2)
+- [x] 02-05-PLAN.md -- Div + Text elements with layout integration (Wave 3)
+- [x] 02-06-PLAN.md -- Scissor clipping, render pass integration, event loop updates, demo (Wave 4)
 
 ### Phase 3: Reactive State System
 **Goal**: Add observation mechanism, effect queue, and Model change tracking for reactive UI updates
@@ -180,7 +180,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation & View System | 3/3 | Complete | 2026-01-28 |
-| 2. Layout & Rendering Pipeline | 0/6 | Planned | - |
+| 2. Layout & Rendering Pipeline | 6/6 | Complete | 2026-01-29 |
 | 3. Reactive State System | 0/TBD | Not started | - |
 | 4. Event System | 0/TBD | Not started | - |
 | 5. Element Library | 0/TBD | Not started | - |
@@ -191,4 +191,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 
 ---
 *Roadmap created: 2026-01-28*
-*Last updated: 2026-01-28 after Phase 1 completion (3/3 plans complete)*
+*Last updated: 2026-01-29 after Phase 2 completion (6/6 plans complete)*
