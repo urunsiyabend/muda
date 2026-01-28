@@ -155,77 +155,77 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CORE-01 | — | Pending |
-| CORE-02 | — | Pending |
-| CORE-03 | — | Pending |
-| CORE-04 | — | Pending |
-| CORE-05 | — | Pending |
-| VIEW-01 | — | Pending |
-| VIEW-02 | — | Pending |
-| VIEW-03 | — | Pending |
-| VIEW-04 | — | Pending |
-| ELEM-01 | — | Pending |
-| ELEM-02 | — | Pending |
-| ELEM-03 | — | Pending |
-| ELEM-04 | — | Pending |
-| ELEM-05 | — | Pending |
-| ELEM-06 | — | Pending |
-| LAYOUT-01 | — | Pending |
-| LAYOUT-02 | — | Pending |
-| LAYOUT-03 | — | Pending |
-| LAYOUT-04 | — | Pending |
-| LAYOUT-05 | — | Pending |
-| REND-01 | — | Pending |
-| REND-02 | — | Pending |
-| REND-03 | — | Pending |
-| REND-04 | — | Pending |
-| REND-05 | — | Pending |
-| REND-06 | — | Pending |
-| EVT-01 | — | Pending |
-| EVT-02 | — | Pending |
-| EVT-03 | — | Pending |
-| EVT-04 | — | Pending |
-| EVT-05 | — | Pending |
-| DS-01 | — | Pending |
-| DS-02 | — | Pending |
-| DS-03 | — | Pending |
-| DS-04 | — | Pending |
-| DS-05 | — | Pending |
-| TRANS-01 | — | Pending |
-| TRANS-02 | — | Pending |
-| TRANS-03 | — | Pending |
-| TRANS-04 | — | Pending |
-| CHROME-01 | — | Pending |
-| CHROME-02 | — | Pending |
-| CHROME-03 | — | Pending |
-| CHROME-04 | — | Pending |
-| CHROME-05 | — | Pending |
-| EDIT-01 | — | Pending |
-| EDIT-02 | — | Pending |
-| EDIT-03 | — | Pending |
-| UI-01 | — | Pending |
-| UI-02 | — | Pending |
-| UI-03 | — | Pending |
-| UI-04 | — | Pending |
-| WIDGET-01 | — | Pending |
-| WIDGET-02 | — | Pending |
-| WIDGET-03 | — | Pending |
-| WIDGET-04 | — | Pending |
-| WIDGET-05 | — | Pending |
-| WIDGET-06 | — | Pending |
-| WIDGET-07 | — | Pending |
-| WIDGET-08 | — | Pending |
-| INT-01 | — | Pending |
-| INT-02 | — | Pending |
-| INT-03 | — | Pending |
-| INT-04 | — | Pending |
-| INT-05 | — | Pending |
+| CORE-01 | Phase 1 | Pending |
+| CORE-02 | Phase 1 | Pending |
+| CORE-03 | Phase 3 | Pending |
+| CORE-04 | Phase 3 | Pending |
+| CORE-05 | Phase 1 | Pending |
+| VIEW-01 | Phase 1 | Pending |
+| VIEW-02 | Phase 1 | Pending |
+| VIEW-03 | Phase 3 | Pending |
+| VIEW-04 | Phase 3 | Pending |
+| ELEM-01 | Phase 1 | Pending |
+| ELEM-02 | Phase 2 | Pending |
+| ELEM-03 | Phase 2 | Pending |
+| ELEM-04 | Phase 1 | Pending |
+| ELEM-05 | Phase 5 | Pending |
+| ELEM-06 | Phase 2 | Pending |
+| LAYOUT-01 | Phase 2 | Pending |
+| LAYOUT-02 | Phase 2 | Pending |
+| LAYOUT-03 | Phase 2 | Pending |
+| LAYOUT-04 | Phase 2 | Pending |
+| LAYOUT-05 | Phase 2 | Pending |
+| REND-01 | Phase 2 | Pending |
+| REND-02 | Phase 2 | Pending |
+| REND-03 | Phase 2 | Pending |
+| REND-04 | Phase 2 | Pending |
+| REND-05 | Phase 2 | Pending |
+| REND-06 | Phase 2 | Pending |
+| EVT-01 | Phase 4 | Pending |
+| EVT-02 | Phase 4 | Pending |
+| EVT-03 | Phase 4 | Pending |
+| EVT-04 | Phase 4 | Pending |
+| EVT-05 | Phase 4 | Pending |
+| DS-01 | Phase 6 | Pending |
+| DS-02 | Phase 6 | Pending |
+| DS-03 | Phase 6 | Pending |
+| DS-04 | Phase 6 | Pending |
+| DS-05 | Phase 6 | Pending |
+| TRANS-01 | Phase 9 | Pending |
+| TRANS-02 | Phase 9 | Pending |
+| TRANS-03 | Phase 9 | Pending |
+| TRANS-04 | Phase 9 | Pending |
+| CHROME-01 | Phase 7 | Pending |
+| CHROME-02 | Phase 7 | Pending |
+| CHROME-03 | Phase 7 | Pending |
+| CHROME-04 | Phase 7 | Pending |
+| CHROME-05 | Phase 7 | Pending |
+| EDIT-01 | Phase 7 | Pending |
+| EDIT-02 | Phase 7 | Pending |
+| EDIT-03 | Phase 7 | Pending |
+| UI-01 | Phase 8 | Pending |
+| UI-02 | Phase 8 | Pending |
+| UI-03 | Phase 8 | Pending |
+| UI-04 | Phase 8 | Pending |
+| WIDGET-01 | Phase 8 | Pending |
+| WIDGET-02 | Phase 8 | Pending |
+| WIDGET-03 | Phase 8 | Pending |
+| WIDGET-04 | Phase 8 | Pending |
+| WIDGET-05 | Phase 8 | Pending |
+| WIDGET-06 | Phase 8 | Pending |
+| WIDGET-07 | Phase 8 | Pending |
+| WIDGET-08 | Phase 8 | Pending |
+| INT-01 | Phase 9 | Pending |
+| INT-02 | Phase 9 | Pending |
+| INT-03 | Phase 9 | Pending |
+| INT-04 | Phase 9 | Pending |
+| INT-05 | Phase 9 | Pending |
 
 **Coverage:**
 - v1 requirements: 58 total
-- Mapped to phases: 0
-- Unmapped: 58 (pending roadmap creation)
+- Mapped to phases: 58
+- Unmapped: 0 (100% coverage)
 
 ---
 *Requirements defined: 2026-01-28*
-*Last updated: 2026-01-28 after initial definition*
+*Last updated: 2026-01-28 after roadmap creation with phase mappings*
