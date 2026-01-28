@@ -12,7 +12,7 @@ Build ora as a standalone GPUI-inspired UI framework crate that owns the GPU ren
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Foundation & View System** - App lifecycle, Entity/Model, View trait, Element trait basics
+- [x] **Phase 1: Foundation & View System** - App lifecycle, Entity/Model, View trait, Element trait basics
 - [ ] **Phase 2: Layout & Rendering Pipeline** - Simple stack/flex layout, GPU batching, text rendering via glyphon
 - [ ] **Phase 3: Reactive State System** - Observation, effect queue, Model change tracking
 - [ ] **Phase 4: Event System** - Mouse/keyboard routing, focus management, two-phase dispatch
@@ -37,9 +37,9 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 3 plans
 
 Plans:
-- [ ] 01-01-PLAN.md -- App lifecycle + GPU pipeline + Entity storage (Wave 1)
-- [ ] 01-02-PLAN.md -- View/Element traits + Context types (Wave 2)
-- [ ] 01-03-PLAN.md -- Window integration + stub rendering + verification (Wave 3)
+- [x] 01-01-PLAN.md -- App lifecycle + GPU pipeline + Entity storage (Wave 1)
+- [x] 01-02-PLAN.md -- View/Element traits + Context types (Wave 2)
+- [x] 01-03-PLAN.md -- Window integration + stub rendering + verification (Wave 3)
 
 ### Phase 2: Layout & Rendering Pipeline
 **Goal**: Implement simple stack/flex layout engine, GPU rendering pipeline with batching, and glyphon text rendering
@@ -174,7 +174,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation & View System | 0/3 | Planned | - |
+| 1. Foundation & View System | 3/3 | Complete | 2026-01-28 |
 | 2. Layout & Rendering Pipeline | 0/TBD | Not started | - |
 | 3. Reactive State System | 0/TBD | Not started | - |
 | 4. Event System | 0/TBD | Not started | - |
@@ -186,4 +186,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 
 ---
 *Roadmap created: 2026-01-28*
-*Last updated: 2026-01-28 after Phase 1 planning (3 plans, 3 waves)*
+*Last updated: 2026-01-28 after Phase 1 completion (3/3 plans complete)*
