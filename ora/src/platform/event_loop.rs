@@ -1,7 +1,8 @@
 use crate::app::App;
-use crate::context::AppContext;
+use crate::context::{AppContext, WindowContext};
 use crate::entity::EntityStorage;
 use crate::platform::gpu::GpuState;
+use crate::window::OraWindow;
 use std::sync::Arc;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
@@ -12,6 +13,7 @@ use winit::window::{Window, WindowId};
 pub struct OraApp {
     app_config: Option<App>,
     gpu_state: Option<GpuState>,
+    ora_window: OraWindow,
     entity_storage: EntityStorage,
 }
 
@@ -20,6 +22,7 @@ impl OraApp {
         Self {
             app_config: Some(app),
             gpu_state: None,
+            ora_window: OraWindow::new(),
             entity_storage: EntityStorage::new(),
         }
     }
@@ -52,12 +55,18 @@ impl ApplicationHandler for OraApp {
 
         // Call on_open callback if present
         if let Some(on_open) = app_config.on_open {
-            let mut ctx = AppContext::new(std::mem::replace(
+            let mut app_context = AppContext::new(std::mem::replace(
                 &mut self.entity_storage,
                 EntityStorage::new(),
             ));
-            on_open(&mut ctx);
-            self.entity_storage = ctx.into_storage();
+            let winit_window = &self.gpu_state.as_ref().unwrap().window;
+            let mut window_context = WindowContext::new(
+                &mut app_context,
+                &mut self.ora_window,
+                winit_window,
+            );
+            on_open(&mut window_context);
+            self.entity_storage = app_context.into_storage();
         }
 
         // Request initial redraw

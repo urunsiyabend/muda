@@ -1,4 +1,4 @@
-use crate::context::AppContext;
+use crate::context::WindowContext;
 use crate::platform::event_loop::OraApp;
 use winit::event_loop::EventLoop;
 
@@ -6,7 +6,7 @@ use winit::event_loop::EventLoop;
 pub struct App {
     pub(crate) title: String,
     pub(crate) size: (u32, u32),
-    pub(crate) on_open: Option<Box<dyn FnOnce(&mut AppContext)>>,
+    pub(crate) on_open: Option<Box<dyn FnOnce(&mut WindowContext)>>,
 }
 
 impl App {
@@ -34,7 +34,8 @@ impl App {
     }
 
     /// Set the on_open callback, called when the application starts.
-    pub fn on_open<F: FnOnce(&mut AppContext) + 'static>(mut self, f: F) -> Self {
+    /// The callback receives a WindowContext for setting up the root view.
+    pub fn on_open<F: FnOnce(&mut WindowContext) + 'static>(mut self, f: F) -> Self {
         self.on_open = Some(Box::new(f));
         self
     }

@@ -1,19 +1,5 @@
+use crate::context::ViewContext;
 use crate::element::AnyElement;
-use crate::entity::EntityStorage;
-
-/// Context for rendering views.
-/// Provides access to entity storage for reading/updating state.
-/// This is a simplified non-generic version for Phase 1.
-/// Phase 3 will add generic ViewContext<V> for typed view access.
-pub struct ViewContext<'a> {
-    pub(crate) entity_storage: &'a mut EntityStorage,
-}
-
-impl<'a> ViewContext<'a> {
-    pub(crate) fn new(entity_storage: &'a mut EntityStorage) -> Self {
-        Self { entity_storage }
-    }
-}
 
 /// View trait for stateful UI components.
 ///
