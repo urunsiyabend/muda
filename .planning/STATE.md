@@ -10,29 +10,29 @@ See: .planning/PROJECT.md (updated 2026-01-28)
 ## Current Position
 
 Phase: 2 of 9 (Layout & Rendering Pipeline)
-Plan: 3 of 6 in current phase (02-03 just completed)
+Plan: 5 of 6 in current phase (02-05 just completed)
 Status: In progress
-Last activity: 2026-01-29 - Completed 02-03-PLAN.md (GPU Rectangle Rendering)
+Last activity: 2026-01-29 - Completed 02-05-PLAN.md (Div & Text Primitives)
 
-Progress: [██████░░░░] ~67% (6 of 9 plans complete)
+Progress: [████████░░] ~78% (7 of 9 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 6
-- Average duration: 6m 50s
-- Total execution time: 0.68 hours
+- Total plans completed: 7
+- Average duration: 6m 26s
+- Total execution time: 0.75 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-foundation-view-system | 3 | 23m 0s | 7m 40s |
-| 02-layout-rendering-pipeline | 3 | 24m 0s | 8m 0s |
+| 02-layout-rendering-pipeline | 4 | 29m 0s | 7m 15s |
 
 **Recent Trend:**
-- Last 5 plans: 01-03 (~10m 0s), 02-01 (5m 0s), 02-04 (9m 0s), 02-03 (10m 0s)
-- Trend: Good velocity maintained, Phase 2 at 50% complete (3 of 6 plans)
+- Last 5 plans: 02-01 (5m 0s), 02-04 (9m 0s), 02-03 (10m 0s), 02-05 (5m 0s)
+- Trend: Excellent velocity, Phase 2 at 67% complete (4 of 6 plans)
 
 *Updated after each plan completion*
 
@@ -72,6 +72,10 @@ Recent decisions affecting current work:
 - Downgraded glyphon to 0.7 for wgpu 23 compatibility - glyphon 0.9 requires wgpu 25 (02-04)
 - Framework owns all font resources - Elements don't create FontSystem instances, just provide text content (02-04)
 - Buffer reuse between measure and paint - Same Buffer from measure_text() must be used in add_text_area() (02-04)
+- Div children stored internally in Vec<AnyElement> - Elements manage their own child collections (02-05)
+- TextState stores Buffer in Option - Taken during paint to move into PaintCommand::Text (02-05)
+- PaintCommand::Text carries glyphon::Buffer directly - Simplifies rendering pipeline coordination (02-05)
+- LayoutContext uses raw pointer to TextSystem - Necessary for measure_text() integration with borrow checker (02-05)
 
 ### Pending Todos
 
@@ -88,10 +92,10 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-01-29
-Stopped at: Completed 02-03-PLAN.md (GPU Rectangle Rendering)
+Stopped at: Completed 02-05-PLAN.md (Div & Text Primitives)
 Resume file: None
-Next: Plan 02-02 (Flexbox Layout Engine) or 02-05 (Div & Text Primitives)
+Next: Plan 02-02 (Flexbox Layout Engine) or 02-06 (Rendering Pipeline Integration)
 
 ---
 *State initialized: 2026-01-28*
-*Last updated: 2026-01-29 after 02-03 completion*
+*Last updated: 2026-01-29 after 02-05 completion*
