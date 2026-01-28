@@ -103,11 +103,15 @@ impl ApplicationHandler for OraApp {
                     if let Some(mut element_tree) = self.ora_window.render(&mut app_context) {
                         let window_size = gpu_state.size;
 
-                        // Phase 1: Request layout
+                        // Phase 1: Request layout with text measurement
                         let mut layout_cx = LayoutContext::new(
                             &mut app_context.entity_storage,
                             window_size,
                         );
+
+                        // Pass TextSystem for text measurement during layout
+                        layout_cx.set_text_system(&mut gpu_state.text_system as *mut _);
+
                         element_tree.request_layout(&mut layout_cx);
 
                         // Compute layout using flexbox algorithm
@@ -130,9 +134,9 @@ impl ApplicationHandler for OraApp {
                         );
                         element_tree.paint(&mut paint_cx);
 
-                        // Extract paint commands and present
+                        // Extract paint commands and render
                         let commands = paint_cx.take_commands();
-                        match gpu_state.present(commands) {
+                        match gpu_state.render_frame(&commands) {
                             Ok(_) => {
                                 // Request continuous redraw
                                 gpu_state.window.request_redraw();
@@ -151,7 +155,7 @@ impl ApplicationHandler for OraApp {
                         }
                     } else {
                         // No root view, just clear
-                        match gpu_state.present(Vec::new()) {
+                        match gpu_state.render_frame(&[]) {
                             Ok(_) => {
                                 gpu_state.window.request_redraw();
                             }

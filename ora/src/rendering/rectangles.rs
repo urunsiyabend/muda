@@ -28,6 +28,33 @@ const _: () = assert!(
 );
 
 impl RectInstance {
+    /// Create a RectInstance from legacy PaintCommand::Rect data (backward compat)
+    pub fn from_legacy(
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+        color: [f32; 4],
+        window_size: (u32, u32),
+    ) -> Self {
+        Self {
+            position: [x, y],
+            size: [width, height],
+            color,
+            border_color: [0.0, 0.0, 0.0, 0.0],
+            border_widths: [0.0, 0.0, 0.0, 0.0],
+            corners: [0.0, 0.0, 0.0, 0.0],
+            shadow_offset: [0.0, 0.0],
+            shadow_blur: 0.0,
+            shadow_spread: 0.0,
+            shadow_color: [0.0, 0.0, 0.0, 0.0],
+            gradient_end_color: [0.0, 0.0, 0.0, 0.0],
+            gradient_angle: 0.0,
+            window_size: [window_size.0 as f32, window_size.1 as f32],
+            _pad: 0.0,
+        }
+    }
+
     /// Create a RectInstance from a Style and bounds
     pub fn from_style(style: &Style, bounds: &Rect, window_size: (u32, u32)) -> Self {
         // Extract background color
@@ -253,6 +280,7 @@ impl RectangleRenderer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::style::{Background, Color, Corners, Edges};
 
     #[test]
     fn test_rect_instance_alignment() {

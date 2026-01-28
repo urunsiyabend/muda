@@ -32,6 +32,15 @@ pub enum PaintCommand {
         bounds: Rect,
         color: Color,
     },
+    /// Set scissor rectangle for clipping
+    SetScissor {
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+    },
+    /// Reset scissor to full viewport
+    ResetScissor,
 }
 
 /// Context for computing layout requirements.
@@ -213,6 +222,7 @@ pub struct PaintContext<'a> {
     pub(crate) paint_commands: Vec<PaintCommand>,
     pub(crate) window_size: (u32, u32),
     pub(crate) layout_outputs: &'a [LayoutOutput],
+    pub(crate) clip_stack: Vec<Rect>,
 }
 
 impl<'a> PaintContext<'a> {
@@ -226,6 +236,7 @@ impl<'a> PaintContext<'a> {
             paint_commands: Vec::new(),
             window_size,
             layout_outputs,
+            clip_stack: Vec::new(),
         }
     }
 
@@ -277,6 +288,46 @@ impl<'a> PaintContext<'a> {
     /// Get the current window size.
     pub fn window_size(&self) -> (u32, u32) {
         self.window_size
+    }
+
+    /// Push a clipping rectangle onto the stack
+    pub fn push_clip(&mut self, clip_rect: Rect) {
+        // Round scissor coordinates to nearest integer (RESEARCH.md Pitfall 3)
+        let x = clip_rect.origin.x.round() as u32;
+        let y = clip_rect.origin.y.round() as u32;
+        let width = clip_rect.size.width.round() as u32;
+        let height = clip_rect.size.height.round() as u32;
+
+        self.clip_stack.push(clip_rect);
+        self.paint_commands.push(PaintCommand::SetScissor {
+            x,
+            y,
+            width,
+            height,
+        });
+    }
+
+    /// Pop the top clipping rectangle from the stack
+    pub fn pop_clip(&mut self) {
+        if self.clip_stack.pop().is_some() {
+            if let Some(previous) = self.clip_stack.last() {
+                // Restore previous scissor
+                let x = previous.origin.x.round() as u32;
+                let y = previous.origin.y.round() as u32;
+                let width = previous.size.width.round() as u32;
+                let height = previous.size.height.round() as u32;
+
+                self.paint_commands.push(PaintCommand::SetScissor {
+                    x,
+                    y,
+                    width,
+                    height,
+                });
+            } else {
+                // No more clips, reset to full viewport
+                self.paint_commands.push(PaintCommand::ResetScissor);
+            }
+        }
     }
 
     /// Extract the collected paint commands.
