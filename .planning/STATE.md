@@ -9,29 +9,30 @@ See: .planning/PROJECT.md (updated 2026-01-28)
 
 ## Current Position
 
-Phase: 1 of 9 (Foundation & View System)
-Plan: 3 of 3 in current phase
-Status: Phase complete
-Last activity: 2026-01-28 - Completed 01-03-PLAN.md
+Phase: 2 of 9 (Layout & Rendering Pipeline)
+Plan: 1 of 5 in current phase
+Status: In progress
+Last activity: 2026-01-29 - Completed 02-01-PLAN.md
 
 Progress: [███░░░░░░░] ~33%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 3
-- Average duration: 7m 40s
-- Total execution time: 0.38 hours
+- Total plans completed: 4
+- Average duration: 6m 45s
+- Total execution time: 0.45 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-foundation-view-system | 3 | 23m 0s | 7m 40s |
+| 02-layout-rendering-pipeline | 1 | 5m 0s | 5m 0s |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (4m 40s), 01-02 (8m 20s), 01-03 (~10m 0s)
-- Trend: Consistent velocity, Phase 1 complete
+- Last 5 plans: 01-01 (4m 40s), 01-02 (8m 20s), 01-03 (~10m 0s), 02-01 (5m 0s)
+- Trend: Good velocity maintained, Phase 2 started
 
 *Updated after each plan completion*
 
@@ -58,6 +59,11 @@ Recent decisions affecting current work:
 - Stub clear-color rendering - Phase 1 proves architecture without vertex buffer complexity (01-03)
 - RedrawRequested drives lifecycle - Natural per-frame entry point for rendering work (01-03)
 - Stub LayoutContext - Sequential ID allocation, real constraint solving deferred to Phase 2 (01-03)
+- flex_shrink defaults to 1.0 (CSS default) - Matches standard flexbox behavior, children shrink to fit (02-01)
+- Per-corner border-radius (Corners<f32>) - Each corner independently styled for complex UI patterns (02-01)
+- Per-side border widths (Edges<f32>) - Fine-grained border control matching CSS model (02-01)
+- RGBA floats for Color - 0.0..1.0 range matches GPU shaders, eliminates conversion overhead (02-01)
+- AvailableSpace enum (Definite/MinContent/MaxContent) - Supports three-pass flexbox algorithm (02-01)
 
 ### Pending Todos
 
@@ -73,11 +79,11 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-01-28
-Stopped at: Completed 01-03-PLAN.md (window integration + stub rendering) - Phase 1 complete
+Last session: 2026-01-29
+Stopped at: Completed 02-01-PLAN.md (style type system & layout constraints)
 Resume file: None
-Next: Phase 2 planning (Layout & Rendering Pipeline)
+Next: Plan 02-02 (Flexbox Layout Engine)
 
 ---
 *State initialized: 2026-01-28*
-*Last updated: 2026-01-28 after 01-03 completion (Phase 1 complete)*
+*Last updated: 2026-01-29 after 02-01 completion*
