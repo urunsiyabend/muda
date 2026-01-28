@@ -187,30 +187,32 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         bg_color = mix(input.color, input.gradient_end_color, t);
     }
 
-    // Border detection (distance-based)
+    // Border detection — compute distance from pixel to each edge of the rectangle,
+    // then select the border width of the closest edge.
     let max_border = max(max(input.border_widths.x, input.border_widths.y),
                          max(input.border_widths.z, input.border_widths.w));
     var is_border = false;
     var border_width = 0.0;
 
     if dist < 0.0 && dist > -max_border {
-        // Inside rect, possibly in border region
-        // Select border width based on which edge is closest
-        let edge_dist = abs(input.local_pos) - half_size;
-        if abs(edge_dist.y - max(edge_dist.x, edge_dist.y)) < 0.1 {
-            // Top or bottom edge
-            if input.local_pos.y < 0.0 {
-                border_width = input.border_widths.x; // Top
-            } else {
-                border_width = input.border_widths.z; // Bottom
-            }
+        // Distance from pixel to each edge (all positive when inside the rect)
+        let dist_top = half_size.y + input.local_pos.y;
+        let dist_bottom = half_size.y - input.local_pos.y;
+        let dist_left = half_size.x + input.local_pos.x;
+        let dist_right = half_size.x - input.local_pos.x;
+
+        // Find the minimum distance to determine the closest edge
+        let min_dist = min(min(dist_top, dist_bottom), min(dist_left, dist_right));
+
+        // Select border width for the closest edge
+        if min_dist == dist_top {
+            border_width = input.border_widths.x; // Top
+        } else if min_dist == dist_right {
+            border_width = input.border_widths.y; // Right
+        } else if min_dist == dist_bottom {
+            border_width = input.border_widths.z; // Bottom
         } else {
-            // Left or right edge
-            if input.local_pos.x < 0.0 {
-                border_width = input.border_widths.w; // Left
-            } else {
-                border_width = input.border_widths.y; // Right
-            }
+            border_width = input.border_widths.w; // Left
         }
 
         if dist > -border_width {

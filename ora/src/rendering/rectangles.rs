@@ -71,9 +71,14 @@ impl RectInstance {
     /// Create a RectInstance from a Style and bounds
     pub fn from_style(style: &Style, bounds: &Rect, window_size: (u32, u32)) -> Self {
         // Extract background color
+        // For solid/none backgrounds, set gradient_end_color == color to prevent
+        // false gradient detection in the shader (length check would be > 0 otherwise)
         let (color, gradient_end_color, gradient_angle) = match style.background {
             Background::None => ([0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0], 0.0),
-            Background::Solid(c) => (c.to_array(), [0.0, 0.0, 0.0, 0.0], 0.0),
+            Background::Solid(c) => {
+                let arr = c.to_array();
+                (arr, arr, 0.0) // Same color prevents gradient detection
+            }
             Background::Linear(Gradient {
                 start,
                 end,

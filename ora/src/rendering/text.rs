@@ -1,6 +1,6 @@
 use crate::style::{Color, Size};
 use glyphon::{
-    Attrs, Buffer, Cache, Color as GlyphonColor, Family, FontSystem, Metrics, Shaping,
+    Attrs, Buffer, Cache, Color as GlyphonColor, Family, FontSystem, Metrics, Resolution, Shaping,
     SwashCache, TextArea, TextAtlas, TextBounds, TextRenderer, Viewport,
 };
 use wgpu::{Device, MultisampleState, Queue, RenderPass};
@@ -161,9 +161,18 @@ impl TextSystem {
         &mut self,
         device: &Device,
         queue: &Queue,
-        _window_width: u32,
-        _window_height: u32,
+        window_width: u32,
+        window_height: u32,
     ) -> Result<(), glyphon::PrepareError> {
+        // Update viewport with current window dimensions — required for glyphon to render
+        self.viewport.update(
+            queue,
+            Resolution {
+                width: window_width,
+                height: window_height,
+            },
+        );
+
         // Build Vec<TextArea> from pending_buffers
         let text_areas: Vec<TextArea> = self
             .pending_buffers
