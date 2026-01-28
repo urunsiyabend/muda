@@ -378,7 +378,9 @@ fn layout_flex_children(
                     AlignSelf::End => AlignItems::End,
                     AlignSelf::Stretch => AlignItems::Stretch,
                 };
-                let height = if align == AlignItems::Stretch && child_size.height == 0.0 {
+                // Stretch cross-axis (height) when child has no explicit height set.
+                // CSS flexbox stretches auto-sized children, not just zero-sized ones.
+                let height = if align == AlignItems::Stretch && matches!(child_style.height, Length::Auto) {
                     inner_height
                 } else {
                     child_size.height
@@ -393,7 +395,9 @@ fn layout_flex_children(
                     AlignSelf::End => AlignItems::End,
                     AlignSelf::Stretch => AlignItems::Stretch,
                 };
-                let width = if align == AlignItems::Stretch && child_size.width == 0.0 {
+                // Stretch cross-axis (width) when child has no explicit width set.
+                // CSS flexbox stretches auto-sized children, not just zero-sized ones.
+                let width = if align == AlignItems::Stretch && matches!(child_style.width, Length::Auto) {
                     inner_width
                 } else {
                     child_size.width
