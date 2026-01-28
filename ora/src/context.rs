@@ -1,4 +1,6 @@
-use crate::entity::{Entity, EntityStorage};
+use crate::effect::EffectQueue;
+use crate::entity::{Entity, EntityStorage, Model};
+use crate::entity::model::{ModelContext, PendingEffect};
 use crate::view::View;
 use crate::window::OraWindow;
 use std::sync::Arc;
@@ -8,11 +10,17 @@ use winit::window::Window;
 /// Owns the entity storage and provides methods for entity management.
 pub struct AppContext {
     pub(crate) entity_storage: EntityStorage,
+    pub(crate) effect_queue: EffectQueue,
+    pub(crate) update_depth: usize,
 }
 
 impl AppContext {
     pub(crate) fn new(entity_storage: EntityStorage) -> Self {
-        Self { entity_storage }
+        Self {
+            entity_storage,
+            effect_queue: EffectQueue::new(),
+            update_depth: 0,
+        }
     }
 
     pub(crate) fn into_storage(self) -> EntityStorage {
@@ -37,6 +45,64 @@ impl AppContext {
     /// Remove an entity by handle.
     pub fn remove<T: 'static>(&mut self, entity: &Entity<T>) -> Option<T> {
         self.entity_storage.remove(entity)
+    }
+
+    /// Create a new reactive model and return a handle to it.
+    pub fn new_model<T: 'static>(&mut self, value: T) -> Model<T> {
+        let entity = self.entity_storage.insert(value);
+        Model::new(entity)
+    }
+
+    /// Read a model's data immutably.
+    pub fn read_model<T: 'static>(&self, model: &Model<T>) -> &T {
+        self.entity_storage.read(&model.entity)
+    }
+
+    /// Update a model's data mutably with a ModelContext for queueing effects.
+    pub fn update_model<T: 'static, R>(
+        &mut self,
+        model: &Model<T>,
+        f: impl FnOnce(&mut T, &mut ModelContext<T>) -> R,
+    ) -> R {
+        let entity_id = model.entity_id();
+        self.update_depth += 1;
+
+        // Create ModelContext to collect effects during the update
+        let mut model_cx = ModelContext::new(entity_id);
+
+        // Execute the update closure
+        let result = self.entity_storage.update(&model.entity, |data| {
+            f(data, &mut model_cx)
+        });
+
+        // Drain effects from ModelContext into the effect queue
+        for (eid, effect) in model_cx.drain() {
+            match effect {
+                PendingEffect::Notify => {
+                    self.effect_queue.push_notify(eid);
+                }
+                PendingEffect::Emit { event_type_id, event } => {
+                    self.effect_queue.push_emit(eid, event_type_id, event);
+                }
+            }
+        }
+
+        self.update_depth -= 1;
+
+        // Flush effects when we return to the top level
+        if self.update_depth == 0 {
+            self.flush_effects();
+        }
+
+        result
+    }
+
+    /// Flush all queued effects.
+    /// Stub implementation for Plan 01 - real implementation in Plan 02.
+    fn flush_effects(&mut self) {
+        let notify_count = self.effect_queue.drain_notify().len();
+        let emit_count = self.effect_queue.drain_emit().len();
+        log::trace!("flush_effects: {} notify, {} emit pending (stub, discarding)", notify_count, emit_count);
     }
 }
 
