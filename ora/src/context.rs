@@ -4,6 +4,9 @@ use crate::entity::model::{ModelContext, PendingEffect};
 use crate::events::focus::{FocusHandle, FocusId, FocusSource, FocusState};
 use crate::events::actions::{Action, ActionRegistry, KeyBinding, KeyContext, Keymap};
 use crate::events::keyboard::Keystroke;
+use crate::events::interaction::InteractionState;
+use crate::events::mouse::HitboxId;
+use crate::events::types::MouseButton;
 use crate::subscription::{CleanupAction, GlobalEventBus, ObserverSet, SubscriberSet, Subscription};
 use crate::view::View;
 use crate::window::OraWindow;
@@ -27,6 +30,7 @@ pub struct AppContext {
     pub(crate) focus_state: FocusState,
     pub(crate) keymap: Keymap,
     pub(crate) action_registry: ActionRegistry,
+    pub(crate) interaction_state: InteractionState,
 }
 
 impl AppContext {
@@ -43,6 +47,7 @@ impl AppContext {
             focus_state: FocusState::new(),
             keymap: Keymap::new(),
             action_registry: ActionRegistry::new(),
+            interaction_state: InteractionState::new(),
         }
     }
 
@@ -389,6 +394,33 @@ impl AppContext {
     pub fn match_action(&self, keystroke: &Keystroke, context: &KeyContext) -> Option<&dyn Action> {
         self.keymap.match_action(keystroke, context)
     }
+
+    // Interaction state methods
+
+    /// Check if a hitbox is currently hovered (includes ancestors)
+    pub fn is_hovered(&self, hitbox_id: HitboxId) -> bool {
+        self.interaction_state.is_hovered(hitbox_id)
+    }
+
+    /// Check if a hitbox is currently active/pressed (includes ancestors)
+    pub fn is_active(&self, hitbox_id: HitboxId) -> bool {
+        self.interaction_state.is_active(hitbox_id)
+    }
+
+    /// Capture mouse for drag operations
+    pub fn capture_mouse(&mut self, hitbox_id: HitboxId, button: MouseButton) {
+        self.interaction_state.capture_mouse(hitbox_id, button);
+    }
+
+    /// Release mouse capture
+    pub fn release_mouse_capture(&mut self) {
+        self.interaction_state.release_mouse_capture();
+    }
+
+    /// Check if mouse is currently captured
+    pub fn is_mouse_captured(&self) -> bool {
+        self.interaction_state.is_mouse_captured()
+    }
 }
 
 /// View context for rendering views.
@@ -493,6 +525,18 @@ impl<'a> ViewContext<'a> {
     /// Bind a keystroke to an action
     pub fn bind_key(&mut self, keystroke: Keystroke, action: Box<dyn Action>) {
         self.app_context.bind_key(keystroke, action);
+    }
+
+    // Interaction state methods
+
+    /// Check if a hitbox is currently hovered (includes ancestors)
+    pub fn is_hovered(&self, hitbox_id: HitboxId) -> bool {
+        self.app_context.is_hovered(hitbox_id)
+    }
+
+    /// Check if a hitbox is currently active/pressed (includes ancestors)
+    pub fn is_active(&self, hitbox_id: HitboxId) -> bool {
+        self.app_context.is_active(hitbox_id)
     }
 }
 

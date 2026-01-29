@@ -112,13 +112,28 @@ impl ApplicationHandler for OraApp {
                 let point = Point::new(position.x as f32, position.y as f32);
                 self.cursor_position = point;
 
+                // Check for mouse capture - if captured, route to captured element
+                let hit_id = if let Some(capture) = self.app_context.interaction_state.mouse_capture() {
+                    Some(capture.hitbox_id)
+                } else {
+                    hit_test(&self.hitboxes, point)
+                };
+
+                // Update hover state
+                self.app_context.interaction_state.update_hover(hit_id);
+
                 // Dispatch mouse move event
-                if let Some(hit_id) = hit_test(&self.hitboxes, point) {
+                if let Some(id) = hit_id {
                     let event = MouseMoveEvent {
                         position: point,
                         modifiers: self.modifiers,
                     };
-                    dispatch_mouse_move(&mut self.event_handlers, &event, hit_id);
+                    dispatch_mouse_move(&mut self.event_handlers, &event, id);
+                }
+
+                // Request redraw to update hover state visuals
+                if let Some(gpu_state) = &self.gpu_state {
+                    gpu_state.window.request_redraw();
                 }
             }
             WindowEvent::MouseInput { state, button, .. } => {
@@ -134,6 +149,9 @@ impl ApplicationHandler for OraApp {
                 if let Some(hit_id) = hit_test(&self.hitboxes, self.cursor_position) {
                     match state {
                         winit::event::ElementState::Pressed => {
+                            // Set active state
+                            self.app_context.interaction_state.set_active(hit_id);
+
                             let event = MouseDownEvent {
                                 position: self.cursor_position,
                                 button: mouse_button,
@@ -142,6 +160,10 @@ impl ApplicationHandler for OraApp {
                             dispatch_mouse_down(&mut self.event_handlers, &event, hit_id);
                         }
                         winit::event::ElementState::Released => {
+                            // Clear active state and release capture if present
+                            self.app_context.interaction_state.clear_active();
+                            self.app_context.interaction_state.release_mouse_capture();
+
                             let event = MouseUpEvent {
                                 position: self.cursor_position,
                                 button: mouse_button,
@@ -149,6 +171,11 @@ impl ApplicationHandler for OraApp {
                             };
                             dispatch_mouse_up(&mut self.event_handlers, &event, hit_id);
                         }
+                    }
+
+                    // Request redraw to update active state visuals
+                    if let Some(gpu_state) = &self.gpu_state {
+                        gpu_state.window.request_redraw();
                     }
                 }
             }
@@ -183,6 +210,12 @@ impl ApplicationHandler for OraApp {
                             }
                         }
                     }
+                }
+            }
+            WindowEvent::Focused(focused) => {
+                // Clear all interaction state when window loses focus
+                if !focused {
+                    self.app_context.interaction_state.clear_all();
                 }
             }
             WindowEvent::RedrawRequested => {
