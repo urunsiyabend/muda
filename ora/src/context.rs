@@ -1,6 +1,7 @@
 use crate::effect::{EffectQueue, EntityId};
 use crate::entity::{Entity, EntityStorage, Model};
 use crate::entity::model::{ModelContext, PendingEffect};
+use crate::events::focus::{FocusHandle, FocusId, FocusSource, FocusState};
 use crate::subscription::{CleanupAction, GlobalEventBus, ObserverSet, SubscriberSet, Subscription};
 use crate::view::View;
 use crate::window::OraWindow;
@@ -21,6 +22,7 @@ pub struct AppContext {
     pub(crate) dirty_entities: HashSet<EntityId>,
     pub(crate) update_depth: usize,
     pub(crate) executor: async_executor::LocalExecutor<'static>,
+    pub(crate) focus_state: FocusState,
 }
 
 impl AppContext {
@@ -34,6 +36,7 @@ impl AppContext {
             dirty_entities: HashSet::new(),
             update_depth: 0,
             executor: async_executor::LocalExecutor::new(),
+            focus_state: FocusState::new(),
         }
     }
 
@@ -308,6 +311,51 @@ impl AppContext {
             }
         }
     }
+
+    // Focus management methods
+
+    /// Create a new focus handle with a unique stable ID.
+    pub fn focus_handle(&mut self) -> FocusHandle {
+        self.focus_state.create_focus_handle()
+    }
+
+    /// Check if the given focus ID is currently focused.
+    pub fn is_focused(&self, id: FocusId) -> bool {
+        self.focus_state.focused_id() == Some(id)
+    }
+
+    /// Check if the given focus ID is focused AND focus rings should be visible.
+    /// Returns true only if the element is focused and focus was gained via keyboard.
+    pub fn focus_visible(&self, id: FocusId) -> bool {
+        self.is_focused(id) && self.focus_state.is_keyboard_focused()
+    }
+
+    /// Set focus to the given handle programmatically.
+    pub fn focus(&mut self, handle: &FocusHandle) {
+        self.focus_state.set_focused(handle.id(), FocusSource::Programmatic);
+    }
+
+    /// Set focus to the given handle via mouse interaction.
+    /// Focus rings will not be visible.
+    pub fn focus_by_mouse(&mut self, handle: &FocusHandle) {
+        self.focus_state.set_focused(handle.id(), FocusSource::Mouse);
+    }
+
+    /// Set focus to the given ID via keyboard navigation.
+    /// Focus rings will be visible.
+    pub fn focus_by_keyboard(&mut self, id: FocusId) {
+        self.focus_state.set_focused(id, FocusSource::Keyboard);
+    }
+
+    /// Move focus to the next focusable element in tab order.
+    pub fn focus_next(&mut self) {
+        self.focus_state.focus_next();
+    }
+
+    /// Move focus to the previous focusable element in tab order.
+    pub fn focus_prev(&mut self) {
+        self.focus_state.focus_prev();
+    }
 }
 
 /// View context for rendering views.
@@ -378,6 +426,28 @@ impl<'a> ViewContext<'a> {
         callback: impl FnMut(&E, &mut AppContext) + 'static,
     ) -> Subscription {
         self.app_context.subscribe(model, callback)
+    }
+
+    // Focus management methods
+
+    /// Create a new focus handle with a unique stable ID.
+    pub fn focus_handle(&mut self) -> FocusHandle {
+        self.app_context.focus_handle()
+    }
+
+    /// Check if the given focus ID is currently focused.
+    pub fn is_focused(&self, id: FocusId) -> bool {
+        self.app_context.is_focused(id)
+    }
+
+    /// Check if the given focus ID is focused AND focus rings should be visible.
+    pub fn focus_visible(&self, id: FocusId) -> bool {
+        self.app_context.focus_visible(id)
+    }
+
+    /// Set focus to the given handle programmatically.
+    pub fn focus(&mut self, handle: &FocusHandle) {
+        self.app_context.focus(handle);
     }
 }
 
@@ -461,5 +531,27 @@ impl<'a> WindowContext<'a> {
     /// Useful for passing to Model::update() directly.
     pub fn app_context_mut(&mut self) -> &mut AppContext {
         self.app_context
+    }
+
+    // Focus management methods
+
+    /// Create a new focus handle with a unique stable ID.
+    pub fn focus_handle(&mut self) -> FocusHandle {
+        self.app_context.focus_handle()
+    }
+
+    /// Check if the given focus ID is currently focused.
+    pub fn is_focused(&self, id: FocusId) -> bool {
+        self.app_context.is_focused(id)
+    }
+
+    /// Check if the given focus ID is focused AND focus rings should be visible.
+    pub fn focus_visible(&self, id: FocusId) -> bool {
+        self.app_context.focus_visible(id)
+    }
+
+    /// Set focus to the given handle programmatically.
+    pub fn focus(&mut self, handle: &FocusHandle) {
+        self.app_context.focus(handle);
     }
 }
