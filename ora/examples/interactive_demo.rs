@@ -7,7 +7,7 @@
 
 use ora::{
     AnyElement, App, Color, Div, Model, Subscription, TextElement, View, ViewContext,
-    define_action, Keystroke, Key, NamedKey, Modifiers,
+    define_action, Keystroke, Key, NamedKey, Modifiers, FocusHandle,
 };
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -32,16 +32,20 @@ struct SharedCounter {
 struct InteractiveView {
     shared: SharedCounter,
     _subscription: Subscription,
+    // Persistent focus handles - created once, not every render
+    button1_focus: FocusHandle,
+    button2_focus: FocusHandle,
+    button3_focus: FocusHandle,
 }
 
 impl View for InteractiveView {
     fn render(&self, cx: &mut ViewContext) -> AnyElement {
         let count = *self.shared.count.borrow();
 
-        // Create focus handles for focusable elements
-        let button1_focus = cx.focus_handle();
-        let button2_focus = cx.focus_handle();
-        let button3_focus = cx.focus_handle();
+        // Use persistent focus handles stored in view (not created every render)
+        let button1_focus = self.button1_focus.clone();
+        let button2_focus = self.button2_focus.clone();
+        let button3_focus = self.button3_focus.clone();
 
         Div::new()
             .flex_col()
@@ -270,13 +274,22 @@ fn main() {
 
             log::info!("Keybindings registered: Arrow Up/Down, Ctrl+R");
 
-            // Create view with shared counter
+            // Create persistent focus handles (once, not every render)
+            let button1_focus = cx.focus_handle();
+            let button2_focus = cx.focus_handle();
+            let button3_focus = cx.focus_handle();
+            log::info!("Created 3 persistent focus handles for buttons");
+
+            // Create view with shared counter and persistent focus handles
             let view = InteractiveView {
                 shared: SharedCounter {
                     count: counter.clone(),
                     model: model.clone(),
                 },
                 _subscription: sub,
+                button1_focus,
+                button2_focus,
+                button3_focus,
             };
             cx.set_root_view(view);
             log::info!("Root view set - interactive demo ready!");
