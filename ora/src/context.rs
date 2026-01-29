@@ -6,6 +6,7 @@ use crate::view::View;
 use crate::window::OraWindow;
 use std::any::TypeId;
 use std::collections::HashSet;
+use std::future::Future;
 use std::sync::Arc;
 use winit::window::Window;
 
@@ -19,6 +20,7 @@ pub struct AppContext {
     pub(crate) global_event_bus: GlobalEventBus,
     pub(crate) dirty_entities: HashSet<EntityId>,
     pub(crate) update_depth: usize,
+    pub(crate) executor: async_executor::LocalExecutor<'static>,
 }
 
 impl AppContext {
@@ -31,6 +33,7 @@ impl AppContext {
             global_event_bus: GlobalEventBus::new(),
             dirty_entities: HashSet::new(),
             update_depth: 0,
+            executor: async_executor::LocalExecutor::new(),
         }
     }
 
@@ -195,6 +198,25 @@ impl AppContext {
     /// Clear the dirty entity set.
     pub fn clear_dirty(&mut self) {
         self.dirty_entities.clear();
+    }
+
+    /// Spawn an async task on the main thread executor.
+    ///
+    /// IMPORTANT: The spawned future runs on the main thread and MUST NOT block.
+    /// Use this for async operations like network requests or timers.
+    /// The executor is ticked during event processing.
+    pub fn spawn<F>(&self, future: F) -> async_executor::Task<F::Output>
+    where
+        F: Future + 'static,
+        F::Output: 'static,
+    {
+        self.executor.spawn(future)
+    }
+
+    /// Tick the async executor, polling spawned tasks.
+    /// Returns true if any task was polled.
+    pub fn tick_executor(&self) -> bool {
+        self.executor.try_tick()
     }
 
     /// Flush all queued effects.

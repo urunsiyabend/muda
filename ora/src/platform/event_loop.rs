@@ -88,6 +88,9 @@ impl ApplicationHandler for OraApp {
             }
             WindowEvent::RedrawRequested => {
                 if let Some(gpu_state) = &mut self.gpu_state {
+                    // Log dirty state for debugging
+                    log::trace!("Redraw: dirty={}", self.app_context.has_dirty_entities());
+
                     // Render the root view to get element tree
                     if let Some(mut element_tree) = self.ora_window.render(&mut self.app_context) {
                         let window_size = gpu_state.size;
@@ -127,7 +130,9 @@ impl ApplicationHandler for OraApp {
                         let commands = paint_cx.take_commands();
                         match gpu_state.render_frame(&commands) {
                             Ok(_) => {
-                                // Request continuous redraw
+                                // Clear dirty entities after rendering
+                                self.app_context.clear_dirty();
+                                // Request continuous redraw for now (don't break existing demos)
                                 gpu_state.window.request_redraw();
                             }
                             Err(wgpu::SurfaceError::Lost) => {
@@ -163,6 +168,28 @@ impl ApplicationHandler for OraApp {
                 }
             }
             _ => {}
+        }
+
+        // After processing any event, tick the async executor
+        while self.app_context.tick_executor() {}
+
+        // Check for dirty entities and request redraw if needed
+        if self.app_context.has_dirty_entities() {
+            if let Some(gpu_state) = &self.gpu_state {
+                gpu_state.window.request_redraw();
+            }
+        }
+    }
+
+    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+        // Tick executor when idle
+        while self.app_context.tick_executor() {}
+
+        // Request redraw if entities are dirty
+        if self.app_context.has_dirty_entities() {
+            if let Some(gpu_state) = &self.gpu_state {
+                gpu_state.window.request_redraw();
+            }
         }
     }
 }
