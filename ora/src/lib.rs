@@ -3,6 +3,7 @@ pub mod effect;
 pub mod element;
 pub mod elements;
 pub mod entity;
+pub mod events;
 pub mod platform;
 pub mod subscription;
 pub mod view;
@@ -24,6 +25,9 @@ pub use view::View;
 pub use style::{Style, Color, Background, Overflow, FlexDirection};
 pub use layout::{AvailableSpace, LayoutInput, LayoutOutput};
 pub use rendering::TextSystem;
+
+// Re-export event types
+pub use events::{MouseButton, Point, Modifiers};
 
 // Re-export primitive elements
 pub use elements::{Div, TextElement};

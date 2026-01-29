@@ -128,4 +128,12 @@ impl Rect {
 
         Rect::new(x1, y1, width, height)
     }
+
+    /// Test if a point is contained within this rectangle
+    pub fn contains_point(&self, point: crate::events::types::Point) -> bool {
+        point.x >= self.origin.x
+            && point.x < self.origin.x + self.size.width
+            && point.y >= self.origin.y
+            && point.y < self.origin.y + self.size.height
+    }
 }
