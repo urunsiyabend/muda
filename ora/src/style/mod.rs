@@ -1,6 +1,6 @@
 pub mod units;
 
-pub use units::{Corners, Edges, Length, Point, Rect, Size};
+pub use units::{Corners, Edges, Length, Point, Rect, Size, px, pct};
 
 /// RGBA color with floating-point components (0.0..1.0)
 #[derive(Debug, Clone, Copy, PartialEq)]

@@ -7,6 +7,28 @@ pub enum Length {
     Auto,
 }
 
+/// Unit constructor functions for explicit length specification
+pub fn px(value: f32) -> Length {
+    Length::Px(value)
+}
+
+pub fn pct(value: f32) -> Length {
+    Length::Percent(value)
+}
+
+/// From conversions for ergonomic length specification
+impl From<f32> for Length {
+    fn from(value: f32) -> Self {
+        Length::Px(value)
+    }
+}
+
+impl From<i32> for Length {
+    fn from(value: i32) -> Self {
+        Length::Px(value as f32)
+    }
+}
+
 /// Edges representing values for top, right, bottom, left (padding, margin, border widths)
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Edges<T> {
