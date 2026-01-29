@@ -16,7 +16,7 @@ impl TextElement {
         TextElement {
             content: content.into(),
             font_size: 14.0,
-            line_height: 20.0,
+            line_height: 16.8,
             color: Color::white(),
             style: Style::default(),
             wrap: false,
@@ -25,6 +25,7 @@ impl TextElement {
 
     pub fn size(mut self, size: f32) -> Self {
         self.font_size = size;
+        self.line_height = size * 1.2;
         self
     }
 
