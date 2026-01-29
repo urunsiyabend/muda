@@ -1,4 +1,5 @@
 use crate::element::{Element, LayoutContext, LayoutId, PaintContext, PrepaintContext};
+use crate::events::mouse::HitboxId;
 use crate::style::*;
 
 /// Text rendering element with glyphon-based measurement and rendering.
@@ -75,6 +76,7 @@ pub struct TextState {
     layout_id: LayoutId,
     measured_size: Size<f32>,
     buffer: Option<glyphon::Buffer>,
+    hitbox_id: Option<HitboxId>,
 }
 
 impl Element for TextElement {
@@ -94,11 +96,17 @@ impl Element for TextElement {
                 layout_id: id,
                 measured_size: measured,
                 buffer: Some(buffer),
+                hitbox_id: None,
             },
         )
     }
 
-    fn prepaint(&mut self, _state: &mut TextState, _cx: &mut PrepaintContext) {}
+    fn prepaint(&mut self, state: &mut TextState, cx: &mut PrepaintContext) {
+        // Register hitbox with computed bounds from layout
+        let bounds = cx.bounds(state.layout_id);
+        let hitbox_id = cx.register_hitbox(bounds, true);
+        state.hitbox_id = Some(hitbox_id);
+    }
 
     fn paint(&mut self, state: &mut TextState, cx: &mut PaintContext) {
         let bounds = cx.bounds(state.layout_id);

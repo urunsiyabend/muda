@@ -1,4 +1,5 @@
 use crate::element::{AnyElement, Element, LayoutContext, LayoutId, PaintContext, PrepaintContext};
+use crate::events::mouse::HitboxId;
 use crate::style::*;
 
 /// Styled rectangle container element.
@@ -209,6 +210,7 @@ impl Default for Div {
 /// State persisted through the rendering lifecycle
 pub struct DivState {
     layout_id: LayoutId,
+    hitbox_id: Option<HitboxId>,
 }
 
 impl Element for Div {
@@ -221,10 +223,19 @@ impl Element for Div {
             let child_id = child.request_layout(cx);
             cx.add_child(id, child_id);
         }
-        (id, DivState { layout_id: id })
+        (id, DivState {
+            layout_id: id,
+            hitbox_id: None,
+        })
     }
 
-    fn prepaint(&mut self, _state: &mut DivState, cx: &mut PrepaintContext) {
+    fn prepaint(&mut self, state: &mut DivState, cx: &mut PrepaintContext) {
+        // Register hitbox with computed bounds from layout
+        let bounds = cx.bounds(state.layout_id);
+        let hitbox_id = cx.register_hitbox(bounds, true);
+        state.hitbox_id = Some(hitbox_id);
+
+        // Prepaint children
         for child in &mut self.children {
             child.prepaint(cx);
         }
