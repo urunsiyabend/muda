@@ -27,7 +27,10 @@ pub use layout::{AvailableSpace, LayoutInput, LayoutOutput};
 pub use rendering::TextSystem;
 
 // Re-export event types
-pub use events::{FocusHandle, FocusId, FocusSource, MouseButton, Point, Modifiers};
+pub use events::{
+    FocusHandle, FocusId, FocusSource, MouseButton, Point, Modifiers,
+    Action, Keymap, KeyBinding, Keystroke, Key, NamedKey, KeyContext,
+};
 
 // Re-export primitive elements
 pub use elements::{Div, TextElement};

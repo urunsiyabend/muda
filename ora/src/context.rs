@@ -2,6 +2,8 @@ use crate::effect::{EffectQueue, EntityId};
 use crate::entity::{Entity, EntityStorage, Model};
 use crate::entity::model::{ModelContext, PendingEffect};
 use crate::events::focus::{FocusHandle, FocusId, FocusSource, FocusState};
+use crate::events::actions::{Action, ActionRegistry, KeyBinding, KeyContext, Keymap};
+use crate::events::keyboard::Keystroke;
 use crate::subscription::{CleanupAction, GlobalEventBus, ObserverSet, SubscriberSet, Subscription};
 use crate::view::View;
 use crate::window::OraWindow;
@@ -23,6 +25,8 @@ pub struct AppContext {
     pub(crate) update_depth: usize,
     pub(crate) executor: async_executor::LocalExecutor<'static>,
     pub(crate) focus_state: FocusState,
+    pub(crate) keymap: Keymap,
+    pub(crate) action_registry: ActionRegistry,
 }
 
 impl AppContext {
@@ -37,6 +41,8 @@ impl AppContext {
             update_depth: 0,
             executor: async_executor::LocalExecutor::new(),
             focus_state: FocusState::new(),
+            keymap: Keymap::new(),
+            action_registry: ActionRegistry::new(),
         }
     }
 
@@ -356,6 +362,33 @@ impl AppContext {
     pub fn focus_prev(&mut self) {
         self.focus_state.focus_prev();
     }
+
+    // Action system methods
+
+    /// Register a typed action handler
+    pub fn on_action<A: Action>(&mut self, handler: impl FnMut(&A) + 'static) {
+        self.action_registry.on_action(handler);
+    }
+
+    /// Bind a keystroke to an action
+    pub fn bind_key(&mut self, keystroke: Keystroke, action: Box<dyn Action>) {
+        self.keymap.bind_key(keystroke, action);
+    }
+
+    /// Bind a full KeyBinding with context
+    pub fn bind(&mut self, binding: KeyBinding) {
+        self.keymap.bind(binding);
+    }
+
+    /// Dispatch an action to all registered handlers
+    pub fn dispatch_action(&mut self, action: &dyn Action) {
+        self.action_registry.dispatch(action);
+    }
+
+    /// Match a keystroke against the keymap and return the action if found
+    pub fn match_action(&self, keystroke: &Keystroke, context: &KeyContext) -> Option<&dyn Action> {
+        self.keymap.match_action(keystroke, context)
+    }
 }
 
 /// View context for rendering views.
@@ -448,6 +481,18 @@ impl<'a> ViewContext<'a> {
     /// Set focus to the given handle programmatically.
     pub fn focus(&mut self, handle: &FocusHandle) {
         self.app_context.focus(handle);
+    }
+
+    // Action system methods
+
+    /// Register a typed action handler
+    pub fn on_action<A: Action>(&mut self, handler: impl FnMut(&A) + 'static) {
+        self.app_context.on_action(handler);
+    }
+
+    /// Bind a keystroke to an action
+    pub fn bind_key(&mut self, keystroke: Keystroke, action: Box<dyn Action>) {
+        self.app_context.bind_key(keystroke, action);
     }
 }
 
@@ -553,5 +598,17 @@ impl<'a> WindowContext<'a> {
     /// Set focus to the given handle programmatically.
     pub fn focus(&mut self, handle: &FocusHandle) {
         self.app_context.focus(handle);
+    }
+
+    // Action system methods
+
+    /// Register a typed action handler
+    pub fn on_action<A: Action>(&mut self, handler: impl FnMut(&A) + 'static) {
+        self.app_context.on_action(handler);
+    }
+
+    /// Bind a keystroke to an action
+    pub fn bind_key(&mut self, keystroke: Keystroke, action: Box<dyn Action>) {
+        self.app_context.bind_key(keystroke, action);
     }
 }
