@@ -90,10 +90,14 @@ Plans:
   3. Focus stack tracks focused element, keyboard events route to focused element
   4. Events dispatch in two phases (capture root→target, bubble target→root) with stop_propagation support
   5. Framework automatically tracks hover and active states, elements query is_hovered/is_active
-**Plans**: TBD
+**Plans**: 5 plans
 
 Plans:
-- (Plans will be created during /gsd:plan-phase 4)
+- [ ] 04-01-PLAN.md -- Event types & hit testing infrastructure (Wave 1)
+- [ ] 04-02-PLAN.md -- Focus system with FocusHandle and tab navigation (Wave 1)
+- [ ] 04-03-PLAN.md -- Two-phase dispatch (capture/bubble) and event routing (Wave 2)
+- [ ] 04-04-PLAN.md -- Action registry and keyboard keybindings (Wave 2)
+- [ ] 04-05-PLAN.md -- Hover/active tracking and interactive demo (Wave 3)
 
 ### Phase 5: Element Library
 **Goal**: Build reusable styled primitives with Tailwind-style builder API and layout containers
@@ -185,7 +189,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 1. Foundation & View System | 3/3 | Complete | 2026-01-28 |
 | 2. Layout & Rendering Pipeline | 6/6 | Complete | 2026-01-29 |
 | 3. Reactive State System | 4/4 | Complete | 2026-01-29 |
-| 4. Event System | 0/TBD | Not started | - |
+| 4. Event System | 0/5 | Planned | - |
 | 5. Element Library | 0/TBD | Not started | - |
 | 6. Design System | 0/TBD | Not started | - |
 | 7. Editor Chrome & Text Editing | 0/TBD | Not started | - |
@@ -194,4 +198,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 
 ---
 *Roadmap created: 2026-01-28*
-*Last updated: 2026-01-29 after Phase 3 execution complete (4/4 plans)*
+*Last updated: 2026-01-29 after Phase 4 planning complete (5 plans in 3 waves)*
