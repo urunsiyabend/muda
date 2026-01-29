@@ -38,6 +38,11 @@ impl View for InteractiveView {
     fn render(&self, cx: &mut ViewContext) -> AnyElement {
         let count = *self.shared.count.borrow();
 
+        // Create focus handles for focusable elements
+        let button1_focus = cx.focus_handle();
+        let button2_focus = cx.focus_handle();
+        let button3_focus = cx.focus_handle();
+
         Div::new()
             .flex_col()
             .w_pct(100.0)
@@ -118,6 +123,47 @@ impl View for InteractiveView {
                         TextElement::new("  Shift+Tab - Focus previous")
                             .size(14.0)
                             .color(Color::rgb(0.5, 0.5, 0.6))
+                    )
+            )
+            .child(
+                Div::new()
+                    .flex_row()
+                    .gap(12.0)
+                    .child(
+                        Div::new()
+                            .focusable(button1_focus)
+                            .p(12.0)
+                            .bg(Color::rgb(0.2, 0.3, 0.5))
+                            .border_radius(8.0)
+                            .child(
+                                TextElement::new("Button 1")
+                                    .size(14.0)
+                                    .color(Color::white())
+                            )
+                    )
+                    .child(
+                        Div::new()
+                            .focusable(button2_focus)
+                            .p(12.0)
+                            .bg(Color::rgb(0.2, 0.5, 0.3))
+                            .border_radius(8.0)
+                            .child(
+                                TextElement::new("Button 2")
+                                    .size(14.0)
+                                    .color(Color::white())
+                            )
+                    )
+                    .child(
+                        Div::new()
+                            .focusable(button3_focus)
+                            .p(12.0)
+                            .bg(Color::rgb(0.5, 0.3, 0.2))
+                            .border_radius(8.0)
+                            .child(
+                                TextElement::new("Button 3")
+                                    .size(14.0)
+                                    .color(Color::white())
+                            )
                     )
             )
             .child(

@@ -1,4 +1,5 @@
 use crate::element::{AnyElement, Element, LayoutContext, LayoutId, PaintContext, PrepaintContext};
+use crate::events::focus::FocusHandle;
 use crate::events::mouse::HitboxId;
 use crate::style::*;
 
@@ -7,6 +8,7 @@ use crate::style::*;
 pub struct Div {
     style: Style,
     children: Vec<AnyElement>,
+    focus_handle: Option<FocusHandle>,
 }
 
 impl Div {
@@ -14,6 +16,7 @@ impl Div {
         Div {
             style: Style::default(),
             children: Vec::new(),
+            focus_handle: None,
         }
     }
 
@@ -199,6 +202,12 @@ impl Div {
         self.children = children;
         self
     }
+
+    // Focus
+    pub fn focusable(mut self, handle: FocusHandle) -> Self {
+        self.focus_handle = Some(handle);
+        self
+    }
 }
 
 impl Default for Div {
@@ -234,6 +243,11 @@ impl Element for Div {
         let bounds = cx.bounds(state.layout_id);
         let hitbox_id = cx.register_hitbox(bounds, true);
         state.hitbox_id = Some(hitbox_id);
+
+        // Register as focusable if focus handle provided
+        if let Some(focus_handle) = &self.focus_handle {
+            cx.register_focusable(focus_handle.id);
+        }
 
         // Prepaint children
         for child in &mut self.children {
