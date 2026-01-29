@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-01-28)
 ## Current Position
 
 Phase: 5 of 9 (Element Library)
-Plan: 2 of 5 in current phase
+Plan: 1 of 5 in current phase
 Status: In progress
-Last activity: 2026-01-29 - Completed 05-02-PLAN.md (Stack Container)
+Last activity: 2026-01-29 - Completed 05-01-PLAN.md (Builder API Foundation)
 
-Progress: [████████████░░░░░░░] 60% Phase 5 (2 of 5 plans complete)
+Progress: [████░░░░░░░░░░░░░░░░] 20% Phase 5 (1 of 5 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 20 (Phase 1: 3, Phase 2: 6, Phase 3: 4, Phase 4: 5, Phase 5: 2)
-- Average duration: ~9m per plan
-- Total execution time: ~3 hours 19 minutes
+- Total plans completed: 19 (Phase 1: 3, Phase 2: 6, Phase 3: 4, Phase 4: 5, Phase 5: 1)
+- Average duration: ~10m per plan
+- Total execution time: ~3 hours 20 minutes
 
 **By Phase:**
 
@@ -31,12 +31,11 @@ Progress: [████████████░░░░░░░] 60% Phase 
 | 02-layout-rendering-pipeline | 6 | ~55m | ~9m 10s |
 | 03-reactive-state-system | 4 | ~21m | ~5m 15s |
 | 04-event-system | 5 | ~74m | ~15m |
-| 05-element-library | 2 | ~5m | ~5m |
+| 05-element-library | 1 | 6m 20s | 6m 20s |
 
 **Recent Trend:**
-- Phase 5 Element Library: **IN PROGRESS** (2 of 5 plans)
-- Plan 05-02: Stack container (5m) - Z-layering with absolute positioning, paint-order stacking
-- Plan 05-01: Length/Spacing types (complete) - px(), pct() helpers, Spacing enum, builder API
+- Phase 5 Element Library: **IN PROGRESS** (1 of 5 plans)
+- Plan 05-01: Builder API Foundation (6m 20s) - px()/pct() unit functions, CSS-style justify/items/row/column methods
 - Phase 4 Event System: **COMPLETE** (5 of 5 plans)
 - All unit tests continue passing (15 tests)
 
@@ -119,9 +118,11 @@ Recent decisions affecting current work:
 - TextElement opaque:false for non-interactive hitboxes - Text doesn't capture mouse events (04-05)
 - Persistent FocusHandles stored in view - Created once, not every render (prevents ID explosion) (04-05)
 - PaintContext with InteractionState and FocusState - Elements query interaction during paint (04-05)
-- Stack wraps children in AbsoluteWrapper - Each child positioned at (0,0) relative to Stack for overlapping (05-02)
-- Paint order determines z-index in Stack - First child = bottom, last child = top (05-02)
-- Leverages existing Position::Absolute support - Stack doesn't need custom layout logic (05-02)
+- px() and pct() constructor functions for explicit Length specification - Tailwind-style fluent API (05-01)
+- From<f32> and From<i32> for implicit pixel values - Raw numbers default to pixels for ergonomics (05-01)
+- Removed w_pct/h_pct in favor of w(pct(50)) syntax - Cleaner unified API (05-01)
+- CSS-style alignment methods (justify/items/row/column) - More flexible than convenience-only approach (05-01)
+- Impl Into<Length> for sizing methods - Enables flexible unit specification in builder (05-01)
 
 ### Pending Todos
 
@@ -139,10 +140,10 @@ None.
 ## Session Continuity
 
 Last session: 2026-01-29
-Stopped at: Completed 05-02-SUMMARY.md (Stack Container)
+Stopped at: Completed 05-01-SUMMARY.md (Builder API Foundation)
 Resume file: None
-Next: Phase 5 in progress - continue with remaining plans (Row/Column, Button, Image)
+Next: Phase 5 in progress - continue with remaining plans (Stack, Row/Column, Button, Image)
 
 ---
 *State initialized: 2026-01-28*
-*Last updated: 2026-01-29 after completing Phase 5 Plan 02 (05-02-SUMMARY.md)*
+*Last updated: 2026-01-29 after completing Phase 5 Plan 01 (05-01-SUMMARY.md)*
