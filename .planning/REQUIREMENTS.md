@@ -11,16 +11,16 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [x] **CORE-01**: ora crate provides `ora::run(app)` entry point that owns the winit event loop and application lifecycle
 - [x] **CORE-02**: Single window creation with wgpu surface setup, resize handling, and vsync
-- [ ] **CORE-03**: Entity/Model reactive state system — state lives in `Model<T>`, views observe models and re-render on change
-- [ ] **CORE-04**: Effect queue system — `cx.notify()` and `cx.emit()` queue effects, flushed after update completes (prevents reentrancy)
+- [x] **CORE-03**: Entity/Model reactive state system — state lives in `Model<T>`, views observe models and re-render on change
+- [x] **CORE-04**: Effect queue system — `cx.notify()` and `cx.emit()` queue effects, flushed after update completes (prevents reentrancy)
 - [x] **CORE-05**: Context types provide scoped access to application state (`AppContext`, `ViewContext`, `WindowContext`)
 
 ### View System
 
 - [x] **VIEW-01**: `View` trait with `render(&mut self, cx: &mut ViewContext) -> impl Element` method
 - [x] **VIEW-02**: Framework manages element tree lifecycle — reconstructs tree on state change, diffs for efficient re-rendering
-- [ ] **VIEW-03**: Views can observe `Model<T>` entities and automatically re-render when observed state changes
-- [ ] **VIEW-04**: Views can subscribe to typed events emitted by entities
+- [x] **VIEW-03**: Views can observe `Model<T>` entities and automatically re-render when observed state changes
+- [x] **VIEW-04**: Views can subscribe to typed events emitted by entities
 
 ### Element System
 
@@ -157,13 +157,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | CORE-01 | Phase 1 | Complete |
 | CORE-02 | Phase 1 | Complete |
-| CORE-03 | Phase 3 | Pending |
-| CORE-04 | Phase 3 | Pending |
+| CORE-03 | Phase 3 | Complete |
+| CORE-04 | Phase 3 | Complete |
 | CORE-05 | Phase 1 | Complete |
 | VIEW-01 | Phase 1 | Complete |
 | VIEW-02 | Phase 1 | Complete |
-| VIEW-03 | Phase 3 | Pending |
-| VIEW-04 | Phase 3 | Pending |
+| VIEW-03 | Phase 3 | Complete |
+| VIEW-04 | Phase 3 | Complete |
 | ELEM-01 | Phase 1 | Complete |
 | ELEM-02 | Phase 2 | Complete |
 | ELEM-03 | Phase 2 | Complete |
@@ -228,4 +228,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-01-28*
-*Last updated: 2026-01-29 after Phase 2 completion (LAYOUT-01..05, REND-01..06, ELEM-02..03 complete; ELEM-06 partial)*
+*Last updated: 2026-01-29 after Phase 3 completion (CORE-03..04, VIEW-03..04 complete)*

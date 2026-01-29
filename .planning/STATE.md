@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-01-28)
 
 **Core value:** A single, authoritative UI toolkit that eliminates duplicated styling, enforces consistent design tokens, and provides a scalable GPUI-like component model for the entire GPU client.
-**Current focus:** Phase 2 complete, ready for Phase 3: Reactive State System
+**Current focus:** Phase 3 complete, ready for Phase 4: Event System
 
 ## Current Position
 
-Phase: 3 of 9 (Reactive State System) -- IN PROGRESS
-Plan: 3 of 4 in current phase (plans 03-01, 03-02, 03-03 complete)
-Status: Plan 03-03 complete
-Last activity: 2026-01-29 - Completed 03-03-PLAN.md (Event Subscription System)
+Phase: 3 of 9 (Reactive State System) -- COMPLETE
+Plan: 4 of 4 in current phase (all complete)
+Status: Phase 3 complete, ready for Phase 4
+Last activity: 2026-01-29 - Completed Phase 3 checkpoint (03-04, human-verified)
 
-Progress: [████████████████████░] 75% Phase 3 (3 of 4 plans complete)
+Progress: [██████████] 100% Phase 3 (4 of 4 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 12 (Phase 1: 3, Phase 2: 6, Phase 3: 3)
-- Average duration: ~6m 15s per plan
-- Total execution time: ~1.8 hours
+- Total plans completed: 13 (Phase 1: 3, Phase 2: 6, Phase 3: 4)
+- Average duration: ~6m per plan
+- Total execution time: ~2 hours
 
 **By Phase:**
 
@@ -29,14 +29,14 @@ Progress: [████████████████████░] 75% 
 |-------|-------|-------|----------|
 | 01-foundation-view-system | 3 | 23m 0s | 7m 40s |
 | 02-layout-rendering-pipeline | 6 | ~55m | ~9m 10s |
-| 03-reactive-state-system | 3 | 13m | 4m 20s |
+| 03-reactive-state-system | 4 | ~21m | ~5m 15s |
 
 **Recent Trend:**
-- Phase 3 Plans 01-03 executed smoothly with no deviations
-- Plan 03-03: Typed event subscription system with thread-local cleanup
+- Phase 3 completed smoothly with reactive demo verified
+- Plan 03-04: Async executor, reactive demo, TextElement line_height fix
 - Critical architectural change in 03-02: AppContext now persists across frames
-- All 11 existing unit tests continue passing
-- Event subscription system ready for view integration in Plan 04
+- All unit tests continue passing
+- Reactive demo shows full pipeline: Model -> observe -> notify -> re-render
 
 *Updated after each plan completion*
 
@@ -89,7 +89,7 @@ Recent decisions affecting current work:
 - ModelContext buffers effects locally, drains to AppContext after closure - Avoids aliased mutable borrows (03-01)
 - Update depth tracking ensures flush only at top level (depth == 0) - Batches nested updates, prevents reentrancy (03-01)
 - Model<T> wraps Entity<T> - Reactive entities distinguished from plain entities (03-01)
-- Subscription.detach() pattern for view-lifetime subscriptions - Full Drop cleanup deferred to avoid borrow conflicts during flush (03-02)
+- Subscription.detach() pattern for view-lifetime subscriptions - Full Drop cleanup via thread-local queue (03-02)
 - Borrow-safe observer invocation via take_observers_for/restore_observers - Avoids aliased mutable borrows with &mut AppContext (03-02)
 - AppContext persists across frames in OraApp - Critical change: observer_set and effect_queue must survive frames for reactivity (03-02)
 - Cascade depth limit of 10 with warning at 5 - Prevents infinite loops in observer chains (03-02)
@@ -99,14 +99,18 @@ Recent decisions affecting current work:
 - GlobalEventBus separate from SubscriberSet - App-wide events without emitter entity (03-03)
 - global_emit_queue in EffectQueue - Separate queue for global events avoids sentinel entity ID (03-03)
 - Type-erased event dispatch with downcast_ref - Subscribers receive &dyn Any and downcast to concrete types (03-03)
+- LocalExecutor<'static> for main-thread async - Spawned futures MUST NOT block (03-04)
+- Executor ticked after events AND in about_to_wait - Ensures async work progresses even without input (03-04)
+- Context forwarding to AppContext - ViewContext/WindowContext delegate Model ops to AppContext (03-04)
+- TextElement.size() auto-scales line_height = font_size * 1.2 - CSS standard ratio prevents text clipping (03-04)
 
 ### Pending Todos
 
-None yet.
+None.
 
 ### Blockers/Concerns
 
-- Unsafe code in OraWindow::render() should be revisited in Phase 3 (not a blocker, but noted for future refactoring)
+- Unsafe code in OraWindow::render() should be revisited (not a blocker, but noted for future refactoring)
 
 ### Known Issues
 
@@ -116,10 +120,10 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-01-29
-Stopped at: Completed 03-03-PLAN.md
+Stopped at: Phase 3 complete, checkpoint approved
 Resume file: None
-Next: Plan 03-04 (View Integration)
+Next: Phase 4 (Event System)
 
 ---
 *State initialized: 2026-01-28*
-*Last updated: 2026-01-29 after completing Plan 03-03 (Event Subscription System)*
+*Last updated: 2026-01-29 after Phase 3 completion (4/4 plans, checkpoint approved)*
