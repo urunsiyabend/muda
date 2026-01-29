@@ -1,4 +1,4 @@
-use crate::element::{AnyElement, Element, LayoutContext, LayoutId, PaintContext, PrepaintContext};
+use crate::element::{Element, LayoutContext, LayoutId, PaintContext, PrepaintContext};
 use crate::elements::text::{TextElement, TextState};
 use crate::events::focus::{FocusHandle, FocusId};
 use crate::events::mouse::HitboxId;
@@ -149,6 +149,7 @@ pub struct Button {
     disabled: bool,
     on_click: Option<Box<dyn Fn() + 'static>>,
     focus_handle: Option<FocusHandle>,
+    text_element: Option<TextElement>,
 }
 
 /// Constructor function for button
@@ -165,6 +166,7 @@ impl Button {
             disabled: false,
             on_click: None,
             focus_handle: None,
+            text_element: None,
         }
     }
 
@@ -245,6 +247,9 @@ impl Element for Button {
         let (text_layout_id, text_state) = text_element.request_layout(cx);
         cx.add_child(layout_id, text_layout_id);
 
+        // Store text element for paint phase
+        self.text_element = Some(text_element);
+
         (layout_id, ButtonElementState {
             layout_id,
             text_layout_id,
@@ -264,9 +269,10 @@ impl Element for Button {
             state.focus_id = Some(focus_handle.id);
         }
 
-        // Note: We would prepaint text_element here, but we don't have a &mut TextElement
-        // The text_state was already populated during request_layout
-        // Text prepaint happens through the buffer stored in TextState
+        // Prepaint text element
+        if let Some(text_element) = &mut self.text_element {
+            text_element.prepaint(&mut state.text_state, cx);
+        }
     }
 
     fn paint(&mut self, state: &mut Self::RequestLayoutState, cx: &mut PaintContext) {
@@ -302,12 +308,9 @@ impl Element for Button {
         // Paint button background
         cx.paint_styled_rect(&style, &bounds);
 
-        // Paint text
-        // Note: TextElement's paint would need &mut self, but we don't have it here
-        // We need to manually paint the text using the text_state's buffer
-        if let Some(buffer) = state.text_state.buffer.take() {
-            let text_bounds = cx.bounds(state.text_layout_id);
-            cx.paint_text(buffer, &button_style.text, &text_bounds);
+        // Paint text element
+        if let Some(text_element) = &mut self.text_element {
+            text_element.paint(&mut state.text_state, cx);
         }
     }
 }

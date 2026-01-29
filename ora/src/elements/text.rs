@@ -75,7 +75,7 @@ impl TextElement {
 pub struct TextState {
     layout_id: LayoutId,
     measured_size: Size<f32>,
-    buffer: Option<glyphon::Buffer>,
+    pub(crate) buffer: Option<glyphon::Buffer>,
     hitbox_id: Option<HitboxId>,
 }
 

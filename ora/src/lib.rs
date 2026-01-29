@@ -24,7 +24,7 @@ pub use view::View;
 // Re-export commonly used style and layout types
 pub use style::{Style, Color, Background, Overflow, FlexDirection, JustifyContent, AlignItems, px, pct};
 pub use layout::{AvailableSpace, LayoutInput, LayoutOutput};
-pub use rendering::TextSystem;
+pub use rendering::{TextSystem, TextureCache, TextureId, ImageSource};
 
 // Re-export event types
 pub use events::{
@@ -33,7 +33,7 @@ pub use events::{
 };
 
 // Re-export primitive elements
-pub use elements::{Div, Stack, TextElement, stack};
+pub use elements::{button, Button, ButtonVariant, Div, Stack, TextElement, stack, Image, img, img_from_bytes, ObjectFit};
 
 /// Run the application.
 /// This is a convenience function that delegates to App::run().
