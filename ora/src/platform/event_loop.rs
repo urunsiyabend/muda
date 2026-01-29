@@ -2,6 +2,8 @@ use crate::app::App;
 use crate::context::{AppContext, WindowContext};
 use crate::element::{LayoutContext, PaintContext, PrepaintContext};
 use crate::entity::EntityStorage;
+use crate::events::mouse::{hit_test, Hitbox};
+use crate::events::types::{MouseButton, Point};
 use crate::platform::gpu::GpuState;
 use crate::window::OraWindow;
 use std::sync::Arc;
@@ -16,6 +18,8 @@ pub struct OraApp {
     gpu_state: Option<GpuState>,
     ora_window: OraWindow,
     app_context: AppContext,
+    hitboxes: Vec<Hitbox>,
+    cursor_position: Point,
 }
 
 impl OraApp {
@@ -25,6 +29,8 @@ impl OraApp {
             gpu_state: None,
             ora_window: OraWindow::new(),
             app_context: AppContext::new(EntityStorage::new()),
+            hitboxes: Vec::new(),
+            cursor_position: Point::new(0.0, 0.0),
         }
     }
 }
@@ -86,6 +92,34 @@ impl ApplicationHandler for OraApp {
             WindowEvent::CloseRequested => {
                 event_loop.exit();
             }
+            WindowEvent::CursorMoved { position, .. } => {
+                let point = Point::new(position.x as f32, position.y as f32);
+                self.cursor_position = point;
+                // Hit test to find target
+                if let Some(hit_id) = hit_test(&self.hitboxes, point) {
+                    log::trace!("Mouse move over hitbox {:?}", hit_id);
+                }
+            }
+            WindowEvent::MouseInput { state, button, .. } => {
+                let mouse_button = match button {
+                    winit::event::MouseButton::Left => MouseButton::Left,
+                    winit::event::MouseButton::Right => MouseButton::Right,
+                    winit::event::MouseButton::Middle => MouseButton::Middle,
+                    winit::event::MouseButton::Back => MouseButton::Back,
+                    winit::event::MouseButton::Forward => MouseButton::Forward,
+                    winit::event::MouseButton::Other(n) => MouseButton::Other(n),
+                };
+                if let Some(hit_id) = hit_test(&self.hitboxes, self.cursor_position) {
+                    match state {
+                        winit::event::ElementState::Pressed => {
+                            log::trace!("Mouse down {:?} on hitbox {:?}", mouse_button, hit_id);
+                        }
+                        winit::event::ElementState::Released => {
+                            log::trace!("Mouse up {:?} on hitbox {:?}", mouse_button, hit_id);
+                        }
+                    }
+                }
+            }
             WindowEvent::RedrawRequested => {
                 if let Some(gpu_state) = &mut self.gpu_state {
                     // Log dirty state for debugging
@@ -117,6 +151,9 @@ impl ApplicationHandler for OraApp {
                             &layout_outputs,
                         );
                         element_tree.prepaint(&mut prepaint_cx);
+
+                        // Store hitboxes for mouse event routing
+                        self.hitboxes = prepaint_cx.take_hitboxes();
 
                         // Phase 3: Paint
                         let mut paint_cx = PaintContext::new(
