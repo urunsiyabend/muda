@@ -9,6 +9,8 @@ use ora::{
     AnyElement, App, Color, Div, Model, Subscription, TextElement, View, ViewContext,
     define_action, Keystroke, Key, NamedKey, Modifiers,
 };
+use std::cell::RefCell;
+use std::rc::Rc;
 
 // Define actions for this demo
 define_action!(IncrementAction);
@@ -20,14 +22,21 @@ struct CounterState {
     count: i32,
 }
 
-struct InteractiveView {
+// Shared counter for action handlers (workaround for action handler context limitation)
+// In Phase 5, the builder API will provide proper context access to action handlers
+struct SharedCounter {
+    count: Rc<RefCell<i32>>,
     model: Model<CounterState>,
+}
+
+struct InteractiveView {
+    shared: SharedCounter,
     _subscription: Subscription,
 }
 
 impl View for InteractiveView {
     fn render(&self, cx: &mut ViewContext) -> AnyElement {
-        let count = cx.read_model(&self.model).count;
+        let count = *self.shared.count.borrow();
 
         Div::new()
             .flex_col()
@@ -86,17 +95,17 @@ impl View for InteractiveView {
                             .color(Color::rgb(0.7, 0.7, 0.8))
                     )
                     .child(
-                        TextElement::new("  ↑  Arrow Up - Increment (logged)")
+                        TextElement::new("  ↑  Arrow Up - Increment counter")
                             .size(14.0)
                             .color(Color::rgb(0.5, 0.5, 0.6))
                     )
                     .child(
-                        TextElement::new("  ↓  Arrow Down - Decrement (logged)")
+                        TextElement::new("  ↓  Arrow Down - Decrement counter")
                             .size(14.0)
                             .color(Color::rgb(0.5, 0.5, 0.6))
                     )
                     .child(
-                        TextElement::new("  Ctrl+R - Reset (logged)")
+                        TextElement::new("  Ctrl+R - Reset counter to 0")
                             .size(14.0)
                             .color(Color::rgb(0.5, 0.5, 0.6))
                     )
@@ -127,8 +136,9 @@ fn main() {
         .title("ora - Interactive Demo")
         .size(700, 600)
         .on_open(|cx| {
-            // Create reactive model
+            // Create reactive model and shared counter
             let model = cx.new_model(CounterState { count: 0 });
+            let counter = Rc::new(RefCell::new(0));
             log::info!("Created counter model with count=0");
 
             // Set up observation
@@ -136,20 +146,38 @@ fn main() {
                 log::info!("Observer fired: counter changed!");
             });
 
-            // Note: Full action handler integration requires access to AppContext
-            // For this infrastructure demo, we register the actions but they won't
-            // actually mutate the model (requires Phase 5 builder API for proper
-            // element-level action handling with context access)
+            // Register action handlers that modify shared counter
+            // Note: This is a workaround - Phase 5 builder API will provide proper
+            // context access to action handlers for direct model mutation
+            let counter_for_inc = counter.clone();
             cx.on_action::<IncrementAction>(move |_action| {
-                log::info!("IncrementAction triggered! (action system working)");
+                let new_count = {
+                    let mut c = counter_for_inc.borrow_mut();
+                    *c += 1;
+                    *c
+                };
+                log::info!("IncrementAction triggered! Count: {}", new_count);
+                // Note: Can't call model.update() here due to no AppContext access
+                // The view will read from shared counter on next render
             });
 
+            let counter_for_dec = counter.clone();
             cx.on_action::<DecrementAction>(move |_action| {
-                log::info!("DecrementAction triggered! (action system working)");
+                let new_count = {
+                    let mut c = counter_for_dec.borrow_mut();
+                    *c -= 1;
+                    *c
+                };
+                log::info!("DecrementAction triggered! Count: {}", new_count);
             });
 
+            let counter_for_reset = counter.clone();
             cx.on_action::<ResetAction>(move |_action| {
-                log::info!("ResetAction triggered! (action system working)");
+                {
+                    let mut c = counter_for_reset.borrow_mut();
+                    *c = 0;
+                }
+                log::info!("ResetAction triggered! Count reset to 0");
             });
 
             // Bind keys to actions
@@ -187,9 +215,12 @@ fn main() {
 
             log::info!("Keybindings registered: Arrow Up/Down, Ctrl+R");
 
-            // Create view
+            // Create view with shared counter
             let view = InteractiveView {
-                model: model.clone(),
+                shared: SharedCounter {
+                    count: counter.clone(),
+                    model: model.clone(),
+                },
                 _subscription: sub,
             };
             cx.set_root_view(view);
