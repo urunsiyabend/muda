@@ -43,6 +43,28 @@ impl Div {
         self
     }
 
+    // CSS-style aliases
+    pub fn row(mut self) -> Self {
+        self.style.flex_direction = FlexDirection::Row;
+        self
+    }
+
+    pub fn column(mut self) -> Self {
+        self.style.flex_direction = FlexDirection::Column;
+        self
+    }
+
+    // CSS-style alignment methods
+    pub fn justify(mut self, j: JustifyContent) -> Self {
+        self.style.justify_content = j;
+        self
+    }
+
+    pub fn items(mut self, a: AlignItems) -> Self {
+        self.style.align_items = a;
+        self
+    }
+
     pub fn gap(mut self, gap: f32) -> Self {
         self.style.gap = gap;
         self
@@ -89,43 +111,33 @@ impl Div {
     }
 
     // Sizing builders
-    pub fn w(mut self, w: f32) -> Self {
-        self.style.width = Length::Px(w);
+    pub fn w(mut self, w: impl Into<Length>) -> Self {
+        self.style.width = w.into();
         self
     }
 
-    pub fn h(mut self, h: f32) -> Self {
-        self.style.height = Length::Px(h);
+    pub fn h(mut self, h: impl Into<Length>) -> Self {
+        self.style.height = h.into();
         self
     }
 
-    pub fn w_pct(mut self, p: f32) -> Self {
-        self.style.width = Length::Percent(p);
+    pub fn min_w(mut self, w: impl Into<Length>) -> Self {
+        self.style.min_width = w.into();
         self
     }
 
-    pub fn h_pct(mut self, p: f32) -> Self {
-        self.style.height = Length::Percent(p);
+    pub fn min_h(mut self, h: impl Into<Length>) -> Self {
+        self.style.min_height = h.into();
         self
     }
 
-    pub fn min_w(mut self, w: f32) -> Self {
-        self.style.min_width = Length::Px(w);
+    pub fn max_w(mut self, w: impl Into<Length>) -> Self {
+        self.style.max_width = w.into();
         self
     }
 
-    pub fn min_h(mut self, h: f32) -> Self {
-        self.style.min_height = Length::Px(h);
-        self
-    }
-
-    pub fn max_w(mut self, w: f32) -> Self {
-        self.style.max_width = Length::Px(w);
-        self
-    }
-
-    pub fn max_h(mut self, h: f32) -> Self {
-        self.style.max_height = Length::Px(h);
+    pub fn max_h(mut self, h: impl Into<Length>) -> Self {
+        self.style.max_height = h.into();
         self
     }
 
