@@ -103,8 +103,10 @@ impl Element for TextElement {
 
     fn prepaint(&mut self, state: &mut TextState, cx: &mut PrepaintContext) {
         // Register hitbox with computed bounds from layout
+        // Text is not interactive - use opaque:false so it doesn't capture mouse events
+        // This allows parent elements (buttons, etc.) to receive hover/click through text
         let bounds = cx.bounds(state.layout_id);
-        let hitbox_id = cx.register_hitbox(bounds, true);
+        let hitbox_id = cx.register_hitbox(bounds, false);
         state.hitbox_id = Some(hitbox_id);
     }
 
