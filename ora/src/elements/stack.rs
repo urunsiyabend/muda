@@ -4,7 +4,26 @@ use crate::style::*;
 /// Stack container for z-axis layering of children.
 /// All children are positioned at the same origin and paint in order (first = bottom, last = top).
 ///
-/// Each child is automatically wrapped in an absolutely-positioned container to achieve overlapping.
+/// # Implementation
+///
+/// Each child is automatically wrapped in an absolutely-positioned container with `position: absolute`,
+/// `top: 0`, and `left: 0`. This leverages the existing Position::Absolute support in the flexbox
+/// layout system (see `ora/src/layout/flexbox.rs:layout_absolute_child`), which positions absolute
+/// children at their specified offsets relative to the parent.
+///
+/// Since all children have the same offset (0, 0), they overlay at the same position, creating the
+/// z-layering effect. Paint order determines z-index: first child paints first (bottom layer),
+/// last child paints last (top layer).
+///
+/// # Example
+///
+/// ```rust,ignore
+/// stack()
+///     .w(200.0)
+///     .h(200.0)
+///     .child(div().bg(Color::rgb(1.0, 0.0, 0.0))) // Red background (bottom)
+///     .child(div().w(100.0).h(100.0).bg(Color::rgb(0.0, 0.0, 1.0))) // Blue square (top)
+/// ```
 pub struct Stack {
     style: Style,
     children: Vec<AnyElement>,
