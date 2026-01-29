@@ -22,7 +22,7 @@ pub use subscription::Subscription;
 pub use view::View;
 
 // Re-export commonly used style and layout types
-pub use style::{Style, Color, Background, Overflow, FlexDirection};
+pub use style::{Style, Color, Background, Overflow, FlexDirection, JustifyContent, AlignItems, px, pct};
 pub use layout::{AvailableSpace, LayoutInput, LayoutOutput};
 pub use rendering::TextSystem;
 
@@ -33,7 +33,7 @@ pub use events::{
 };
 
 // Re-export primitive elements
-pub use elements::{Div, TextElement};
+pub use elements::{Div, Stack, TextElement, stack};
 
 /// Run the application.
 /// This is a convenience function that delegates to App::run().
