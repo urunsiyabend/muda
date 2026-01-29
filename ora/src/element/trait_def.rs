@@ -1,4 +1,5 @@
 use crate::entity::EntityStorage;
+use crate::events::mouse::{Hitbox, HitboxId};
 use crate::layout::{compute_flexbox, AvailableSpace, LayoutInput, LayoutOutput};
 use crate::style::units::{Rect, Size};
 use crate::style::{Color, Style};
@@ -186,6 +187,8 @@ pub struct PrepaintContext<'a> {
     pub(crate) entity_storage: &'a mut EntityStorage,
     pub(crate) window_size: (u32, u32),
     pub(crate) layout_outputs: &'a [LayoutOutput],
+    pub(crate) hitboxes: Vec<Hitbox>,
+    pub(crate) next_hitbox_id: u64,
 }
 
 impl<'a> PrepaintContext<'a> {
@@ -198,7 +201,26 @@ impl<'a> PrepaintContext<'a> {
             entity_storage,
             window_size,
             layout_outputs,
+            hitboxes: Vec::new(),
+            next_hitbox_id: 0,
         }
+    }
+
+    /// Register a hitbox for mouse event routing.
+    /// Returns a HitboxId that can be used to identify this element when hit.
+    pub fn register_hitbox(&mut self, bounds: Rect, opaque: bool) -> HitboxId {
+        let id = HitboxId(self.next_hitbox_id);
+        self.next_hitbox_id += 1;
+
+        let hitbox = Hitbox { id, bounds, opaque };
+        self.hitboxes.push(hitbox);
+
+        id
+    }
+
+    /// Extract the collected hitboxes (for internal use by event loop).
+    pub(crate) fn take_hitboxes(&mut self) -> Vec<Hitbox> {
+        std::mem::take(&mut self.hitboxes)
     }
 
     /// Get the computed bounds for a layout node.
