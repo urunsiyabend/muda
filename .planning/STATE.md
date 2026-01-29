@@ -5,7 +5,7 @@
 See: .planning/PROJECT.md (updated 2026-01-28)
 
 **Core value:** A single, authoritative UI toolkit that eliminates duplicated styling, enforces consistent design tokens, and provides a scalable GPUI-like component model for the entire GPU client.
-**Current focus:** Phase 3 complete, ready for Phase 4: Event System
+**Current focus:** Phase 4 complete, ready for Phase 5: Element Library
 
 ## Current Position
 

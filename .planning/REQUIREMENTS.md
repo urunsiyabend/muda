@@ -50,11 +50,11 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Events
 
-- [ ] **EVT-01**: Mouse event routing — hit testing against element tree, dispatch click/hover/scroll to correct element
-- [ ] **EVT-02**: Keyboard event system — platform-agnostic key translation, action registry for shortcuts
-- [ ] **EVT-03**: Focus management — focus stack with enter/exit callbacks, keyboard events routed to focused element
-- [ ] **EVT-04**: Two-phase event dispatch — capture (root→target) then bubble (target→root), with stop_propagation
-- [ ] **EVT-05**: Automatic hover/active state tracking — framework tracks mouse position, elements query `is_hovered`, `is_active`
+- [x] **EVT-01**: Mouse event routing — hit testing against element tree, dispatch click/hover/scroll to correct element
+- [x] **EVT-02**: Keyboard event system — platform-agnostic key translation, action registry for shortcuts
+- [x] **EVT-03**: Focus management — focus stack with enter/exit callbacks, keyboard events routed to focused element
+- [x] **EVT-04**: Two-phase event dispatch — capture (root→target) then bubble (target→root), with stop_propagation
+- [x] **EVT-05**: Automatic hover/active state tracking — framework tracks mouse position, elements query `is_hovered`, `is_active`
 
 ### Design System
 
