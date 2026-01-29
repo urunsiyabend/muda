@@ -1,4 +1,5 @@
 use crate::entity::EntityStorage;
+use crate::events::focus::FocusId;
 use crate::events::mouse::{Hitbox, HitboxId};
 use crate::layout::{compute_flexbox, AvailableSpace, LayoutInput, LayoutOutput};
 use crate::style::units::{Rect, Size};
@@ -189,6 +190,8 @@ pub struct PrepaintContext<'a> {
     pub(crate) layout_outputs: &'a [LayoutOutput],
     pub(crate) hitboxes: Vec<Hitbox>,
     pub(crate) next_hitbox_id: u64,
+    /// Focus IDs of focusable elements in tree order.
+    pub(crate) focusable_elements: Vec<FocusId>,
 }
 
 impl<'a> PrepaintContext<'a> {
@@ -203,6 +206,7 @@ impl<'a> PrepaintContext<'a> {
             layout_outputs,
             hitboxes: Vec::new(),
             next_hitbox_id: 0,
+            focusable_elements: Vec::new(),
         }
     }
 
@@ -221,6 +225,17 @@ impl<'a> PrepaintContext<'a> {
     /// Extract the collected hitboxes (for internal use by event loop).
     pub(crate) fn take_hitboxes(&mut self) -> Vec<Hitbox> {
         std::mem::take(&mut self.hitboxes)
+    }
+
+    /// Register an element as focusable for tab navigation.
+    /// Call during prepaint for any element that can receive keyboard focus.
+    pub fn register_focusable(&mut self, focus_id: FocusId) {
+        self.focusable_elements.push(focus_id);
+    }
+
+    /// Extract collected focusable elements (for internal use by event loop).
+    pub(crate) fn take_focusables(&mut self) -> Vec<FocusId> {
+        std::mem::take(&mut self.focusable_elements)
     }
 
     /// Get the computed bounds for a layout node.
