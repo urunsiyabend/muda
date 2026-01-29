@@ -9,19 +9,19 @@ See: .planning/PROJECT.md (updated 2026-01-28)
 
 ## Current Position
 
-Phase: 4 of 9 (Event System)
-Plan: 5 of 5 in current phase
-Status: Phase complete
-Last activity: 2026-01-29 - Completed 04-05-PLAN.md (Hover/Active Tracking & Interactive Demo)
+Phase: 5 of 9 (Element Library)
+Plan: 2 of 5 in current phase
+Status: In progress
+Last activity: 2026-01-29 - Completed 05-02-PLAN.md (Stack Container)
 
-Progress: [██████████] 100% Phase 4 (5 of 5 plans complete)
+Progress: [████████████░░░░░░░] 60% Phase 5 (2 of 5 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 18 (Phase 1: 3, Phase 2: 6, Phase 3: 4, Phase 4: 5)
-- Average duration: ~10m per plan
-- Total execution time: ~3 hours 14 minutes
+- Total plans completed: 20 (Phase 1: 3, Phase 2: 6, Phase 3: 4, Phase 4: 5, Phase 5: 2)
+- Average duration: ~9m per plan
+- Total execution time: ~3 hours 19 minutes
 
 **By Phase:**
 
@@ -31,16 +31,13 @@ Progress: [██████████] 100% Phase 4 (5 of 5 plans complete)
 | 02-layout-rendering-pipeline | 6 | ~55m | ~9m 10s |
 | 03-reactive-state-system | 4 | ~21m | ~5m 15s |
 | 04-event-system | 5 | ~74m | ~15m |
+| 05-element-library | 2 | ~5m | ~5m |
 
 **Recent Trend:**
+- Phase 5 Element Library: **IN PROGRESS** (2 of 5 plans)
+- Plan 05-02: Stack container (5m) - Z-layering with absolute positioning, paint-order stacking
+- Plan 05-01: Length/Spacing types (complete) - px(), pct() helpers, Spacing enum, builder API
 - Phase 4 Event System: **COMPLETE** (5 of 5 plans)
-- Plan 04-05: Hover/active tracking & interactive demo (50m) - InteractionState, visual feedback, 7 bug fixes
-- Plan 04-04: Keyboard events & actions (7m) - Action trait, Keymap, typed action dispatch
-- Plan 04-03: Event dispatch system (complete) - Two-phase capture/bubble dispatch
-- Plan 04-02: Focus management (5m) - Stable handles, modality tracking, tab navigation
-- Plan 04-01: Mouse events (5m) - Event types, hitbox registration, hit testing
-- Event system feature complete: mouse, focus, keyboard, dispatch, interaction state
-- Interactive demo demonstrates full event loop with visual feedback
 - All unit tests continue passing (15 tests)
 
 *Updated after each plan completion*
@@ -122,6 +119,9 @@ Recent decisions affecting current work:
 - TextElement opaque:false for non-interactive hitboxes - Text doesn't capture mouse events (04-05)
 - Persistent FocusHandles stored in view - Created once, not every render (prevents ID explosion) (04-05)
 - PaintContext with InteractionState and FocusState - Elements query interaction during paint (04-05)
+- Stack wraps children in AbsoluteWrapper - Each child positioned at (0,0) relative to Stack for overlapping (05-02)
+- Paint order determines z-index in Stack - First child = bottom, last child = top (05-02)
+- Leverages existing Position::Absolute support - Stack doesn't need custom layout logic (05-02)
 
 ### Pending Todos
 
@@ -139,10 +139,10 @@ None.
 ## Session Continuity
 
 Last session: 2026-01-29
-Stopped at: Completed 04-05-SUMMARY.md (Hover/Active Tracking & Interactive Demo)
+Stopped at: Completed 05-02-SUMMARY.md (Stack Container)
 Resume file: None
-Next: Phase 4 complete - ready for Phase 5 (Builder API) or continue with remaining phases
+Next: Phase 5 in progress - continue with remaining plans (Row/Column, Button, Image)
 
 ---
 *State initialized: 2026-01-28*
-*Last updated: 2026-01-29 after completing Phase 4 Event System (04-05-SUMMARY.md)*
+*Last updated: 2026-01-29 after completing Phase 5 Plan 02 (05-02-SUMMARY.md)*
