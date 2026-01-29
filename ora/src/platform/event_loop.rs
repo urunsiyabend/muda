@@ -120,7 +120,18 @@ impl ApplicationHandler for OraApp {
                 };
 
                 // Update hover state
+                let prev_hover = self.app_context.interaction_state.hovered_hitbox();
                 self.app_context.interaction_state.update_hover(hit_id);
+
+                // Log hover state changes
+                if prev_hover != hit_id {
+                    match (prev_hover, hit_id) {
+                        (None, Some(id)) => log::info!("Hover entered: HitboxId({:?})", id.0),
+                        (Some(_), None) => log::info!("Hover exited"),
+                        (Some(old_id), Some(new_id)) => log::info!("Hover changed: {:?} -> {:?}", old_id.0, new_id.0),
+                        (None, None) => {},
+                    }
+                }
 
                 // Dispatch mouse move event
                 if let Some(id) = hit_id {
@@ -151,6 +162,7 @@ impl ApplicationHandler for OraApp {
                         winit::event::ElementState::Pressed => {
                             // Set active state
                             self.app_context.interaction_state.set_active(hit_id);
+                            log::info!("Active state: Mouse button {:?} pressed on HitboxId({:?})", mouse_button, hit_id.0);
 
                             let event = MouseDownEvent {
                                 position: self.cursor_position,
@@ -163,6 +175,7 @@ impl ApplicationHandler for OraApp {
                             // Clear active state and release capture if present
                             self.app_context.interaction_state.clear_active();
                             self.app_context.interaction_state.release_mouse_capture();
+                            log::info!("Active state: Mouse button {:?} released", mouse_button);
 
                             let event = MouseUpEvent {
                                 position: self.cursor_position,
@@ -185,11 +198,17 @@ impl ApplicationHandler for OraApp {
                     // Handle Tab navigation first (before action matching)
                     if key_event.state.is_pressed() {
                         if let Key::Named(NamedKey::Tab) = keyboard_event.keystroke.key {
+                            let prev_focused = self.app_context.focus_state.focused_id();
                             if self.modifiers.shift {
+                                log::info!("Tab navigation: Shift+Tab pressed, focusing previous");
                                 self.app_context.focus_prev();
                             } else {
+                                log::info!("Tab navigation: Tab pressed, focusing next");
                                 self.app_context.focus_next();
                             }
+                            let new_focused = self.app_context.focus_state.focused_id();
+                            log::info!("Focus changed: {:?} -> {:?}", prev_focused, new_focused);
+
                             // Request redraw to show new focus state
                             if let Some(gpu_state) = &self.gpu_state {
                                 gpu_state.window.request_redraw();
