@@ -1,4 +1,4 @@
-use ora::{AnyElement, Div, TextElement, View, ViewContext, Color};
+use ora::{AnyElement, Div, TextElement, View, ViewContext, Color, pct};
 
 /// Mock editor layout demonstrating flexbox and styled elements
 struct LayoutDemo;
@@ -14,8 +14,8 @@ impl View for LayoutDemo {
         // Root container - full window with padding
         Div::new()
             .flex_col()
-            .w_pct(100.0)
-            .h_pct(100.0)
+            .w(pct(100.0))
+            .h(pct(100.0))
             .bg(Color::rgb(0.08, 0.08, 0.10))
             .p(16.0)
             .gap(8.0)
@@ -23,7 +23,7 @@ impl View for LayoutDemo {
                 // Header bar
                 Div::new()
                     .flex_row()
-                    .w_pct(100.0)
+                    .w(pct(100.0))
                     .h(48.0)
                     .bg(Color::rgb(0.12, 0.12, 0.14))
                     .border(1.0, Color::rgb(0.2, 0.2, 0.22))
@@ -114,7 +114,7 @@ impl View for LayoutDemo {
                 // Status bar at bottom
                 Div::new()
                     .flex_row()
-                    .w_pct(100.0)
+                    .w(pct(100.0))
                     .h(32.0)
                     .bg(Color::rgb(0.12, 0.12, 0.14))
                     .border(1.0, Color::rgb(0.2, 0.2, 0.22))

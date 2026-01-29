@@ -6,7 +6,7 @@
 //! 4. Observer fires, marks entities dirty
 //! 5. View re-renders with updated state
 
-use ora::{AnyElement, App, Div, TextElement, View, ViewContext, Color, Model, Subscription};
+use ora::{AnyElement, App, Div, TextElement, View, ViewContext, Color, Model, Subscription, pct};
 
 #[derive(Clone)]
 struct CounterState {
@@ -24,8 +24,8 @@ impl View for CounterView {
 
         Div::new()
             .flex_col()
-            .w_pct(100.0)
-            .h_pct(100.0)
+            .w(pct(100.0))
+            .h(pct(100.0))
             .bg(Color::rgb(0.08, 0.08, 0.10))
             .p(24.0)
             .gap(16.0)

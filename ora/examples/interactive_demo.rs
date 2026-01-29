@@ -7,7 +7,7 @@
 
 use ora::{
     AnyElement, App, Color, Div, Model, Subscription, TextElement, View, ViewContext,
-    define_action, Keystroke, Key, NamedKey, Modifiers, FocusHandle,
+    define_action, Keystroke, Key, NamedKey, Modifiers, FocusHandle, pct,
 };
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -49,8 +49,8 @@ impl View for InteractiveView {
 
         Div::new()
             .flex_col()
-            .w_pct(100.0)
-            .h_pct(100.0)
+            .w(pct(100.0))
+            .h(pct(100.0))
             .bg(Color::rgb(0.08, 0.08, 0.10))
             .p(24.0)
             .gap(16.0)
