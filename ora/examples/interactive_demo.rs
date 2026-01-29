@@ -134,6 +134,9 @@ impl View for InteractiveView {
                             .focusable(button1_focus)
                             .p(12.0)
                             .bg(Color::rgb(0.2, 0.3, 0.5))
+                            .hover_bg(Color::rgb(0.3, 0.4, 0.6))
+                            .active_bg(Color::rgb(0.15, 0.25, 0.45))
+                            .focus_ring(Color::rgb(0.4, 0.8, 1.0))
                             .border_radius(8.0)
                             .child(
                                 TextElement::new("Button 1")
@@ -146,6 +149,9 @@ impl View for InteractiveView {
                             .focusable(button2_focus)
                             .p(12.0)
                             .bg(Color::rgb(0.2, 0.5, 0.3))
+                            .hover_bg(Color::rgb(0.3, 0.6, 0.4))
+                            .active_bg(Color::rgb(0.15, 0.45, 0.25))
+                            .focus_ring(Color::rgb(0.4, 1.0, 0.6))
                             .border_radius(8.0)
                             .child(
                                 TextElement::new("Button 2")
@@ -158,6 +164,9 @@ impl View for InteractiveView {
                             .focusable(button3_focus)
                             .p(12.0)
                             .bg(Color::rgb(0.5, 0.3, 0.2))
+                            .hover_bg(Color::rgb(0.6, 0.4, 0.3))
+                            .active_bg(Color::rgb(0.45, 0.25, 0.15))
+                            .focus_ring(Color::rgb(1.0, 0.6, 0.4))
                             .border_radius(8.0)
                             .child(
                                 TextElement::new("Button 3")

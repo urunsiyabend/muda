@@ -285,6 +285,8 @@ impl ApplicationHandler for OraApp {
                             &mut self.app_context.entity_storage,
                             window_size,
                             &layout_outputs,
+                            &self.app_context.interaction_state,
+                            &self.app_context.focus_state,
                         );
                         element_tree.paint(&mut paint_cx);
 

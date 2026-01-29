@@ -1,5 +1,5 @@
 use crate::element::{AnyElement, Element, LayoutContext, LayoutId, PaintContext, PrepaintContext};
-use crate::events::focus::FocusHandle;
+use crate::events::focus::{FocusHandle, FocusId};
 use crate::events::mouse::HitboxId;
 use crate::style::*;
 
@@ -9,6 +9,10 @@ pub struct Div {
     style: Style,
     children: Vec<AnyElement>,
     focus_handle: Option<FocusHandle>,
+    // Interactive styling
+    hover_bg: Option<Color>,
+    active_bg: Option<Color>,
+    focus_ring_color: Option<Color>,
 }
 
 impl Div {
@@ -17,6 +21,9 @@ impl Div {
             style: Style::default(),
             children: Vec::new(),
             focus_handle: None,
+            hover_bg: None,
+            active_bg: None,
+            focus_ring_color: None,
         }
     }
 
@@ -208,6 +215,22 @@ impl Div {
         self.focus_handle = Some(handle);
         self
     }
+
+    // Interactive styling
+    pub fn hover_bg(mut self, color: Color) -> Self {
+        self.hover_bg = Some(color);
+        self
+    }
+
+    pub fn active_bg(mut self, color: Color) -> Self {
+        self.active_bg = Some(color);
+        self
+    }
+
+    pub fn focus_ring(mut self, color: Color) -> Self {
+        self.focus_ring_color = Some(color);
+        self
+    }
 }
 
 impl Default for Div {
@@ -220,6 +243,7 @@ impl Default for Div {
 pub struct DivState {
     layout_id: LayoutId,
     hitbox_id: Option<HitboxId>,
+    focus_id: Option<FocusId>,
 }
 
 impl Element for Div {
@@ -235,6 +259,7 @@ impl Element for Div {
         (id, DivState {
             layout_id: id,
             hitbox_id: None,
+            focus_id: None,
         })
     }
 
@@ -244,9 +269,10 @@ impl Element for Div {
         let hitbox_id = cx.register_hitbox(bounds, true);
         state.hitbox_id = Some(hitbox_id);
 
-        // Register as focusable if focus handle provided
+        // Register as focusable if focus handle provided and store focus_id
         if let Some(focus_handle) = &self.focus_handle {
             cx.register_focusable(focus_handle.id);
+            state.focus_id = Some(focus_handle.id);
         }
 
         // Prepaint children
@@ -257,8 +283,39 @@ impl Element for Div {
 
     fn paint(&mut self, state: &mut DivState, cx: &mut PaintContext) {
         let bounds = cx.bounds(state.layout_id);
-        // Emit PaintCommand::StyledRect with style properties and computed bounds
-        cx.paint_styled_rect(&self.style, &bounds);
+
+        // Build style with interactive states applied
+        let mut style = self.style.clone();
+
+        // Apply interactive styling based on state (priority: active > hover > focus > base)
+        if let Some(hitbox_id) = state.hitbox_id {
+            // Check active state (highest priority)
+            if cx.is_active(hitbox_id) {
+                if let Some(active_bg) = self.active_bg {
+                    style.background = Background::Solid(active_bg);
+                }
+            }
+            // Check hover state
+            else if cx.is_hovered(hitbox_id) {
+                if let Some(hover_bg) = self.hover_bg {
+                    style.background = Background::Solid(hover_bg);
+                }
+            }
+        }
+
+        // Apply focus ring if keyboard-focused
+        if let Some(focus_id) = state.focus_id {
+            if cx.is_focused(focus_id) {
+                if let Some(focus_color) = self.focus_ring_color {
+                    style.border.widths = Edges::all(2.0);
+                    style.border.color = focus_color;
+                }
+            }
+        }
+
+        // Emit PaintCommand::StyledRect with computed style
+        cx.paint_styled_rect(&style, &bounds);
+
         // Paint children
         for child in &mut self.children {
             child.paint(cx);

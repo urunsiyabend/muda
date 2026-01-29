@@ -1,5 +1,6 @@
 use crate::entity::EntityStorage;
-use crate::events::focus::FocusId;
+use crate::events::focus::{FocusId, FocusState};
+use crate::events::interaction::InteractionState;
 use crate::events::mouse::{Hitbox, HitboxId, MouseDownEvent, MouseMoveEvent, MouseUpEvent};
 use crate::events::dispatch::EventHandlers;
 use crate::layout::{compute_flexbox, AvailableSpace, LayoutInput, LayoutOutput};
@@ -324,6 +325,8 @@ pub struct PaintContext<'a> {
     pub(crate) window_size: (u32, u32),
     pub(crate) layout_outputs: &'a [LayoutOutput],
     pub(crate) clip_stack: Vec<Rect>,
+    pub(crate) interaction_state: &'a InteractionState,
+    pub(crate) focus_state: &'a FocusState,
 }
 
 impl<'a> PaintContext<'a> {
@@ -331,6 +334,8 @@ impl<'a> PaintContext<'a> {
         entity_storage: &'a mut EntityStorage,
         window_size: (u32, u32),
         layout_outputs: &'a [LayoutOutput],
+        interaction_state: &'a InteractionState,
+        focus_state: &'a FocusState,
     ) -> Self {
         Self {
             entity_storage,
@@ -338,6 +343,8 @@ impl<'a> PaintContext<'a> {
             window_size,
             layout_outputs,
             clip_stack: Vec::new(),
+            interaction_state,
+            focus_state,
         }
     }
 
@@ -389,6 +396,23 @@ impl<'a> PaintContext<'a> {
     /// Get the current window size.
     pub fn window_size(&self) -> (u32, u32) {
         self.window_size
+    }
+
+    // Interaction state queries
+
+    /// Check if a hitbox is currently hovered
+    pub fn is_hovered(&self, hitbox_id: HitboxId) -> bool {
+        self.interaction_state.is_hovered(hitbox_id)
+    }
+
+    /// Check if a hitbox is currently active (mouse pressed)
+    pub fn is_active(&self, hitbox_id: HitboxId) -> bool {
+        self.interaction_state.is_active(hitbox_id)
+    }
+
+    /// Check if an element is keyboard-focused
+    pub fn is_focused(&self, focus_id: FocusId) -> bool {
+        self.focus_state.focused_id() == Some(focus_id) && self.focus_state.is_keyboard_focused()
     }
 
     /// Push a clipping rectangle onto the stack
