@@ -2,8 +2,11 @@ use crate::app::App;
 use crate::context::{AppContext, WindowContext};
 use crate::element::{LayoutContext, PaintContext, PrepaintContext};
 use crate::entity::EntityStorage;
-use crate::events::mouse::{hit_test, Hitbox};
-use crate::events::types::{MouseButton, Point};
+use crate::events::mouse::{hit_test, Hitbox, MouseDownEvent, MouseMoveEvent, MouseUpEvent};
+use crate::events::types::{MouseButton, Modifiers, Point};
+use crate::events::dispatch::{dispatch_mouse_down, dispatch_mouse_move, dispatch_mouse_up, EventHandlers};
+use crate::events::keyboard::{translate_key_event, Key, NamedKey};
+use crate::events::actions::KeyContext;
 use crate::platform::gpu::GpuState;
 use crate::window::OraWindow;
 use std::sync::Arc;
@@ -20,6 +23,8 @@ pub struct OraApp {
     app_context: AppContext,
     hitboxes: Vec<Hitbox>,
     cursor_position: Point,
+    event_handlers: EventHandlers,
+    modifiers: Modifiers,
 }
 
 impl OraApp {
@@ -31,6 +36,8 @@ impl OraApp {
             app_context: AppContext::new(EntityStorage::new()),
             hitboxes: Vec::new(),
             cursor_position: Point::new(0.0, 0.0),
+            event_handlers: EventHandlers::new(),
+            modifiers: Modifiers::none(),
         }
     }
 }
@@ -92,12 +99,26 @@ impl ApplicationHandler for OraApp {
             WindowEvent::CloseRequested => {
                 event_loop.exit();
             }
+            WindowEvent::ModifiersChanged(modifiers_state) => {
+                // Update modifier state
+                self.modifiers = Modifiers {
+                    ctrl: modifiers_state.state().control_key(),
+                    alt: modifiers_state.state().alt_key(),
+                    shift: modifiers_state.state().shift_key(),
+                    meta: modifiers_state.state().super_key(),
+                };
+            }
             WindowEvent::CursorMoved { position, .. } => {
                 let point = Point::new(position.x as f32, position.y as f32);
                 self.cursor_position = point;
-                // Hit test to find target
+
+                // Dispatch mouse move event
                 if let Some(hit_id) = hit_test(&self.hitboxes, point) {
-                    log::trace!("Mouse move over hitbox {:?}", hit_id);
+                    let event = MouseMoveEvent {
+                        position: point,
+                        modifiers: self.modifiers,
+                    };
+                    dispatch_mouse_move(&mut self.event_handlers, &event, hit_id);
                 }
             }
             WindowEvent::MouseInput { state, button, .. } => {
@@ -109,13 +130,57 @@ impl ApplicationHandler for OraApp {
                     winit::event::MouseButton::Forward => MouseButton::Forward,
                     winit::event::MouseButton::Other(n) => MouseButton::Other(n),
                 };
+
                 if let Some(hit_id) = hit_test(&self.hitboxes, self.cursor_position) {
                     match state {
                         winit::event::ElementState::Pressed => {
-                            log::trace!("Mouse down {:?} on hitbox {:?}", mouse_button, hit_id);
+                            let event = MouseDownEvent {
+                                position: self.cursor_position,
+                                button: mouse_button,
+                                modifiers: self.modifiers,
+                            };
+                            dispatch_mouse_down(&mut self.event_handlers, &event, hit_id);
                         }
                         winit::event::ElementState::Released => {
-                            log::trace!("Mouse up {:?} on hitbox {:?}", mouse_button, hit_id);
+                            let event = MouseUpEvent {
+                                position: self.cursor_position,
+                                button: mouse_button,
+                                modifiers: self.modifiers,
+                            };
+                            dispatch_mouse_up(&mut self.event_handlers, &event, hit_id);
+                        }
+                    }
+                }
+            }
+            WindowEvent::KeyboardInput { event: key_event, .. } => {
+                // Translate winit key event to ora keyboard event
+                if let Some(keyboard_event) = translate_key_event(&key_event, self.modifiers) {
+                    // Handle Tab navigation first (before action matching)
+                    if key_event.state.is_pressed() {
+                        if let Key::Named(NamedKey::Tab) = keyboard_event.keystroke.key {
+                            if self.modifiers.shift {
+                                self.app_context.focus_prev();
+                            } else {
+                                self.app_context.focus_next();
+                            }
+                            // Request redraw to show new focus state
+                            if let Some(gpu_state) = &self.gpu_state {
+                                gpu_state.window.request_redraw();
+                            }
+                            // Tab handled, skip action matching
+                        } else {
+                            // Match keystroke against keymap
+                            let context = KeyContext::new(); // TODO: Build context from focus stack
+                            if let Some(action) = self.app_context.match_action(&keyboard_event.keystroke, &context) {
+                                // Clone the action so we can dispatch it with mutable context
+                                let action_clone = action.boxed_clone();
+                                self.app_context.dispatch_action(&*action_clone);
+
+                                // Request redraw after action dispatch
+                                if let Some(gpu_state) = &self.gpu_state {
+                                    gpu_state.window.request_redraw();
+                                }
+                            }
                         }
                     }
                 }
@@ -152,8 +217,16 @@ impl ApplicationHandler for OraApp {
                         );
                         element_tree.prepaint(&mut prepaint_cx);
 
-                        // Store hitboxes for mouse event routing
+                        // Store hitboxes and event handlers for mouse event routing
                         self.hitboxes = prepaint_cx.take_hitboxes();
+                        self.event_handlers = prepaint_cx.take_event_handlers();
+
+                        // Transfer focus order to FocusState
+                        let focusables = prepaint_cx.take_focusables();
+                        self.app_context.focus_state.clear_focus_order();
+                        for focus_id in focusables {
+                            self.app_context.focus_state.register_focusable(focus_id);
+                        }
 
                         // Phase 3: Paint
                         let mut paint_cx = PaintContext::new(
