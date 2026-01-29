@@ -12,7 +12,7 @@ impl Point {
 }
 
 /// Modifier key state for events
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct Modifiers {
     pub ctrl: bool,
     pub alt: bool,
