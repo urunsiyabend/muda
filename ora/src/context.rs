@@ -342,6 +342,43 @@ impl<'a> ViewContext<'a> {
     pub fn notify(&mut self) {
         // Phase 3 will implement reactivity tracking here
     }
+
+    /// Create a new reactive model and return a handle to it.
+    pub fn new_model<T: 'static>(&mut self, value: T) -> Model<T> {
+        self.app_context.new_model(value)
+    }
+
+    /// Read a model's data immutably.
+    pub fn read_model<T: 'static>(&self, model: &Model<T>) -> &T {
+        self.app_context.read_model(model)
+    }
+
+    /// Update a model's data mutably with a ModelContext for queueing effects.
+    pub fn update_model<T: 'static, R>(
+        &mut self,
+        model: &Model<T>,
+        f: impl FnOnce(&mut T, &mut ModelContext<T>) -> R,
+    ) -> R {
+        self.app_context.update_model(model, f)
+    }
+
+    /// Observe a model and register a callback to be invoked when it calls cx.notify().
+    pub fn observe<T: 'static>(
+        &mut self,
+        model: &Model<T>,
+        callback: impl FnMut(&mut AppContext) + 'static,
+    ) -> Subscription {
+        self.app_context.observe(model, callback)
+    }
+
+    /// Subscribe to typed events emitted by a specific model.
+    pub fn subscribe<T: 'static, E: 'static>(
+        &mut self,
+        model: &Model<T>,
+        callback: impl FnMut(&E, &mut AppContext) + 'static,
+    ) -> Subscription {
+        self.app_context.subscribe(model, callback)
+    }
 }
 
 /// Window context for window-level operations.
@@ -390,5 +427,39 @@ impl<'a> WindowContext<'a> {
     /// Request the window to be redrawn.
     pub fn request_redraw(&self) {
         self.winit_window.request_redraw();
+    }
+
+    /// Create a new reactive model and return a handle to it.
+    pub fn new_model<T: 'static>(&mut self, value: T) -> Model<T> {
+        self.app_context.new_model(value)
+    }
+
+    /// Read a model's data immutably.
+    pub fn read_model<T: 'static>(&self, model: &Model<T>) -> &T {
+        self.app_context.read_model(model)
+    }
+
+    /// Update a model's data mutably with a ModelContext for queueing effects.
+    pub fn update_model<T: 'static, R>(
+        &mut self,
+        model: &Model<T>,
+        f: impl FnOnce(&mut T, &mut ModelContext<T>) -> R,
+    ) -> R {
+        self.app_context.update_model(model, f)
+    }
+
+    /// Observe a model and register a callback to be invoked when it calls cx.notify().
+    pub fn observe<T: 'static>(
+        &mut self,
+        model: &Model<T>,
+        callback: impl FnMut(&mut AppContext) + 'static,
+    ) -> Subscription {
+        self.app_context.observe(model, callback)
+    }
+
+    /// Get mutable access to the underlying AppContext.
+    /// Useful for passing to Model::update() directly.
+    pub fn app_context_mut(&mut self) -> &mut AppContext {
+        self.app_context
     }
 }
