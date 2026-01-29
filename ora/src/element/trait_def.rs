@@ -1,6 +1,7 @@
 use crate::entity::EntityStorage;
 use crate::events::focus::FocusId;
-use crate::events::mouse::{Hitbox, HitboxId};
+use crate::events::mouse::{Hitbox, HitboxId, MouseDownEvent, MouseMoveEvent, MouseUpEvent};
+use crate::events::dispatch::EventHandlers;
 use crate::layout::{compute_flexbox, AvailableSpace, LayoutInput, LayoutOutput};
 use crate::style::units::{Rect, Size};
 use crate::style::{Color, Style};
@@ -192,6 +193,10 @@ pub struct PrepaintContext<'a> {
     pub(crate) next_hitbox_id: u64,
     /// Focus IDs of focusable elements in tree order.
     pub(crate) focusable_elements: Vec<FocusId>,
+    /// Event handlers registry.
+    pub(crate) event_handlers: EventHandlers,
+    /// Stack of parent hitboxes for building parent relationships.
+    pub(crate) hitbox_stack: Vec<HitboxId>,
 }
 
 impl<'a> PrepaintContext<'a> {
@@ -207,6 +212,8 @@ impl<'a> PrepaintContext<'a> {
             hitboxes: Vec::new(),
             next_hitbox_id: 0,
             focusable_elements: Vec::new(),
+            event_handlers: EventHandlers::new(),
+            hitbox_stack: Vec::new(),
         }
     }
 
@@ -236,6 +243,63 @@ impl<'a> PrepaintContext<'a> {
     /// Extract collected focusable elements (for internal use by event loop).
     pub(crate) fn take_focusables(&mut self) -> Vec<FocusId> {
         std::mem::take(&mut self.focusable_elements)
+    }
+
+    /// Extract event handlers (for internal use by event loop).
+    pub(crate) fn take_event_handlers(&mut self) -> EventHandlers {
+        std::mem::take(&mut self.event_handlers)
+    }
+
+    /// Register a mouse down handler for a hitbox.
+    pub fn on_mouse_down(
+        &mut self,
+        hitbox_id: HitboxId,
+        handler: impl FnMut(&MouseDownEvent, &crate::events::dispatch::EventContext) + 'static,
+    ) {
+        self.event_handlers.register_mouse_down(hitbox_id, Box::new(handler));
+    }
+
+    /// Register a mouse up handler for a hitbox.
+    pub fn on_mouse_up(
+        &mut self,
+        hitbox_id: HitboxId,
+        handler: impl FnMut(&MouseUpEvent, &crate::events::dispatch::EventContext) + 'static,
+    ) {
+        self.event_handlers.register_mouse_up(hitbox_id, Box::new(handler));
+    }
+
+    /// Register a mouse move handler for a hitbox.
+    pub fn on_mouse_move(
+        &mut self,
+        hitbox_id: HitboxId,
+        handler: impl FnMut(&MouseMoveEvent, &crate::events::dispatch::EventContext) + 'static,
+    ) {
+        self.event_handlers.register_mouse_move(hitbox_id, Box::new(handler));
+    }
+
+    /// Push a parent hitbox onto the stack.
+    /// Call before processing children to establish parent relationships.
+    pub fn push_hitbox_parent(&mut self, parent: HitboxId) {
+        self.hitbox_stack.push(parent);
+    }
+
+    /// Pop a parent hitbox from the stack.
+    /// Call after processing all children.
+    pub fn pop_hitbox_parent(&mut self) {
+        self.hitbox_stack.pop();
+    }
+
+    /// Register a hitbox with parent relationship from the current stack.
+    /// This should be called when registering a hitbox to establish parent chain.
+    pub fn register_hitbox_with_parent(&mut self, bounds: Rect, opaque: bool) -> HitboxId {
+        let id = self.register_hitbox(bounds, opaque);
+
+        // Register parent relationship if there's a parent on the stack
+        if let Some(&parent) = self.hitbox_stack.last() {
+            self.event_handlers.register_parent(id, parent);
+        }
+
+        id
     }
 
     /// Get the computed bounds for a layout node.
