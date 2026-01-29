@@ -4,6 +4,7 @@ pub mod focus;
 pub mod keyboard;
 pub mod dispatch;
 pub mod actions;
+pub mod interaction;
 
 pub use types::{Point, Modifiers, MouseButton};
 pub use mouse::{
@@ -17,3 +18,4 @@ pub use dispatch::{
     dispatch_mouse_down, dispatch_mouse_up, dispatch_mouse_move,
 };
 pub use actions::{Action, Keymap, KeyBinding, KeyContext, ActionRegistry};
+pub use interaction::{InteractionState, MouseCapture};
