@@ -90,6 +90,64 @@ pub fn amber_600() -> Color {
     Color::rgb(0.96, 0.62, 0.0) // #F59E00 - darker amber for light mode
 }
 
+/// Purple palette for syntax highlighting (keywords, macros)
+pub fn purple_300() -> Color {
+    Color::rgb(0.73, 0.55, 0.87) // #BA8BDE - lighter purple for macros
+}
+
+pub fn purple_400() -> Color {
+    Color::rgb(0.64, 0.42, 0.82) // #A36BD1 - keywords in dark mode
+}
+
+pub fn purple_500() -> Color {
+    Color::rgb(0.61, 0.32, 0.76) // #9C52C2 - keywords in light mode
+}
+
+/// Cyan palette for types
+pub fn cyan_400() -> Color {
+    Color::rgb(0.30, 0.82, 0.88) // #4DD1E0 - types in dark mode
+}
+
+pub fn cyan_500() -> Color {
+    Color::rgb(0.15, 0.71, 0.77) // #26B5C4 - types in light mode
+}
+
+/// Orange palette for numbers
+pub fn orange_400() -> Color {
+    Color::rgb(1.0, 0.60, 0.25) // #FF9940 - numbers in dark mode
+}
+
+pub fn orange_500() -> Color {
+    Color::rgb(0.96, 0.49, 0.13) // #F57D21 - numbers in light mode
+}
+
+/// Yellow palette for constants and attributes
+pub fn yellow_300() -> Color {
+    Color::rgb(1.0, 0.88, 0.40) // #FFE066 - attributes
+}
+
+pub fn yellow_400() -> Color {
+    Color::rgb(1.0, 0.79, 0.24) // #FFC93D - constants in dark mode
+}
+
+pub fn yellow_500() -> Color {
+    Color::rgb(0.96, 0.70, 0.13) // #F5B221 - constants in light mode
+}
+
+/// Blue palette extension for selection and functions
+pub fn blue_200() -> Color {
+    Color::rgb(0.56, 0.79, 0.98) // #8FC9FA - selection in light mode
+}
+
+pub fn blue_900() -> Color {
+    Color::rgb(0.05, 0.22, 0.44) // #0D3870 - selection in dark mode
+}
+
+/// Green palette extension for strings
+pub fn green_400() -> Color {
+    Color::rgb(0.40, 0.78, 0.42) // #66C76B - strings in dark mode
+}
+
 /// Enumeration of all available palette colors
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PaletteColor {
@@ -104,16 +162,29 @@ pub enum PaletteColor {
     Gray800,
     Gray900,
     Gray950,
+    Blue200,
     Blue400,
     Blue500,
     Blue600,
     Blue700,
+    Blue900,
     Red500,
     Red600,
+    Green400,
     Green500,
     Green600,
     Amber500,
     Amber600,
+    Purple300,
+    Purple400,
+    Purple500,
+    Cyan400,
+    Cyan500,
+    Orange400,
+    Orange500,
+    Yellow300,
+    Yellow400,
+    Yellow500,
 }
 
 /// Get a color from the palette by enum
@@ -130,15 +201,28 @@ pub fn get(palette: PaletteColor) -> Color {
         PaletteColor::Gray800 => gray_800(),
         PaletteColor::Gray900 => gray_900(),
         PaletteColor::Gray950 => gray_950(),
+        PaletteColor::Blue200 => blue_200(),
         PaletteColor::Blue400 => blue_400(),
         PaletteColor::Blue500 => blue_500(),
         PaletteColor::Blue600 => blue_600(),
         PaletteColor::Blue700 => blue_700(),
+        PaletteColor::Blue900 => blue_900(),
         PaletteColor::Red500 => red_500(),
         PaletteColor::Red600 => red_600(),
+        PaletteColor::Green400 => green_400(),
         PaletteColor::Green500 => green_500(),
         PaletteColor::Green600 => green_600(),
         PaletteColor::Amber500 => amber_500(),
         PaletteColor::Amber600 => amber_600(),
+        PaletteColor::Purple300 => purple_300(),
+        PaletteColor::Purple400 => purple_400(),
+        PaletteColor::Purple500 => purple_500(),
+        PaletteColor::Cyan400 => cyan_400(),
+        PaletteColor::Cyan500 => cyan_500(),
+        PaletteColor::Orange400 => orange_400(),
+        PaletteColor::Orange500 => orange_500(),
+        PaletteColor::Yellow300 => yellow_300(),
+        PaletteColor::Yellow400 => yellow_400(),
+        PaletteColor::Yellow500 => yellow_500(),
     }
 }

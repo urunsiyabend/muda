@@ -54,6 +54,32 @@ pub enum ColorToken {
     Success,
     /// Warning color (for unsaved changes, caution indicators)
     Warning,
+
+    // === Syntax Highlighting Tokens ===
+    /// Language keywords (fn, if, else, struct, etc.)
+    SyntaxKeyword,
+    /// String literals
+    SyntaxString,
+    /// Comments (single-line or multi-line)
+    SyntaxComment,
+    /// Numeric literals
+    SyntaxNumber,
+    /// Type names and annotations
+    SyntaxType,
+    /// Function and method names
+    SyntaxFunction,
+    /// Constants and enum variants
+    SyntaxConstant,
+    /// Attributes and annotations (#[...])
+    SyntaxAttribute,
+    /// Macro invocations
+    SyntaxMacro,
+
+    // === Editor-Specific Tokens ===
+    /// Selection background color (solid, not semi-transparent)
+    Selection,
+    /// Current line highlight background
+    CurrentLineBg,
 }
 
 /// Theme configuration for the application
@@ -92,7 +118,7 @@ impl Theme {
         use color::*;
 
         match (self.mode, token) {
-            // Dark mode mappings
+            // Dark mode mappings - UI tokens
             (ThemeMode::Dark, ColorToken::BgPrimary) => gray_900(),
             (ThemeMode::Dark, ColorToken::BgSecondary) => gray_800(),
             (ThemeMode::Dark, ColorToken::BgElevated) => gray_700(),
@@ -107,7 +133,22 @@ impl Theme {
             (ThemeMode::Dark, ColorToken::Success) => green_500(),
             (ThemeMode::Dark, ColorToken::Warning) => amber_500(),
 
-            // Light mode mappings
+            // Dark mode mappings - Syntax highlighting tokens
+            (ThemeMode::Dark, ColorToken::SyntaxKeyword) => purple_400(),
+            (ThemeMode::Dark, ColorToken::SyntaxString) => green_400(),
+            (ThemeMode::Dark, ColorToken::SyntaxComment) => gray_500(),
+            (ThemeMode::Dark, ColorToken::SyntaxNumber) => orange_400(),
+            (ThemeMode::Dark, ColorToken::SyntaxType) => cyan_400(),
+            (ThemeMode::Dark, ColorToken::SyntaxFunction) => blue_400(),
+            (ThemeMode::Dark, ColorToken::SyntaxConstant) => yellow_400(),
+            (ThemeMode::Dark, ColorToken::SyntaxAttribute) => yellow_300(),
+            (ThemeMode::Dark, ColorToken::SyntaxMacro) => purple_300(),
+
+            // Dark mode mappings - Editor-specific tokens
+            (ThemeMode::Dark, ColorToken::Selection) => blue_900(),
+            (ThemeMode::Dark, ColorToken::CurrentLineBg) => gray_800(),
+
+            // Light mode mappings - UI tokens
             (ThemeMode::Light, ColorToken::BgPrimary) => gray_50(),
             (ThemeMode::Light, ColorToken::BgSecondary) => gray_100(),
             (ThemeMode::Light, ColorToken::BgElevated) => Color::rgb(1.0, 1.0, 1.0), // white
@@ -121,6 +162,21 @@ impl Theme {
             (ThemeMode::Light, ColorToken::Error) => red_600(),
             (ThemeMode::Light, ColorToken::Success) => green_600(),
             (ThemeMode::Light, ColorToken::Warning) => amber_600(),
+
+            // Light mode mappings - Syntax highlighting tokens
+            (ThemeMode::Light, ColorToken::SyntaxKeyword) => purple_500(),
+            (ThemeMode::Light, ColorToken::SyntaxString) => green_600(),
+            (ThemeMode::Light, ColorToken::SyntaxComment) => gray_500(),
+            (ThemeMode::Light, ColorToken::SyntaxNumber) => orange_500(),
+            (ThemeMode::Light, ColorToken::SyntaxType) => cyan_500(),
+            (ThemeMode::Light, ColorToken::SyntaxFunction) => blue_600(),
+            (ThemeMode::Light, ColorToken::SyntaxConstant) => yellow_500(),
+            (ThemeMode::Light, ColorToken::SyntaxAttribute) => yellow_400(),
+            (ThemeMode::Light, ColorToken::SyntaxMacro) => purple_400(),
+
+            // Light mode mappings - Editor-specific tokens
+            (ThemeMode::Light, ColorToken::Selection) => blue_200(),
+            (ThemeMode::Light, ColorToken::CurrentLineBg) => gray_100(),
         }
     }
 
