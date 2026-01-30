@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Layout & Rendering Pipeline** - Simple stack/flex layout, GPU batching, text rendering via glyphon
 - [x] **Phase 3: Reactive State System** - Observation, effect queue, Model change tracking
 - [x] **Phase 4: Event System** - Mouse/keyboard routing, focus management, two-phase dispatch
-- [ ] **Phase 5: Element Library** - Styled primitives (Div, Text), builder API, layout containers
+- [x] **Phase 5: Element Library** - Styled primitives (Div, Text), builder API, layout containers
 - [ ] **Phase 6: Design System** - Color tokens, spacing scale, typography, theme switching
 - [ ] **Phase 7: Editor Chrome & Text Editing** - TabBar, StatusBar, Sidebar, Gutter, Dialog, TextArea, Caret, Selection
 - [ ] **Phase 8: Advanced UI & Widgets** - CommandPalette, FileTree, PanelManager, Button, Input, Checkbox, etc.
@@ -111,11 +111,11 @@ Plans:
 **Plans**: 5 plans
 
 Plans:
-- [ ] 05-01-PLAN.md -- Unit functions (px, pct) and enhanced Div builder (Wave 1)
-- [ ] 05-02-PLAN.md -- Stack container for z-layering (Wave 1)
-- [ ] 05-03-PLAN.md -- Button element with variants (Wave 2)
-- [ ] 05-04-PLAN.md -- Image element with texture cache (Wave 2)
-- [ ] 05-05-PLAN.md -- Element library demo and verification (Wave 3)
+- [x] 05-01-PLAN.md -- Unit functions (px, pct) and enhanced Div builder (Wave 1)
+- [x] 05-02-PLAN.md -- Stack container for z-layering (Wave 1)
+- [x] 05-03-PLAN.md -- Button element with variants (Wave 2)
+- [x] 05-04-PLAN.md -- Image element with texture cache (Wave 2)
+- [x] 05-05-PLAN.md -- Element library demo and verification (Wave 3)
 
 ### Phase 6: Design System
 **Goal**: Consolidate design tokens (colors, spacing, typography) as single source of truth with theme support
@@ -194,7 +194,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 2. Layout & Rendering Pipeline | 6/6 | Complete | 2026-01-29 |
 | 3. Reactive State System | 4/4 | Complete | 2026-01-29 |
 | 4. Event System | 5/5 | Complete | 2026-01-29 |
-| 5. Element Library | 0/5 | Planned | - |
+| 5. Element Library | 5/5 | Complete | 2026-01-30 |
 | 6. Design System | 0/TBD | Not started | - |
 | 7. Editor Chrome & Text Editing | 0/TBD | Not started | - |
 | 8. Advanced UI & Widgets | 0/TBD | Not started | - |
@@ -202,4 +202,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 
 ---
 *Roadmap created: 2026-01-28*
-*Last updated: 2026-01-29 after Phase 5 planning complete (5 plans created)*
+*Last updated: 2026-01-30 after Phase 5 execution complete (5/5 plans, verified)*
