@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-01-28)
 ## Current Position
 
 Phase: 6 of 9 (Design System)
-Plan: 3 of 5 in current phase
+Plan: 4 of 5 in current phase
 Status: In progress
-Last activity: 2026-01-30 - Completed 06-03-PLAN.md (Theme Context Integration)
+Last activity: 2026-01-30 - Completed 06-04-PLAN.md (Element Theme Integration)
 
-Progress: [████████████████████░░] 91% Phase 6 (3 of 5 plans complete)
+Progress: [████████████████████░░] 95% Phase 6 (4 of 5 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 26 (Phase 1: 3, Phase 2: 6, Phase 3: 4, Phase 4: 5, Phase 5: 5, Phase 6: 3)
-- Average duration: ~7.5m per plan
-- Total execution time: ~4 hours 16 minutes
+- Total plans completed: 27 (Phase 1: 3, Phase 2: 6, Phase 3: 4, Phase 4: 5, Phase 5: 5, Phase 6: 4)
+- Average duration: ~7.6m per plan
+- Total execution time: ~4 hours 40 minutes
 
 **By Phase:**
 
@@ -32,10 +32,11 @@ Progress: [████████████████████░░] 9
 | 03-reactive-state-system | 4 | ~21m | ~5m 15s |
 | 04-event-system | 5 | ~74m | ~15m |
 | 05-element-library | 5 | ~34m | ~6m 48s |
-| 06-design-system | 3 | ~18m | ~6m |
+| 06-design-system | 4 | ~42m | ~10m 30s |
 
 **Recent Trend:**
-- Phase 6 Design System: **IN PROGRESS** (3 of 5 plans)
+- Phase 6 Design System: **IN PROGRESS** (4 of 5 plans)
+- Plan 06-04: Element Theme Integration (24m) - Button uses theme tokens, runtime theme switching demo with 'T' key
 - Plan 06-03: Theme Context Integration (7m) - Theme in AppContext, ThemeChanged event, theme() on all contexts
 - Plan 06-01: Color Token Foundation (6m 38s) - PaletteColor with 11-step gray scale, Theme struct, 12 semantic ColorToken variants
 - Plan 06-02: Spacing and Typography Tokens (4m) - sp() spacing scale, TextSize with bundled font/line-height
@@ -145,6 +146,10 @@ Recent decisions affecting current work:
 - Theme stored in AppContext with dark mode default - Centralizes theme for global access, AppContext::new() initializes Theme::dark() (06-03)
 - Raw pointer for app_context in PaintContext - Necessary to avoid borrow checker aliasing (immutable app_context + mutable entity_storage) (06-03)
 - ThemeChanged global event for theme switching - Simple marker event, subscribers query theme() directly (06-03)
+- Elements access theme during paint phase only - LayoutContext lacks theme access, elements call cx.theme() in paint() (06-04)
+- ButtonVariant::style() accepts &Theme parameter - Enables variant color computation based on current theme (06-04)
+- TextElement::set_color() for paint-time updates - Allows dynamic text color changes after layout measurement (06-04)
+- Demo 'T' key handler in event loop - Temporary workaround for theme toggle until action handlers receive context (06-04)
 
 ### Pending Todos
 
@@ -154,6 +159,7 @@ None.
 
 - Unsafe code in OraWindow::render() should be revisited (not a blocker, but noted for future refactoring)
 - Raw pointer in PaintContext for app_context (follows same pattern, safe during paint phase, but noted for potential refactoring)
+- Action and button handlers lack context access - Prevents calling context methods (like set_theme) from user interactions. Workaround: 'T' key handled in event loop for demo. Should be addressed before Phase 7. (06-04)
 
 ### Known Issues
 
@@ -163,10 +169,10 @@ None.
 ## Session Continuity
 
 Last session: 2026-01-30
-Stopped at: Completed 06-03-PLAN.md (Theme Context Integration)
+Stopped at: Completed 06-04-PLAN.md (Element Theme Integration)
 Resume file: None
-Next: Continue Phase 6 (Design System) - Plans 06-04, 06-05 remaining.
+Next: Continue Phase 6 (Design System) - Plan 06-05 remaining (final plan in phase).
 
 ---
 *State initialized: 2026-01-28*
-*Last updated: 2026-01-30 after completing Phase 6 Plan 03 (06-03-SUMMARY.md)*
+*Last updated: 2026-01-30 after completing Phase 6 Plan 04 (06-04-SUMMARY.md)*
