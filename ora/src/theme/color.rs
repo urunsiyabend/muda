@@ -81,6 +81,15 @@ pub fn green_600() -> Color {
     Color::rgb(0.26, 0.63, 0.28) // #43A047
 }
 
+/// Warning amber/yellow palette
+pub fn amber_500() -> Color {
+    Color::rgb(1.0, 0.71, 0.0) // #FFB500 - warning yellow/amber
+}
+
+pub fn amber_600() -> Color {
+    Color::rgb(0.96, 0.62, 0.0) // #F59E00 - darker amber for light mode
+}
+
 /// Enumeration of all available palette colors
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PaletteColor {
@@ -103,6 +112,8 @@ pub enum PaletteColor {
     Red600,
     Green500,
     Green600,
+    Amber500,
+    Amber600,
 }
 
 /// Get a color from the palette by enum
@@ -127,5 +138,7 @@ pub fn get(palette: PaletteColor) -> Color {
         PaletteColor::Red600 => red_600(),
         PaletteColor::Green500 => green_500(),
         PaletteColor::Green600 => green_600(),
+        PaletteColor::Amber500 => amber_500(),
+        PaletteColor::Amber600 => amber_600(),
     }
 }

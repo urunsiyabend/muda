@@ -156,12 +156,12 @@ impl DialogView {
             .w(pct(100.0))
             .h(px(TITLE_BAR_HEIGHT))
             .flex_row()
-            // Warning accent strip on the left (yellow/orange for unsaved changes)
+            // Warning accent strip on the left (theme-aware warning color)
             .child(
                 Div::new()
                     .w(px(WARNING_ACCENT_WIDTH))
                     .h(pct(100.0))
-                    .bg(Color::rgba(1.0, 0.71, 0.0, 1.0)) // #FFB500 warning yellow
+                    .bg(theme.color(ColorToken::Warning))
             )
             // Title text container
             .child(

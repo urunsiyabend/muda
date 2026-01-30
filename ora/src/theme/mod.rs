@@ -52,6 +52,8 @@ pub enum ColorToken {
     Error,
     /// Success/positive action color
     Success,
+    /// Warning color (for unsaved changes, caution indicators)
+    Warning,
 }
 
 /// Theme configuration for the application
@@ -103,6 +105,7 @@ impl Theme {
             (ThemeMode::Dark, ColorToken::Border) => gray_700(),
             (ThemeMode::Dark, ColorToken::Error) => red_500(),
             (ThemeMode::Dark, ColorToken::Success) => green_500(),
+            (ThemeMode::Dark, ColorToken::Warning) => amber_500(),
 
             // Light mode mappings
             (ThemeMode::Light, ColorToken::BgPrimary) => gray_50(),
@@ -117,6 +120,7 @@ impl Theme {
             (ThemeMode::Light, ColorToken::Border) => gray_300(),
             (ThemeMode::Light, ColorToken::Error) => red_600(),
             (ThemeMode::Light, ColorToken::Success) => green_600(),
+            (ThemeMode::Light, ColorToken::Warning) => amber_600(),
         }
     }
 
