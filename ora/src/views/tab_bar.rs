@@ -11,20 +11,23 @@ use crate::theme::ColorToken;
 use crate::view::View;
 use core_editor::view_model::{TabBarPresentation, TabPresentation};
 
-/// Tab bar height in logical pixels (from wgpu_client constants).
-pub const TAB_BAR_HEIGHT: f32 = 28.0;
+/// Tab bar height in logical pixels (increased for readability).
+pub const TAB_BAR_HEIGHT: f32 = 36.0;
 
 /// Horizontal padding within each tab.
-const TAB_PADDING_H: f32 = 12.0;
+const TAB_PADDING_H: f32 = 14.0;
 
 /// Vertical padding within each tab.
-const TAB_PADDING_V: f32 = 6.0;
+const TAB_PADDING_V: f32 = 8.0;
 
-/// Font size for tab titles.
-const TAB_FONT_SIZE: f32 = 12.0;
+/// Font size for tab titles (increased for readability).
+const TAB_FONT_SIZE: f32 = 13.0;
 
 /// Gap between tabs.
-const TAB_GAP: f32 = 0.0;
+const TAB_GAP: f32 = 1.0;
+
+/// Close button size.
+const CLOSE_BUTTON_SIZE: f32 = 16.0;
 
 /// Tab bar view for displaying open document tabs.
 ///
@@ -84,14 +87,32 @@ impl TabBarView {
             .size(TAB_FONT_SIZE)
             .color(theme.color(ColorToken::FgPrimary));
 
-        // Build tab container
+        // Create close button (visible on hover via parent hover state)
+        // Using "x" character as close icon
+        let close_button = Div::new()
+            .flex_row()
+            .align_center()
+            .justify_center()
+            .w(px(CLOSE_BUTTON_SIZE))
+            .h(px(CLOSE_BUTTON_SIZE))
+            .border_radius(3.0)
+            .hover_bg(theme.color(ColorToken::BgElevated))
+            .child(
+                TextElement::new("x")
+                    .size(TAB_FONT_SIZE - 2.0)
+                    .color(theme.color(ColorToken::FgMuted))
+            );
+
+        // Build tab container with title and close button
         let mut tab_div = Div::new()
             .flex_row()
             .align_center()
+            .gap(8.0)
             .px(TAB_PADDING_H)
             .py(TAB_PADDING_V)
             .bg(bg_color)
-            .child(text);
+            .child(text)
+            .child(close_button);
 
         // Add hover effect for inactive tabs only
         if !tab.is_active {
@@ -165,7 +186,7 @@ mod tests {
 
     #[test]
     fn test_tab_bar_constants() {
-        assert_eq!(TAB_BAR_HEIGHT, 28.0);
-        assert_eq!(TAB_FONT_SIZE, 12.0);
+        assert_eq!(TAB_BAR_HEIGHT, 36.0);
+        assert_eq!(TAB_FONT_SIZE, 13.0);
     }
 }

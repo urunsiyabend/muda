@@ -17,11 +17,11 @@ use crate::theme::ColorToken;
 use crate::view::View;
 use core_editor::view_model::StatusPresentation;
 
-/// Status bar height in logical pixels (from wgpu_client constants).
-pub const STATUS_BAR_HEIGHT: f32 = 24.0;
+/// Status bar height in logical pixels (increased for readability).
+pub const STATUS_BAR_HEIGHT: f32 = 28.0;
 
 /// Font size for status bar text.
-const STATUS_FONT_SIZE: f32 = 12.0;
+const STATUS_FONT_SIZE: f32 = 13.0;
 
 /// Horizontal padding for status bar.
 const STATUS_PADDING_H: f32 = 8.0;
@@ -198,8 +198,8 @@ mod tests {
 
     #[test]
     fn test_status_bar_constants() {
-        assert_eq!(STATUS_BAR_HEIGHT, 24.0);
-        assert_eq!(STATUS_FONT_SIZE, 12.0);
+        assert_eq!(STATUS_BAR_HEIGHT, 28.0);
+        assert_eq!(STATUS_FONT_SIZE, 13.0);
     }
 
     #[test]
