@@ -12,7 +12,7 @@ See: .planning/PROJECT.md (updated 2026-01-28)
 Phase: 6 of 9 (Design System)
 Plan: 2 of 5 in current phase
 Status: In progress
-Last activity: 2026-01-30 - Completed 06-02-PLAN.md (Spacing and Typography Tokens)
+Last activity: 2026-01-30 - Completed 06-01-PLAN.md (Color Token Foundation)
 
 Progress: [████████████████████░░] 88% Phase 6 (2 of 5 plans complete)
 
@@ -21,7 +21,7 @@ Progress: [████████████████████░░] 8
 **Velocity:**
 - Total plans completed: 25 (Phase 1: 3, Phase 2: 6, Phase 3: 4, Phase 4: 5, Phase 5: 5, Phase 6: 2)
 - Average duration: ~8m per plan
-- Total execution time: ~4 hours 2 minutes
+- Total execution time: ~4 hours 9 minutes
 
 **By Phase:**
 
@@ -32,12 +32,12 @@ Progress: [████████████████████░░] 8
 | 03-reactive-state-system | 4 | ~21m | ~5m 15s |
 | 04-event-system | 5 | ~74m | ~15m |
 | 05-element-library | 5 | ~34m | ~6m 48s |
-| 06-design-system | 2 | ~8m | ~4m |
+| 06-design-system | 2 | ~11m | ~5m 30s |
 
 **Recent Trend:**
 - Phase 6 Design System: **IN PROGRESS** (2 of 5 plans)
+- Plan 06-01: Color Token Foundation (6m 38s) - PaletteColor with 11-step gray scale, Theme struct, 12 semantic ColorToken variants
 - Plan 06-02: Spacing and Typography Tokens (4m) - sp() spacing scale, TextSize with bundled font/line-height
-- Plan 06-01: Theme Color System - PaletteColor with Tailwind-style grays/blues, semantic ColorToken
 - Phase 5 Element Library: **COMPLETE** (5 of 5 plans) ✅
 - All unit tests continue passing (15 tests)
 
@@ -133,6 +133,10 @@ Recent decisions affecting current work:
 - ObjectFit CSS model (Contain/Cover/Fill) - Familiar web-style image scaling semantics (05-04)
 - Atomic TextureId generation - Thread-safe monotonic IDs without locking (05-04)
 - Placeholder color for loading images - Dark gray default, customizable via builder (05-04)
+- 11-step gray scale (50-950) with soft neutrals - Comfortable for extended dark mode use, not harsh contrast (06-01)
+- Semantic color tokens map to palette - BgPrimary/FgSecondary resolve to gray_900/blue_500 based on theme mode (06-01)
+- Theme defaults to dark mode - ThemeMode::Dark as default variant (06-01)
+- theme.color() primary API, theme.palette() escape hatch - 90% semantic, 10% direct palette access (06-01)
 - sp() spacing scale with 4px base - Tailwind-style spacing, supports negative values for overlap (06-02)
 - TextSize bundles font_size and line_height - Prevents mismatched font/line-height pairs (06-02)
 - Dual naming for TextSize - Semantic names (Body, Small) and scale aliases (Sm, Xs) (06-02)
@@ -154,10 +158,10 @@ None.
 ## Session Continuity
 
 Last session: 2026-01-30
-Stopped at: Completed 06-02-PLAN.md (Spacing and Typography Tokens)
+Stopped at: Completed 06-01-PLAN.md (Color Token Foundation)
 Resume file: None
-Next: Continue Phase 6 (Design System) - Plan 06-03 next.
+Next: Continue Phase 6 (Design System) - Plans 06-03, 06-04, 06-05 remaining.
 
 ---
 *State initialized: 2026-01-28*
-*Last updated: 2026-01-30 after completing Phase 6 Plan 02 (06-02-SUMMARY.md)*
+*Last updated: 2026-01-30 after completing Phase 6 Plan 01 (06-01-SUMMARY.md)*
