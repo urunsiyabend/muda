@@ -13,6 +13,7 @@ mod context;
 pub mod style;
 pub mod layout;
 pub mod rendering;
+pub mod theme;
 
 pub use app::App;
 pub use context::{AppContext, ViewContext, WindowContext};
@@ -25,6 +26,9 @@ pub use view::View;
 pub use style::{Style, Color, Background, Overflow, FlexDirection, JustifyContent, AlignItems, px, pct};
 pub use layout::{AvailableSpace, LayoutInput, LayoutOutput};
 pub use rendering::{TextSystem, TextureCache, TextureId, ImageSource};
+
+// Re-export theme tokens
+pub use theme::{sp, SpacingToken};
 
 // Re-export event types
 pub use events::{
