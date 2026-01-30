@@ -39,7 +39,7 @@ Progress: [███████████████████████
 - Phase 7 Editor Chrome: **IN PROGRESS** (3 of 5 plans)
 - Plan 07-03: DialogView (14m 15s) - Modal overlay with Stack z-layering, ColorToken::Warning for accent
 - Plan 07-02: Sidebar and Gutter Views (~8m) - SidebarView with collapsed icon rail, GutterView with dynamic width calculation
-- Plan 07-01: TabBar, StatusBar Views - TabBarView, StatusBarView implemented
+- Plan 07-01: TabBar, StatusBar Views (15m) - TabBarView, StatusBarView with theme tokens, presentation data pattern
 - Phase 6 Design System: **COMPLETE** (4 of 4 plans)
 - All unit tests continue passing (33 tests in ora)
 - Note: wgpu_client token migration deferred to Phase 9 (INT-04, INT-05)
@@ -151,6 +151,9 @@ Recent decisions affecting current work:
 - ButtonVariant::style() accepts &Theme parameter - Enables variant color computation based on current theme (06-04)
 - TextElement::set_color() for paint-time updates - Allows dynamic text color changes after layout measurement (06-04)
 - Demo 'T' key handler in event loop - Temporary workaround for theme toggle until action handlers receive context (06-04)
+- Views consume presentation data, own no rendering state (no FontSystem/TextAtlas) - GPUI pattern for ora views (07-01)
+- Borrow-safe render pattern: complete mutable cx operations before getting theme reference - Avoids aliased borrows (07-01)
+- TAB_BAR_HEIGHT (28.0) and STATUS_BAR_HEIGHT (24.0) as exported constants - Consistent heights across layout (07-01)
 - Sidebar collapsed state shows 48px icon rail (not completely hidden) - CONTEXT decision for expand affordance (07-02)
 - Sidebar toggle via dedicated button (not header click) - CONTEXT decision for explicit control (07-02)
 - Gutter current line highlight in text color only (not background) - CONTEXT decision, parent layout handles background (07-02)
@@ -178,10 +181,10 @@ None.
 ## Session Continuity
 
 Last session: 2026-01-30
-Stopped at: Completed 07-03-PLAN.md (DialogView)
+Stopped at: Completed 07-01-PLAN.md (TabBarView, StatusBarView)
 Resume file: None
 Next: Ready for Plan 07-04 (TextAreaView) or 07-05 (Caret/Selection)
 
 ---
 *State initialized: 2026-01-28*
-*Last updated: 2026-01-30 after completing 07-03 (DialogView with Stack z-layering and Warning color token)*
+*Last updated: 2026-01-30 after completing 07-01 (StatusBarView implementation, TabBarView already committed)*
