@@ -1,9 +1,10 @@
-//! Element Library Demo: Comprehensive showcase of Phase 05 elements
+//! Element Library Demo: Comprehensive showcase of Phase 05 + Phase 06 elements
 //! Demonstrates:
 //! 1. Builder API with px() and pct() unit functions
 //! 2. Button variants (Primary, Secondary, Ghost, Destructive)
 //! 3. Stack container for z-layering
 //! 4. Image element with placeholder rendering
+//! 5. Runtime theme switching with theme-aware components
 
 use ora::{
     AnyElement, App, Color, Div, TextElement, View, ViewContext,
@@ -21,11 +22,16 @@ struct ElementLibraryView {
 
 impl View for ElementLibraryView {
     fn render(&self, cx: &mut ViewContext) -> AnyElement {
+        let theme = cx.theme();
+        let bg_color = theme.color(ora::ColorToken::BgPrimary);
+        let title_color = theme.color(ora::ColorToken::FgPrimary);
+        let subtitle_color = theme.color(ora::ColorToken::FgSecondary);
+
         Div::new()
             .flex_col()
             .w(pct(100.0))
             .h(pct(100.0))
-            .bg(Color::rgb(0.08, 0.08, 0.10))
+            .bg(bg_color)
             .p(32.0)
             .gap(32.0)
             // Header
@@ -36,36 +42,41 @@ impl View for ElementLibraryView {
                     .child(
                         TextElement::new("Element Library Demo")
                             .size(32.0)
-                            .color(Color::rgb(0.9, 0.9, 1.0))
+                            .color(title_color)
                     )
                     .child(
-                        TextElement::new("Phase 05: Comprehensive showcase of all elements")
+                        TextElement::new(format!(
+                            "Phase 05 + Theme System - Current theme: {:?} (Press 'T' to toggle)",
+                            theme.mode()
+                        ))
                             .size(14.0)
-                            .color(Color::rgb(0.5, 0.5, 0.6))
+                            .color(subtitle_color)
                     )
             )
             // Section 1: Builder API with unit functions
-            .child(self.builder_api_section())
+            .child(self.builder_api_section(cx))
             // Section 2: Button variants
             .child(self.button_variants_section(cx))
             // Section 3: Stack container
-            .child(self.stack_section())
+            .child(self.stack_section(cx))
             // Section 4: Image elements
-            .child(self.image_section())
+            .child(self.image_section(cx))
             .into()
     }
 }
 
 impl ElementLibraryView {
     /// Section 1: Builder API with px() and pct() unit functions
-    fn builder_api_section(&self) -> Div {
+    fn builder_api_section(&self, cx: &mut ViewContext) -> Div {
+        let section_title_color = cx.theme().color(ora::ColorToken::FgPrimary);
+
         Div::new()
             .flex_col()
             .gap(16.0)
             .child(
                 TextElement::new("1. Builder API - Unit Functions")
                     .size(20.0)
-                    .color(Color::rgb(0.7, 0.8, 0.9))
+                    .color(section_title_color)
             )
             .child(
                 Div::new()
@@ -129,19 +140,22 @@ impl ElementLibraryView {
     }
 
     /// Section 2: Button variants with hover/active states
-    fn button_variants_section(&self, _cx: &mut ViewContext) -> Div {
+    fn button_variants_section(&self, cx: &mut ViewContext) -> Div {
+        let section_title_color = cx.theme().color(ora::ColorToken::FgPrimary);
+        let hint_color = cx.theme().color(ora::ColorToken::FgMuted);
+
         Div::new()
             .flex_col()
             .gap(16.0)
             .child(
                 TextElement::new("2. Button Variants - Hover/Active/Focus States")
                     .size(20.0)
-                    .color(Color::rgb(0.7, 0.8, 0.9))
+                    .color(section_title_color)
             )
             .child(
                 TextElement::new("Hover over buttons (lighten), click and hold (darken), Tab for focus ring")
                     .size(12.0)
-                    .color(Color::rgb(0.5, 0.5, 0.6))
+                    .color(hint_color)
             )
             .child(
                 Div::new()
@@ -199,19 +213,22 @@ impl ElementLibraryView {
     }
 
     /// Section 3: Stack container with z-layering
-    fn stack_section(&self) -> Div {
+    fn stack_section(&self, cx: &mut ViewContext) -> Div {
+        let section_title_color = cx.theme().color(ora::ColorToken::FgPrimary);
+        let hint_color = cx.theme().color(ora::ColorToken::FgMuted);
+
         Div::new()
             .flex_col()
             .gap(16.0)
             .child(
                 TextElement::new("3. Stack Container - Z-Layering")
                     .size(20.0)
-                    .color(Color::rgb(0.7, 0.8, 0.9))
+                    .color(section_title_color)
             )
             .child(
                 TextElement::new("Three overlapping rectangles - gray (bottom), purple (middle), gold (top)")
                     .size(12.0)
-                    .color(Color::rgb(0.5, 0.5, 0.6))
+                    .color(hint_color)
             )
             .child(
                 stack()
@@ -253,19 +270,22 @@ impl ElementLibraryView {
     }
 
     /// Section 4: Image elements with ObjectFit
-    fn image_section(&self) -> Div {
+    fn image_section(&self, cx: &mut ViewContext) -> Div {
+        let section_title_color = cx.theme().color(ora::ColorToken::FgPrimary);
+        let hint_color = cx.theme().color(ora::ColorToken::FgMuted);
+
         Div::new()
             .flex_col()
             .gap(16.0)
             .child(
                 TextElement::new("4. Image Elements - ObjectFit Placeholder")
                     .size(20.0)
-                    .color(Color::rgb(0.7, 0.8, 0.9))
+                    .color(section_title_color)
             )
             .child(
                 TextElement::new("Image placeholders (actual texture rendering deferred to future phase)")
                     .size(12.0)
-                    .color(Color::rgb(0.5, 0.5, 0.6))
+                    .color(hint_color)
             )
             .child(
                 Div::new()
@@ -286,7 +306,7 @@ impl ElementLibraryView {
                             .child(
                                 TextElement::new("Contain")
                                     .size(12.0)
-                                    .color(Color::rgb(0.5, 0.5, 0.6))
+                                    .color(hint_color)
                             )
                     )
                     // Cover
@@ -304,7 +324,7 @@ impl ElementLibraryView {
                             .child(
                                 TextElement::new("Cover")
                                     .size(12.0)
-                                    .color(Color::rgb(0.5, 0.5, 0.6))
+                                    .color(hint_color)
                             )
                     )
                     // Fill
@@ -322,7 +342,7 @@ impl ElementLibraryView {
                             .child(
                                 TextElement::new("Fill")
                                     .size(12.0)
-                                    .color(Color::rgb(0.5, 0.5, 0.6))
+                                    .color(hint_color)
                             )
                     )
             )
@@ -343,6 +363,7 @@ fn main() {
             let button_destructive = cx.focus_handle();
 
             log::info!("Element library demo initialized");
+            log::info!("Theme starts in dark mode. Press 'T' to toggle between dark and light themes.");
 
             let view = ElementLibraryView {
                 button_primary,
@@ -351,7 +372,7 @@ fn main() {
                 button_destructive,
             };
             cx.set_root_view(view);
-            log::info!("Element library demo ready!");
+            log::info!("Element library demo ready! Buttons use theme-aware colors.");
         })
         .run();
 }

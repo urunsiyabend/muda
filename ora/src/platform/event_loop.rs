@@ -214,6 +214,38 @@ impl ApplicationHandler for OraApp {
                                 gpu_state.window.request_redraw();
                             }
                             // Tab handled, skip action matching
+                        } else if let Key::Character(c) = &keyboard_event.keystroke.key {
+                            // DEMO HACK: Handle 'T' key for theme toggle
+                            // This is a temporary workaround for demos until action handlers get context access
+                            if c == "t" || c == "T" {
+                                use crate::theme::{Theme, ThemeMode};
+                                let current_mode = self.app_context.theme().mode();
+                                let new_theme = match current_mode {
+                                    ThemeMode::Dark => Theme::light(),
+                                    ThemeMode::Light => Theme::dark(),
+                                };
+                                let new_mode = new_theme.mode();
+                                self.app_context.set_theme(new_theme);
+                                log::info!("Theme toggled to: {:?}", new_mode);
+
+                                // Request redraw to show new theme
+                                if let Some(gpu_state) = &self.gpu_state {
+                                    gpu_state.window.request_redraw();
+                                }
+                            } else {
+                                // Match keystroke against keymap
+                                let context = KeyContext::new(); // TODO: Build context from focus stack
+                                if let Some(action) = self.app_context.match_action(&keyboard_event.keystroke, &context) {
+                                    // Clone the action so we can dispatch it with mutable context
+                                    let action_clone = action.boxed_clone();
+                                    self.app_context.dispatch_action(&*action_clone);
+
+                                    // Request redraw after action dispatch
+                                    if let Some(gpu_state) = &self.gpu_state {
+                                        gpu_state.window.request_redraw();
+                                    }
+                                }
+                            }
                         } else {
                             // Match keystroke against keymap
                             let context = KeyContext::new(); // TODO: Build context from focus stack
