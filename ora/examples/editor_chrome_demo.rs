@@ -1,11 +1,11 @@
 //! Editor Chrome Demo: Integration showcase of all Phase 7 views
 //!
 //! Demonstrates:
-//! 1. TabBarView - horizontal tab bar with dirty indicator
+//! 1. TabBarView - horizontal tab bar with dirty indicator and close buttons
 //! 2. StatusBarView - bottom status bar with cursor position, language
-//! 3. SidebarView - collapsible file explorer panel
+//! 3. SidebarView - collapsible file explorer panel with visible toggle
 //! 4. GutterView - line number gutter
-//! 5. TextAreaView - syntax-highlighted text with caret
+//! 5. TextAreaView - syntax-highlighted text with caret and current line highlight
 //! 6. DialogView - modal overlay for unsaved changes
 //! 7. Theme switching (dark/light)
 //!
@@ -13,11 +13,12 @@
 //! - 'T': Toggle theme (dark/light)
 //! - 'D': Toggle dialog visibility
 //! - 'S': Toggle sidebar collapsed/expanded
-//! - 'Tab': Cycle through tabs
+//! - Ctrl+Tab: Cycle to next tab
+//! - Ctrl+Shift+Tab: Cycle to previous tab (same as Ctrl+Tab for now)
 
 use ora::{
     AnyElement, App, Div, Model, View, ViewContext,
-    pct,
+    pct, px,
     ColorToken,
     TabBarView, StatusBarView, SidebarView, GutterView, TextAreaView, DialogView,
     stack,
@@ -372,47 +373,42 @@ impl View for EditorChromeDemo {
         // Now get theme for container styling
         let theme = cx.theme();
 
-        // Build main layout
-        // Column (full window)
-        // +-- TabBarView (28px height)
-        // +-- Row (flex: 1)
-        // |   +-- SidebarView (220px or 48px collapsed)
-        // |   +-- Column (editor area)
-        // |       +-- Row (gutter + text)
-        // |           +-- GutterView
-        // |           +-- TextAreaView
-        // +-- StatusBarView (24px height)
+        // Build main layout (professional IDE structure):
+        // Row (full window)
+        // +-- SidebarView (260px or 48px collapsed, left edge)
+        // +-- Column (main area, flex: 1)
+        //     +-- TabBarView (36px height, inside main area after sidebar)
+        //     +-- Row (flex: 1, editor content)
+        //     |   +-- GutterView
+        //     |   +-- TextAreaView (overflow_hidden for clipping)
+        //     +-- StatusBarView (28px height)
 
-        // Editor content: gutter + text area
+        // Editor content: gutter + text area (with overflow clipping)
         let editor_row = Div::new()
             .flex_row()
             .grow(1.0)
+            .overflow_hidden() // Clip content to prevent text overlap on resize
             .child(gutter_element)
             .child(text_area_element);
 
-        // Editor column (for future: minimap, breadcrumbs, etc.)
-        let editor_column = Div::new()
+        // Main area column: tab bar + editor + status bar
+        let main_area = Div::new()
             .flex_col()
             .grow(1.0)
             .bg(theme.color(ColorToken::BgPrimary))
-            .child(editor_row);
+            .overflow_hidden() // Ensure content stays within bounds
+            .child(tab_bar_element)
+            .child(editor_row)
+            .child(status_bar_element);
 
-        // Main content row: sidebar + editor
-        let content_row = Div::new()
-            .flex_row()
-            .grow(1.0)
-            .child(sidebar_element)
-            .child(editor_column);
-
-        // Main layout without dialog
+        // Root layout: sidebar + main area side by side
         let main_layout = Div::new()
-            .flex_col()
+            .flex_row()
             .w(pct(100.0))
             .h(pct(100.0))
             .bg(theme.color(ColorToken::BgPrimary))
-            .child(tab_bar_element)
-            .child(content_row)
-            .child(status_bar_element);
+            .child(sidebar_element)
+            .child(main_area);
 
         // If dialog is showing, wrap in Stack for overlay
         match &dialog_data {
@@ -446,10 +442,14 @@ fn main() {
 
             log::info!("Editor Chrome Demo initialized");
             log::info!("Keyboard controls:");
-            log::info!("  'T' - Toggle theme (dark/light)");
-            log::info!("  'D' - Toggle dialog visibility");
-            log::info!("  'S' - Toggle sidebar collapsed/expanded");
-            log::info!("  'Tab' - Cycle through tabs");
+            log::info!("  'T'           - Toggle theme (dark/light)");
+            log::info!("  'D'           - Toggle dialog visibility");
+            log::info!("  'S'           - Toggle sidebar collapsed/expanded");
+            log::info!("  Ctrl+Tab      - Cycle to next tab");
+            log::info!("  Ctrl+Shift+Tab- Cycle to previous tab");
+            log::info!("");
+            log::info!("Note: S and D keys require keyboard events routed to the view.");
+            log::info!("      Currently only T (theme toggle) works from event loop.");
 
             // Create and set the root view
             let view = EditorChromeDemo {
@@ -458,8 +458,10 @@ fn main() {
             };
             cx.set_root_view(view);
 
-            // Store model in a way we can access it for keyboard handlers
-            // For now, keyboard handlers are in the event loop (like T key in element_library_demo)
+            // Note: For S/D/Tab keyboard shortcuts to work, they need to be handled
+            // via the action system or added to event_loop.rs similar to the 'T' key.
+            // This is a known limitation documented in STATE.md:
+            // "Action and button handlers lack context access"
         })
         .run();
 }
