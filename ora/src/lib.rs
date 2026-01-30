@@ -41,7 +41,7 @@ pub use events::{
 pub use elements::{button, Button, ButtonVariant, Div, Stack, TextElement, stack, Image, img, img_from_bytes, ObjectFit};
 
 // Re-export views
-pub use views::{DialogView, SidebarView, StatusBarView, TabBarView};
+pub use views::{DialogView, GutterView, SidebarView, StatusBarView, TabBarView};
 
 /// Run the application.
 /// This is a convenience function that delegates to App::run().

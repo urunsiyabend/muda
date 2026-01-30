@@ -17,13 +17,16 @@
 //! - `StatusBarView`: Bottom status bar with cursor position, language, etc.
 //! - `DialogView`: Modal dialog for confirmations (unsaved changes, etc.)
 //! - `SidebarView`: Collapsible file explorer panel
+//! - `GutterView`: Line number gutter with current line highlighting
 
 pub mod dialog;
+pub mod gutter;
 pub mod sidebar;
 pub mod status_bar;
 pub mod tab_bar;
 
 pub use dialog::DialogView;
+pub use gutter::GutterView;
 pub use sidebar::SidebarView;
 pub use status_bar::StatusBarView;
 pub use tab_bar::TabBarView;
