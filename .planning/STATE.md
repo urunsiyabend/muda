@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-01-28)
 ## Current Position
 
 Phase: 6 of 9 (Design System)
-Plan: 2 of 5 in current phase
+Plan: 3 of 5 in current phase
 Status: In progress
-Last activity: 2026-01-30 - Completed 06-01-PLAN.md (Color Token Foundation)
+Last activity: 2026-01-30 - Completed 06-03-PLAN.md (Theme Context Integration)
 
-Progress: [████████████████████░░] 88% Phase 6 (2 of 5 plans complete)
+Progress: [████████████████████░░] 91% Phase 6 (3 of 5 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 25 (Phase 1: 3, Phase 2: 6, Phase 3: 4, Phase 4: 5, Phase 5: 5, Phase 6: 2)
-- Average duration: ~8m per plan
-- Total execution time: ~4 hours 9 minutes
+- Total plans completed: 26 (Phase 1: 3, Phase 2: 6, Phase 3: 4, Phase 4: 5, Phase 5: 5, Phase 6: 3)
+- Average duration: ~7.5m per plan
+- Total execution time: ~4 hours 16 minutes
 
 **By Phase:**
 
@@ -32,10 +32,11 @@ Progress: [████████████████████░░] 8
 | 03-reactive-state-system | 4 | ~21m | ~5m 15s |
 | 04-event-system | 5 | ~74m | ~15m |
 | 05-element-library | 5 | ~34m | ~6m 48s |
-| 06-design-system | 2 | ~11m | ~5m 30s |
+| 06-design-system | 3 | ~18m | ~6m |
 
 **Recent Trend:**
-- Phase 6 Design System: **IN PROGRESS** (2 of 5 plans)
+- Phase 6 Design System: **IN PROGRESS** (3 of 5 plans)
+- Plan 06-03: Theme Context Integration (7m) - Theme in AppContext, ThemeChanged event, theme() on all contexts
 - Plan 06-01: Color Token Foundation (6m 38s) - PaletteColor with 11-step gray scale, Theme struct, 12 semantic ColorToken variants
 - Plan 06-02: Spacing and Typography Tokens (4m) - sp() spacing scale, TextSize with bundled font/line-height
 - Phase 5 Element Library: **COMPLETE** (5 of 5 plans) ✅
@@ -141,6 +142,9 @@ Recent decisions affecting current work:
 - TextSize bundles font_size and line_height - Prevents mismatched font/line-height pairs (06-02)
 - Dual naming for TextSize - Semantic names (Body, Small) and scale aliases (Sm, Xs) (06-02)
 - FontFamily enum distinguishes UI vs Code fonts - Automatic suggestion from TextSize::Code (06-02)
+- Theme stored in AppContext with dark mode default - Centralizes theme for global access, AppContext::new() initializes Theme::dark() (06-03)
+- Raw pointer for app_context in PaintContext - Necessary to avoid borrow checker aliasing (immutable app_context + mutable entity_storage) (06-03)
+- ThemeChanged global event for theme switching - Simple marker event, subscribers query theme() directly (06-03)
 
 ### Pending Todos
 
@@ -149,6 +153,7 @@ None.
 ### Blockers/Concerns
 
 - Unsafe code in OraWindow::render() should be revisited (not a blocker, but noted for future refactoring)
+- Raw pointer in PaintContext for app_context (follows same pattern, safe during paint phase, but noted for potential refactoring)
 
 ### Known Issues
 
@@ -158,10 +163,10 @@ None.
 ## Session Continuity
 
 Last session: 2026-01-30
-Stopped at: Completed 06-01-PLAN.md (Color Token Foundation)
+Stopped at: Completed 06-03-PLAN.md (Theme Context Integration)
 Resume file: None
-Next: Continue Phase 6 (Design System) - Plans 06-03, 06-04, 06-05 remaining.
+Next: Continue Phase 6 (Design System) - Plans 06-04, 06-05 remaining.
 
 ---
 *State initialized: 2026-01-28*
-*Last updated: 2026-01-30 after completing Phase 6 Plan 01 (06-01-SUMMARY.md)*
+*Last updated: 2026-01-30 after completing Phase 6 Plan 03 (06-03-SUMMARY.md)*
