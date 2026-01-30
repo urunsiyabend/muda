@@ -69,6 +69,11 @@ impl TextElement {
         self.style.flex_grow = v;
         self
     }
+
+    /// Set the text color (for use during paint phase)
+    pub fn set_color(&mut self, color: Color) {
+        self.color = color;
+    }
 }
 
 /// State persisted through the rendering lifecycle

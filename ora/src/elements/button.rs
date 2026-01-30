@@ -3,6 +3,7 @@ use crate::elements::text::{TextElement, TextState};
 use crate::events::focus::{FocusHandle, FocusId};
 use crate::events::mouse::HitboxId;
 use crate::style::*;
+use crate::theme::{ColorToken, Theme};
 
 /// Button visual variants
 #[derive(Clone, Copy, Debug, Default)]
@@ -33,110 +34,138 @@ struct ButtonStyle {
 
 impl ButtonVariant {
     /// Get the style configuration for this variant in the given state
-    pub fn style(&self, state: ButtonState) -> ButtonStyle {
+    pub fn style(&self, state: ButtonState, theme: &Theme) -> ButtonStyle {
         match (self, state) {
-            // Primary - blue tones
+            // Primary - uses accent colors from theme
             (Self::Primary, ButtonState::Enabled) => ButtonStyle {
-                bg: Color::rgb(0.25, 0.45, 0.85),
-                text: Color::white(),
+                bg: theme.color(ColorToken::Accent),
+                text: theme.color(ColorToken::BgPrimary),  // Contrast with accent
                 border_color: None,
                 border_width: 0.0,
             },
             (Self::Primary, ButtonState::Hover) => ButtonStyle {
-                bg: Color::rgb(0.20, 0.38, 0.75),
-                text: Color::white(),
+                bg: theme.color(ColorToken::AccentHover),
+                text: theme.color(ColorToken::BgPrimary),
                 border_color: None,
                 border_width: 0.0,
             },
             (Self::Primary, ButtonState::Active) => ButtonStyle {
-                bg: Color::rgb(0.15, 0.30, 0.65),
-                text: Color::white(),
+                bg: theme.color(ColorToken::AccentActive),
+                text: theme.color(ColorToken::BgPrimary),
                 border_color: None,
                 border_width: 0.0,
             },
-            (Self::Primary, ButtonState::Disabled) => ButtonStyle {
-                bg: Color::rgba(0.25, 0.45, 0.85, 0.5),
-                text: Color::rgba(1.0, 1.0, 1.0, 0.6),
-                border_color: None,
-                border_width: 0.0,
+            (Self::Primary, ButtonState::Disabled) => {
+                let mut bg = theme.color(ColorToken::Accent);
+                bg.a = 0.5;
+                let mut text = theme.color(ColorToken::BgPrimary);
+                text.a = 0.6;
+                ButtonStyle { bg, text, border_color: None, border_width: 0.0 }
             },
 
-            // Secondary - gray tones
+            // Secondary - uses bg/fg colors from theme
             (Self::Secondary, ButtonState::Enabled) => ButtonStyle {
-                bg: Color::rgb(0.90, 0.90, 0.91),
-                text: Color::rgb(0.1, 0.1, 0.1),
+                bg: theme.color(ColorToken::BgSecondary),
+                text: theme.color(ColorToken::FgPrimary),
                 border_color: None,
                 border_width: 0.0,
             },
             (Self::Secondary, ButtonState::Hover) => ButtonStyle {
-                bg: Color::rgb(0.85, 0.85, 0.86),
-                text: Color::rgb(0.1, 0.1, 0.1),
+                bg: theme.color(ColorToken::BgElevated),
+                text: theme.color(ColorToken::FgPrimary),
                 border_color: None,
                 border_width: 0.0,
             },
             (Self::Secondary, ButtonState::Active) => ButtonStyle {
-                bg: Color::rgb(0.78, 0.78, 0.80),
-                text: Color::rgb(0.1, 0.1, 0.1),
+                bg: theme.color(ColorToken::Border),
+                text: theme.color(ColorToken::FgPrimary),
                 border_color: None,
                 border_width: 0.0,
             },
-            (Self::Secondary, ButtonState::Disabled) => ButtonStyle {
-                bg: Color::rgba(0.90, 0.90, 0.91, 0.5),
-                text: Color::rgba(0.1, 0.1, 0.1, 0.4),
-                border_color: None,
-                border_width: 0.0,
+            (Self::Secondary, ButtonState::Disabled) => {
+                let mut bg = theme.color(ColorToken::BgSecondary);
+                bg.a = 0.5;
+                let mut text = theme.color(ColorToken::FgPrimary);
+                text.a = 0.4;
+                ButtonStyle { bg, text, border_color: None, border_width: 0.0 }
             },
 
             // Ghost - transparent with hover
             (Self::Ghost, ButtonState::Enabled) => ButtonStyle {
                 bg: Color::transparent(),
-                text: Color::rgb(0.9, 0.9, 0.9),
+                text: theme.color(ColorToken::FgPrimary),
                 border_color: None,
                 border_width: 0.0,
             },
-            (Self::Ghost, ButtonState::Hover) => ButtonStyle {
-                bg: Color::rgba(1.0, 1.0, 1.0, 0.1),
-                text: Color::rgb(0.9, 0.9, 0.9),
-                border_color: None,
-                border_width: 0.0,
+            (Self::Ghost, ButtonState::Hover) => {
+                let mut bg = theme.color(ColorToken::FgPrimary);
+                bg.a = 0.1;
+                ButtonStyle {
+                    bg,
+                    text: theme.color(ColorToken::FgPrimary),
+                    border_color: None,
+                    border_width: 0.0,
+                }
             },
-            (Self::Ghost, ButtonState::Active) => ButtonStyle {
-                bg: Color::rgba(1.0, 1.0, 1.0, 0.2),
-                text: Color::rgb(0.9, 0.9, 0.9),
-                border_color: None,
-                border_width: 0.0,
+            (Self::Ghost, ButtonState::Active) => {
+                let mut bg = theme.color(ColorToken::FgPrimary);
+                bg.a = 0.2;
+                ButtonStyle {
+                    bg,
+                    text: theme.color(ColorToken::FgPrimary),
+                    border_color: None,
+                    border_width: 0.0,
+                }
             },
-            (Self::Ghost, ButtonState::Disabled) => ButtonStyle {
-                bg: Color::transparent(),
-                text: Color::rgba(0.9, 0.9, 0.9, 0.4),
-                border_color: None,
-                border_width: 0.0,
+            (Self::Ghost, ButtonState::Disabled) => {
+                let mut text = theme.color(ColorToken::FgPrimary);
+                text.a = 0.4;
+                ButtonStyle {
+                    bg: Color::transparent(),
+                    text,
+                    border_color: None,
+                    border_width: 0.0,
+                }
             },
 
-            // Destructive - red tones
+            // Destructive - uses error color from theme
             (Self::Destructive, ButtonState::Enabled) => ButtonStyle {
-                bg: Color::rgb(0.85, 0.20, 0.20),
-                text: Color::white(),
+                bg: theme.color(ColorToken::Error),
+                text: theme.color(ColorToken::BgPrimary),
                 border_color: None,
                 border_width: 0.0,
             },
-            (Self::Destructive, ButtonState::Hover) => ButtonStyle {
-                bg: Color::rgb(0.75, 0.15, 0.15),
-                text: Color::white(),
-                border_color: None,
-                border_width: 0.0,
+            (Self::Destructive, ButtonState::Hover) => {
+                // Slightly darker error for hover
+                let mut bg = theme.color(ColorToken::Error);
+                bg.r *= 0.9;
+                bg.g *= 0.9;
+                bg.b *= 0.9;
+                ButtonStyle {
+                    bg,
+                    text: theme.color(ColorToken::BgPrimary),
+                    border_color: None,
+                    border_width: 0.0,
+                }
             },
-            (Self::Destructive, ButtonState::Active) => ButtonStyle {
-                bg: Color::rgb(0.65, 0.10, 0.10),
-                text: Color::white(),
-                border_color: None,
-                border_width: 0.0,
+            (Self::Destructive, ButtonState::Active) => {
+                let mut bg = theme.color(ColorToken::Error);
+                bg.r *= 0.8;
+                bg.g *= 0.8;
+                bg.b *= 0.8;
+                ButtonStyle {
+                    bg,
+                    text: theme.color(ColorToken::BgPrimary),
+                    border_color: None,
+                    border_width: 0.0,
+                }
             },
-            (Self::Destructive, ButtonState::Disabled) => ButtonStyle {
-                bg: Color::rgba(0.85, 0.20, 0.20, 0.5),
-                text: Color::rgba(1.0, 1.0, 1.0, 0.6),
-                border_color: None,
-                border_width: 0.0,
+            (Self::Destructive, ButtonState::Disabled) => {
+                let mut bg = theme.color(ColorToken::Error);
+                bg.a = 0.5;
+                let mut text = theme.color(ColorToken::BgPrimary);
+                text.a = 0.6;
+                ButtonStyle { bg, text, border_color: None, border_width: 0.0 }
             },
         }
     }
@@ -236,12 +265,11 @@ impl Element for Button {
 
         let layout_id = cx.request_layout(&style);
 
-        // Create text element with appropriate color for the current variant
-        // Note: We use default enabled state color here since we can't update color dynamically
-        let default_style = self.variant.style(ButtonState::Enabled);
+        // Create text element with a placeholder color
+        // Note: Text color will be set during paint when we have access to theme
         let mut text_element = TextElement::new(self.label.clone())
             .size(14.0)
-            .color(default_style.text);
+            .color(Color::white()); // Placeholder, will be updated in paint
 
         // Request layout for text child
         let (text_layout_id, text_state) = text_element.request_layout(cx);
@@ -293,8 +321,8 @@ impl Element for Button {
             ButtonState::Enabled
         };
 
-        // Get variant-specific style
-        let button_style = self.variant.style(button_state);
+        // Get variant-specific style WITH THEME
+        let button_style = self.variant.style(button_state, cx.theme());
 
         // Build Style for rendering
         let mut style = Style::default();
@@ -308,8 +336,9 @@ impl Element for Button {
         // Paint button background
         cx.paint_styled_rect(&style, &bounds);
 
-        // Paint text element
+        // Update text color based on theme before painting
         if let Some(text_element) = &mut self.text_element {
+            text_element.set_color(button_style.text);
             text_element.paint(&mut state.text_state, cx);
         }
     }
