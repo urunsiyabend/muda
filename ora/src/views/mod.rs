@@ -18,15 +18,18 @@
 //! - `DialogView`: Modal dialog for confirmations (unsaved changes, etc.)
 //! - `SidebarView`: Collapsible file explorer panel
 //! - `GutterView`: Line number gutter with current line highlighting
+//! - `TextAreaView`: Syntax-highlighted text rendering with caret and selection
 
 pub mod dialog;
 pub mod gutter;
 pub mod sidebar;
 pub mod status_bar;
 pub mod tab_bar;
+pub mod text_area;
 
 pub use dialog::DialogView;
 pub use gutter::GutterView;
 pub use sidebar::SidebarView;
 pub use status_bar::StatusBarView;
 pub use tab_bar::TabBarView;
+pub use text_area::{TextAreaView, LINE_HEIGHT};
