@@ -127,10 +127,13 @@ Plans:
   3. Typography scale defines semantic text sizes (body=14, small=12, code=14, heading=18) with line heights
   4. Theme system supports dark and light palettes, switchable at runtime via palette swap
   5. All design tokens live in ora crate only, no tokens remain in wgpu_client
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- (Plans will be created during /gsd:plan-phase 6)
+- [ ] 06-01-PLAN.md -- Color token foundation (palette + ColorToken enum + Theme struct) (Wave 1)
+- [ ] 06-02-PLAN.md -- Spacing and typography tokens (sp() function + TextSize enum) (Wave 1)
+- [ ] 06-03-PLAN.md -- Theme context integration (AppContext storage + set_theme + ThemeChanged) (Wave 2)
+- [ ] 06-04-PLAN.md -- Element migration and demo (Button theme-aware + theme toggle demo) (Wave 3)
 
 ### Phase 7: Editor Chrome & Text Editing
 **Goal**: Migrate editor chrome components (TabBar, StatusBar, Sidebar, Gutter, Dialog) and text editing core (TextArea, Caret, Selection) to ora Views
@@ -195,11 +198,11 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 3. Reactive State System | 4/4 | Complete | 2026-01-29 |
 | 4. Event System | 5/5 | Complete | 2026-01-29 |
 | 5. Element Library | 5/5 | Complete | 2026-01-30 |
-| 6. Design System | 0/TBD | Not started | - |
+| 6. Design System | 0/4 | In Progress | - |
 | 7. Editor Chrome & Text Editing | 0/TBD | Not started | - |
 | 8. Advanced UI & Widgets | 0/TBD | Not started | - |
 | 9. Transitions & Integration | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-01-28*
-*Last updated: 2026-01-30 after Phase 5 execution complete (5/5 plans, verified)*
+*Last updated: 2026-01-30 after Phase 6 planning complete (4 plans created)*
