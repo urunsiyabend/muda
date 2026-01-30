@@ -7,6 +7,7 @@ pub mod events;
 pub mod platform;
 pub mod subscription;
 pub mod view;
+pub mod views;
 pub(crate) mod window;
 mod context;
 
@@ -38,6 +39,9 @@ pub use events::{
 
 // Re-export primitive elements
 pub use elements::{button, Button, ButtonVariant, Div, Stack, TextElement, stack, Image, img, img_from_bytes, ObjectFit};
+
+// Re-export views
+pub use views::{DialogView, SidebarView, StatusBarView, TabBarView};
 
 /// Run the application.
 /// This is a convenience function that delegates to App::run().
