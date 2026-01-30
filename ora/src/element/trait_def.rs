@@ -6,6 +6,7 @@ use crate::events::dispatch::EventHandlers;
 use crate::layout::{compute_flexbox, AvailableSpace, LayoutInput, LayoutOutput};
 use crate::style::units::{Rect, Size};
 use crate::style::{Color, Style};
+use crate::theme::Theme;
 
 /// Opaque handle to layout data produced by the layout engine.
 #[derive(Debug, Clone, Copy)]
@@ -320,6 +321,9 @@ impl<'a> PrepaintContext<'a> {
 /// Context for producing GPU rendering commands.
 /// Called last in the lifecycle, produces visual output.
 pub struct PaintContext<'a> {
+    /// Raw pointer to AppContext for theme access.
+    /// SAFETY: Valid for the duration of the paint phase.
+    pub(crate) app_context: *const crate::context::AppContext,
     pub(crate) entity_storage: &'a mut EntityStorage,
     pub(crate) paint_commands: Vec<PaintCommand>,
     pub(crate) window_size: (u32, u32),
@@ -331,6 +335,7 @@ pub struct PaintContext<'a> {
 
 impl<'a> PaintContext<'a> {
     pub(crate) fn new(
+        app_context: &'a crate::context::AppContext,
         entity_storage: &'a mut EntityStorage,
         window_size: (u32, u32),
         layout_outputs: &'a [LayoutOutput],
@@ -338,6 +343,7 @@ impl<'a> PaintContext<'a> {
         focus_state: &'a FocusState,
     ) -> Self {
         Self {
+            app_context: app_context as *const _,
             entity_storage,
             paint_commands: Vec::new(),
             window_size,
@@ -396,6 +402,13 @@ impl<'a> PaintContext<'a> {
     /// Get the current window size.
     pub fn window_size(&self) -> (u32, u32) {
         self.window_size
+    }
+
+    /// Access the current theme for color lookups
+    pub fn theme(&self) -> &Theme {
+        // SAFETY: The app_context pointer is valid for the duration of the paint phase.
+        // It's set by event_loop before calling paint and not mutated during paint.
+        unsafe { (*self.app_context).theme() }
     }
 
     // Interaction state queries

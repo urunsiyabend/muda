@@ -281,7 +281,11 @@ impl ApplicationHandler for OraApp {
                         }
 
                         // Phase 3: Paint
+                        // SAFETY: We use a raw pointer for app_context to avoid aliasing issues.
+                        // The app_context reference is valid for the entire paint phase and not mutated.
+                        let app_context_ptr = &self.app_context as *const AppContext;
                         let mut paint_cx = PaintContext::new(
+                            unsafe { &*app_context_ptr },
                             &mut self.app_context.entity_storage,
                             window_size,
                             &layout_outputs,
