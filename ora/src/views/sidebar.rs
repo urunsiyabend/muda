@@ -9,15 +9,15 @@
 
 use crate::context::ViewContext;
 use crate::element::AnyElement;
-use crate::elements::{button, Div, TextElement};
+use crate::elements::{Div, TextElement};
 use crate::events::focus::FocusHandle;
 use crate::style::{pct, px};
 use crate::theme::ColorToken;
 use crate::view::View;
 use core_editor::view_model::SidebarPresentation;
 
-/// Default expanded sidebar width in logical pixels.
-pub const SIDEBAR_DEFAULT_WIDTH: f32 = 220.0;
+/// Default expanded sidebar width in logical pixels (increased for readability).
+pub const SIDEBAR_DEFAULT_WIDTH: f32 = 260.0;
 
 /// Icon rail width when collapsed (not completely hidden per CONTEXT decision).
 pub const SIDEBAR_COLLAPSED_WIDTH: f32 = 48.0;
@@ -143,9 +143,22 @@ impl SidebarView {
             .size(TITLE_FONT_SIZE)
             .color(theme.color(ColorToken::FgSecondary));
 
-        // Toggle button (collapse/expand arrow)
-        let toggle_label = if self.is_collapsed { ">" } else { "<" };
-        let toggle_button = button(toggle_label).ghost();
+        // Toggle button (collapse/expand arrow) - always visible ASCII character
+        // Using clear ASCII arrows that are always visible (not hidden on hover)
+        let toggle_icon = if self.is_collapsed { ">" } else { "<" };
+        let toggle_button = Div::new()
+            .flex_row()
+            .align_center()
+            .justify_center()
+            .w(px(24.0))
+            .h(px(24.0))
+            .border_radius(4.0)
+            .hover_bg(theme.color(ColorToken::BgElevated))
+            .child(
+                TextElement::new(toggle_icon)
+                    .size(TITLE_FONT_SIZE + 2.0)
+                    .color(theme.color(ColorToken::FgPrimary))
+            );
 
         // Header container with space-between layout
         Div::new()
@@ -188,8 +201,20 @@ impl SidebarView {
     fn render_collapsed(&self, cx: &mut ViewContext) -> Div {
         let theme = cx.theme();
 
-        // Simple expand button in the icon rail
-        let expand_button = button("Files").ghost();
+        // Expand button with visible ">" arrow at top
+        let expand_button = Div::new()
+            .flex_row()
+            .align_center()
+            .justify_center()
+            .w(px(32.0))
+            .h(px(32.0))
+            .border_radius(4.0)
+            .hover_bg(theme.color(ColorToken::BgElevated))
+            .child(
+                TextElement::new(">")
+                    .size(TITLE_FONT_SIZE + 2.0)
+                    .color(theme.color(ColorToken::FgPrimary))
+            );
 
         Div::new()
             .flex_col()
@@ -198,7 +223,7 @@ impl SidebarView {
             .bg(theme.color(ColorToken::BgSecondary))
             .border(1.0, theme.color(ColorToken::Border))
             .align_center()
-            .p(8.0)
+            .py(8.0)
             .child(expand_button)
     }
 
@@ -307,7 +332,7 @@ mod tests {
 
     #[test]
     fn test_sidebar_constants() {
-        assert_eq!(SIDEBAR_DEFAULT_WIDTH, 220.0);
+        assert_eq!(SIDEBAR_DEFAULT_WIDTH, 260.0);
         assert_eq!(SIDEBAR_COLLAPSED_WIDTH, 48.0);
         assert_eq!(HEADER_HEIGHT, 36.0);
     }
