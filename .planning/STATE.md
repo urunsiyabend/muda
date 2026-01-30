@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-01-28)
 
 **Core value:** A single, authoritative UI toolkit that eliminates duplicated styling, enforces consistent design tokens, and provides a scalable GPUI-like component model for the entire GPU client.
-**Current focus:** Phase 7 in progress: Editor Chrome & Text Editing
+**Current focus:** Phase 7 COMPLETE: Editor Chrome & Text Editing
 
 ## Current Position
 
-Phase: 7 of 9 (Editor Chrome & Text Editing)
-Plan: 4 of 5 in current phase
-Status: In progress
-Last activity: 2026-01-30 - Completed 07-04-PLAN.md (TextAreaView, CaretElement)
+Phase: 7 of 9 (Editor Chrome & Text Editing) - COMPLETE
+Plan: 5 of 5 in current phase
+Status: Phase complete
+Last activity: 2026-01-30 - Completed 07-05-PLAN.md (Integration Demo with fixes)
 
-Progress: [███████████████████████████░] ~94% (31 of ~33 plans complete)
+Progress: [████████████████████████████░] ~97% (32 of ~33 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 31 (Phase 1: 3, Phase 2: 6, Phase 3: 4, Phase 4: 5, Phase 5: 5, Phase 6: 4, Phase 7: 4)
+- Total plans completed: 32 (Phase 1: 3, Phase 2: 6, Phase 3: 4, Phase 4: 5, Phase 5: 5, Phase 6: 4, Phase 7: 5)
 - Average duration: ~7.5m per plan
-- Total execution time: ~5 hours 14 minutes
+- Total execution time: ~5 hours 29 minutes
 
 **By Phase:**
 
@@ -33,10 +33,11 @@ Progress: [███████████████████████
 | 04-event-system | 5 | ~74m | ~15m |
 | 05-element-library | 5 | ~34m | ~6m 48s |
 | 06-design-system | 4 | ~42m | ~10m 30s |
-| 07-editor-chrome-text-editing | 4 | ~39m | ~10m |
+| 07-editor-chrome-text-editing | 5 | ~54m | ~11m |
 
 **Recent Trend:**
-- Phase 7 Editor Chrome: **IN PROGRESS** (4 of 5 plans)
+- Phase 7 Editor Chrome: **COMPLETE** (5 of 5 plans)
+- Plan 07-05: Integration Demo (~15m) - Professional IDE layout, height fixes, toggle improvements
 - Plan 07-04: TextAreaView, CaretElement (~9m) - Syntax highlighting ColorTokens, blink logic with 500ms rate/timeout
 - Plan 07-03: DialogView (14m 15s) - Modal overlay with Stack z-layering, ColorToken::Warning for accent
 - Plan 07-02: Sidebar and Gutter Views (~8m) - SidebarView with collapsed icon rail, GutterView with dynamic width calculation
@@ -168,6 +169,14 @@ Recent decisions affecting current work:
 - Syntax highlighting via ColorToken mapping - TextStyle->ColorToken for consistent theme-aware syntax colors (07-04)
 - Selection backgrounds solid (ColorToken::Selection) - Per CONTEXT decision, not semi-transparent (07-04)
 - LINE_HEIGHT=21.0 as exported constant - Consistent line height across text area and gutter (07-04)
+- TAB_BAR_HEIGHT=36px (increased from 28px) for readability (07-05)
+- STATUS_BAR_HEIGHT=28px (increased from 24px) for readability (07-05)
+- SIDEBAR_DEFAULT_WIDTH=260px (increased from 220px) for readability (07-05)
+- IDE Layout: Tab bar inside main area (after sidebar), not spanning full width (07-05)
+- Tab close button (x) with hover highlight - proof of concept without icon system (07-05)
+- Sidebar toggle uses Div with always-visible ASCII arrows (< or >) (07-05)
+- Current line highlight via per-line bg color check (is_current_line) (07-05)
+- overflow_hidden on text area/editor for clipping intent (scissor not GPU-rendered) (07-05)
 
 ### Pending Todos
 
@@ -187,10 +196,10 @@ None.
 ## Session Continuity
 
 Last session: 2026-01-30
-Stopped at: Completed 07-04-PLAN.md (TextAreaView, CaretElement)
+Stopped at: Completed 07-05-PLAN.md (Integration Demo with post-checkpoint fixes)
 Resume file: None
-Next: Ready for Plan 07-05 (remaining editor chrome)
+Next: Ready for Phase 8 (API Layer & File Operations) or Phase 9 (Integration)
 
 ---
 *State initialized: 2026-01-28*
-*Last updated: 2026-01-30 after completing 07-04 (TextAreaView, CaretElement, syntax highlighting ColorTokens)*
+*Last updated: 2026-01-30 after completing 07-05 (Integration Demo, layout fixes, readability improvements)*
