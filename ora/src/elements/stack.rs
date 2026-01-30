@@ -48,14 +48,14 @@ impl Stack {
         self
     }
 
-    // Sizing
-    pub fn w(mut self, w: f32) -> Self {
-        self.style.width = Length::Px(w);
+    // Sizing - accepts impl Into<Length> for flexibility (px, pct, etc.)
+    pub fn w(mut self, w: impl Into<Length>) -> Self {
+        self.style.width = w.into();
         self
     }
 
-    pub fn h(mut self, h: f32) -> Self {
-        self.style.height = Length::Px(h);
+    pub fn h(mut self, h: impl Into<Length>) -> Self {
+        self.style.height = h.into();
         self
     }
 
