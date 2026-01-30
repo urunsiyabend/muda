@@ -28,7 +28,7 @@ pub use layout::{AvailableSpace, LayoutInput, LayoutOutput};
 pub use rendering::{TextSystem, TextureCache, TextureId, ImageSource};
 
 // Re-export theme tokens
-pub use theme::{sp, SpacingToken};
+pub use theme::{Theme, ColorToken, ThemeMode, PaletteColor, sp, SpacingToken, TextSize, FontFamily};
 
 // Re-export event types
 pub use events::{
