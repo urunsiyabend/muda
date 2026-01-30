@@ -16,8 +16,8 @@ use crate::theme::ColorToken;
 use crate::view::View;
 use core_editor::view_model::SidebarPresentation;
 
-/// Default expanded sidebar width in logical pixels (increased for readability).
-pub const SIDEBAR_DEFAULT_WIDTH: f32 = 260.0;
+/// Default expanded sidebar width in logical pixels (professional IDE width).
+pub const SIDEBAR_DEFAULT_WIDTH: f32 = 320.0;
 
 /// Icon rail width when collapsed (not completely hidden per CONTEXT decision).
 pub const SIDEBAR_COLLAPSED_WIDTH: f32 = 48.0;
@@ -273,7 +273,7 @@ mod tests {
             focused: false,
             directory_name: "my_project".to_string(),
             entries: vec![],
-            width: 200,
+            width: 320,
         };
 
         let view = SidebarView::new(presentation);
@@ -332,7 +332,7 @@ mod tests {
 
     #[test]
     fn test_sidebar_constants() {
-        assert_eq!(SIDEBAR_DEFAULT_WIDTH, 260.0);
+        assert_eq!(SIDEBAR_DEFAULT_WIDTH, 320.0);
         assert_eq!(SIDEBAR_COLLAPSED_WIDTH, 48.0);
         assert_eq!(HEADER_HEIGHT, 36.0);
     }

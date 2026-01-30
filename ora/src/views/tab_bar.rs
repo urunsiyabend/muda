@@ -11,17 +11,17 @@ use crate::theme::ColorToken;
 use crate::view::View;
 use core_editor::view_model::{TabBarPresentation, TabPresentation};
 
-/// Tab bar height in logical pixels (increased for readability).
-pub const TAB_BAR_HEIGHT: f32 = 36.0;
+/// Tab bar height in logical pixels (professional IDE height).
+pub const TAB_BAR_HEIGHT: f32 = 44.0;
 
 /// Horizontal padding within each tab.
-const TAB_PADDING_H: f32 = 14.0;
+const TAB_PADDING_H: f32 = 16.0;
 
 /// Vertical padding within each tab.
-const TAB_PADDING_V: f32 = 8.0;
+const TAB_PADDING_V: f32 = 10.0;
 
-/// Font size for tab titles (increased for readability).
-const TAB_FONT_SIZE: f32 = 13.0;
+/// Font size for tab titles (readable size).
+const TAB_FONT_SIZE: f32 = 14.0;
 
 /// Gap between tabs.
 const TAB_GAP: f32 = 1.0;
@@ -186,7 +186,7 @@ mod tests {
 
     #[test]
     fn test_tab_bar_constants() {
-        assert_eq!(TAB_BAR_HEIGHT, 36.0);
-        assert_eq!(TAB_FONT_SIZE, 13.0);
+        assert_eq!(TAB_BAR_HEIGHT, 44.0);
+        assert_eq!(TAB_FONT_SIZE, 14.0);
     }
 }
