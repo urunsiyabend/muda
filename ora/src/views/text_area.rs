@@ -219,11 +219,19 @@ impl TextAreaView {
             })
             .collect();
 
-        Div::new()
+        // Build line container with current line highlight if applicable
+        let mut line_div = Div::new()
             .flex_row()
+            .w(pct(100.0))
             .h(px(LINE_HEIGHT))
-            .children(span_elements)
-            .into()
+            .children(span_elements);
+
+        // Apply current line background highlight
+        if line.is_current_line {
+            line_div = line_div.bg(theme.color(ColorToken::CurrentLineBg));
+        }
+
+        line_div.into()
     }
 
     /// Renders the caret element.
@@ -254,7 +262,7 @@ impl View for TextAreaView {
         let theme = cx.theme();
 
         // Build layer structure:
-        // 1. Current line background
+        // 1. Current line background (integrated into each line div)
         // 2. Selection backgrounds
         // 3. Text content
         // 4. Caret
@@ -266,7 +274,7 @@ impl View for TextAreaView {
             .w(pct(100.0))
             .h(pct(100.0))
             .bg(theme.color(ColorToken::BgPrimary))
-            .overflow_scroll() // CONTEXT: no wrap, horizontal scroll
+            .overflow_hidden() // Clip content to viewport bounds
             // In a full implementation, we'd use absolute positioning for layers
             // For now, render lines in order with text taking precedence
             .children(text_lines)
