@@ -17,7 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Reactive State System** - Observation, effect queue, Model change tracking
 - [x] **Phase 4: Event System** - Mouse/keyboard routing, focus management, two-phase dispatch
 - [x] **Phase 5: Element Library** - Styled primitives (Div, Text), builder API, layout containers
-- [ ] **Phase 6: Design System** - Color tokens, spacing scale, typography, theme switching
+- [x] **Phase 6: Design System** - Color tokens, spacing scale, typography, theme switching
 - [ ] **Phase 7: Editor Chrome & Text Editing** - TabBar, StatusBar, Sidebar, Gutter, Dialog, TextArea, Caret, Selection
 - [ ] **Phase 8: Advanced UI & Widgets** - CommandPalette, FileTree, PanelManager, Button, Input, Checkbox, etc.
 - [ ] **Phase 9: Transitions & Integration** - CSS-like animations, wgpu_client migration, cleanup
@@ -130,10 +130,10 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 06-01-PLAN.md -- Color token foundation (palette + ColorToken enum + Theme struct) (Wave 1)
-- [ ] 06-02-PLAN.md -- Spacing and typography tokens (sp() function + TextSize enum) (Wave 1)
-- [ ] 06-03-PLAN.md -- Theme context integration (AppContext storage + set_theme + ThemeChanged) (Wave 2)
-- [ ] 06-04-PLAN.md -- Element migration and demo (Button theme-aware + theme toggle demo) (Wave 3)
+- [x] 06-01-PLAN.md -- Color token foundation (palette + ColorToken enum + Theme struct) (Wave 1)
+- [x] 06-02-PLAN.md -- Spacing and typography tokens (sp() function + TextSize enum) (Wave 1)
+- [x] 06-03-PLAN.md -- Theme context integration (AppContext storage + set_theme + ThemeChanged) (Wave 2)
+- [x] 06-04-PLAN.md -- Element migration and demo (Button theme-aware + theme toggle demo) (Wave 3)
 
 ### Phase 7: Editor Chrome & Text Editing
 **Goal**: Migrate editor chrome components (TabBar, StatusBar, Sidebar, Gutter, Dialog) and text editing core (TextArea, Caret, Selection) to ora Views
@@ -198,11 +198,11 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 3. Reactive State System | 4/4 | Complete | 2026-01-29 |
 | 4. Event System | 5/5 | Complete | 2026-01-29 |
 | 5. Element Library | 5/5 | Complete | 2026-01-30 |
-| 6. Design System | 0/4 | In Progress | - |
+| 6. Design System | 4/4 | Complete | 2026-01-30 |
 | 7. Editor Chrome & Text Editing | 0/TBD | Not started | - |
 | 8. Advanced UI & Widgets | 0/TBD | Not started | - |
 | 9. Transitions & Integration | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-01-28*
-*Last updated: 2026-01-30 after Phase 6 planning complete (4 plans created)*
+*Last updated: 2026-01-30 after Phase 6 execution complete (design system foundation established)*

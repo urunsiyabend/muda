@@ -28,7 +28,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **ELEM-02**: Styled `Div` primitive — GPU-rendered rectangle with background, border, padding, margin, border-radius
 - [x] **ELEM-03**: Styled `Text` primitive — `Text::new("hello").size(14)` API, framework manages glyphon internally
 - [x] **ELEM-04**: Elements can have children (composable tree structure)
-- [ ] **ELEM-05**: Tailwind-style builder API — `div().flex().gap(4).bg(color).padding(8)` fluent syntax
+- [x] **ELEM-05**: Tailwind-style builder API — `div().flex().gap(4).bg(color).padding(8)` fluent syntax
 - [~] **ELEM-06**: Automatic scissor clipping — framework manages clip rects per element, children cannot render outside parent bounds (API infrastructure implemented: PaintContext push_clip/pop_clip, PaintCommand SetScissor/ResetScissor; GPU execution and Div integration deferred)
 
 ### Layout
@@ -58,11 +58,11 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Design System
 
-- [ ] **DS-01**: Consolidated color token system — semantic roles (BgPrimary, FgSecondary, AccentPrimary, etc.) as single source of truth
-- [ ] **DS-02**: Spacing token system — named spacing values (xs=4, sm=8, md=12, lg=16, xl=24) enforced through API
-- [ ] **DS-03**: Typography scale — semantic text sizes (body=14, small=12, code=14, heading=18) with line height multipliers
-- [ ] **DS-04**: Theme system — dark and light palettes, switchable at runtime via token palette swap
-- [ ] **DS-05**: All design tokens defined in ora crate — no tokens in wgpu_client, single import for all styling
+- [x] **DS-01**: Consolidated color token system — semantic roles (BgPrimary, FgSecondary, AccentPrimary, etc.) as single source of truth
+- [x] **DS-02**: Spacing token system — named spacing values (xs=4, sm=8, md=12, lg=16, xl=24) enforced through API
+- [x] **DS-03**: Typography scale — semantic text sizes (body=14, small=12, code=14, heading=18) with line height multipliers
+- [x] **DS-04**: Theme system — dark and light palettes, switchable at runtime via token palette swap
+- [~] **DS-05**: All design tokens defined in ora crate — no tokens in wgpu_client, single import for all styling (ora tokens complete; wgpu_client migration deferred to Phase 9)
 
 ### Transitions
 
