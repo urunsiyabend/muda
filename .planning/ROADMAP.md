@@ -148,10 +148,14 @@ Plans:
   6. TextArea renders syntax-highlighted text with selection backgrounds using ora Views
   7. Caret displays blinking cursor with configurable blink rate using ora elements
   8. Selection renders background highlights for selected text ranges using ora elements
-**Plans**: TBD
+**Plans**: 5 plans
 
 Plans:
-- (Plans will be created during /gsd:plan-phase 7)
+- [ ] 07-01-PLAN.md -- Views module + TabBarView + StatusBarView (Wave 1)
+- [ ] 07-02-PLAN.md -- SidebarView + GutterView (Wave 1)
+- [ ] 07-03-PLAN.md -- DialogView with modal overlay (Wave 1)
+- [ ] 07-04-PLAN.md -- TextAreaView + CaretElement + syntax highlighting (Wave 2)
+- [ ] 07-05-PLAN.md -- Integration demo and verification (Wave 3)
 
 ### Phase 8: Advanced UI & Widgets
 **Goal**: Migrate advanced UI components (CommandPalette, FileTree, PanelManager, AppLayout) and all widget primitives to ora
@@ -199,10 +203,10 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 4. Event System | 5/5 | Complete | 2026-01-29 |
 | 5. Element Library | 5/5 | Complete | 2026-01-30 |
 | 6. Design System | 4/4 | Complete | 2026-01-30 |
-| 7. Editor Chrome & Text Editing | 0/TBD | Not started | - |
+| 7. Editor Chrome & Text Editing | 0/5 | Not started | - |
 | 8. Advanced UI & Widgets | 0/TBD | Not started | - |
 | 9. Transitions & Integration | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-01-28*
-*Last updated: 2026-01-30 after Phase 6 execution complete (design system foundation established)*
+*Last updated: 2026-01-30 after Phase 7 planning complete (5 plans in 3 waves)*
