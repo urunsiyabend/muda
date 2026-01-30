@@ -8,6 +8,7 @@ use crate::events::interaction::InteractionState;
 use crate::events::mouse::HitboxId;
 use crate::events::types::MouseButton;
 use crate::subscription::{CleanupAction, GlobalEventBus, ObserverSet, SubscriberSet, Subscription};
+use crate::theme::Theme;
 use crate::view::View;
 use crate::window::OraWindow;
 use std::any::TypeId;
@@ -16,9 +17,14 @@ use std::future::Future;
 use std::sync::Arc;
 use winit::window::Window;
 
+/// Global event emitted when theme changes
+#[derive(Clone, Copy, Debug)]
+pub struct ThemeChanged;
+
 /// Application context providing access to entity storage.
 /// Owns the entity storage and provides methods for entity management.
 pub struct AppContext {
+    theme: Theme,
     pub(crate) entity_storage: EntityStorage,
     pub(crate) effect_queue: EffectQueue,
     pub(crate) observer_set: ObserverSet,
@@ -36,6 +42,7 @@ pub struct AppContext {
 impl AppContext {
     pub(crate) fn new(entity_storage: EntityStorage) -> Self {
         Self {
+            theme: Theme::dark(),  // Default to dark theme
             entity_storage,
             effect_queue: EffectQueue::new(),
             observer_set: ObserverSet::new(),
@@ -75,6 +82,17 @@ impl AppContext {
         self.subscriber_set.remove_all_for_entity(entity_id);
 
         self.entity_storage.remove(entity)
+    }
+
+    /// Get the current theme
+    pub fn theme(&self) -> &Theme {
+        &self.theme
+    }
+
+    /// Set the theme and emit ThemeChanged global event
+    pub fn set_theme(&mut self, theme: Theme) {
+        self.theme = theme;
+        self.emit_global(ThemeChanged);
     }
 
     /// Create a new reactive model and return a handle to it.
@@ -456,6 +474,11 @@ impl<'a> ViewContext<'a> {
         // Phase 3 will implement reactivity tracking here
     }
 
+    /// Get the current theme
+    pub fn theme(&self) -> &Theme {
+        self.app_context.theme()
+    }
+
     /// Create a new reactive model and return a handle to it.
     pub fn new_model<T: 'static>(&mut self, value: T) -> Model<T> {
         self.app_context.new_model(value)
@@ -654,5 +677,15 @@ impl<'a> WindowContext<'a> {
     /// Bind a keystroke to an action
     pub fn bind_key(&mut self, keystroke: Keystroke, action: Box<dyn Action>) {
         self.app_context.bind_key(keystroke, action);
+    }
+
+    /// Get the current theme
+    pub fn theme(&self) -> &Theme {
+        self.app_context.theme()
+    }
+
+    /// Set the theme and emit ThemeChanged global event
+    pub fn set_theme(&mut self, theme: Theme) {
+        self.app_context.set_theme(theme);
     }
 }
