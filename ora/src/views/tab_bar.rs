@@ -11,14 +11,14 @@ use crate::theme::ColorToken;
 use crate::view::View;
 use core_editor::view_model::{TabBarPresentation, TabPresentation};
 
-/// Tab bar height in logical pixels (professional IDE height).
-pub const TAB_BAR_HEIGHT: f32 = 44.0;
+/// Minimum tab bar height in logical pixels (content + padding determines actual).
+pub const TAB_BAR_MIN_HEIGHT: f32 = 36.0;
 
 /// Horizontal padding within each tab.
 const TAB_PADDING_H: f32 = 16.0;
 
-/// Vertical padding within each tab.
-const TAB_PADDING_V: f32 = 10.0;
+/// Vertical padding within each tab (generous padding for comfortable height).
+const TAB_PADDING_V: f32 = 12.0;
 
 /// Font size for tab titles (readable size).
 const TAB_FONT_SIZE: f32 = 14.0;
@@ -141,10 +141,11 @@ impl View for TabBarView {
         // Now get theme for container styling
         let theme = cx.theme();
 
-        // Build the tab bar container
+        // Build the tab bar container (min_h + padding lets content determine height)
         Div::new()
             .flex_row()
-            .h(px(TAB_BAR_HEIGHT))
+            .min_h(px(TAB_BAR_MIN_HEIGHT))
+            .align_center()
             .bg(theme.color(ColorToken::BgSecondary))
             .border(1.0, theme.color(ColorToken::Border))
             .gap(TAB_GAP)
@@ -186,7 +187,7 @@ mod tests {
 
     #[test]
     fn test_tab_bar_constants() {
-        assert_eq!(TAB_BAR_HEIGHT, 44.0);
+        assert_eq!(TAB_BAR_MIN_HEIGHT, 36.0);
         assert_eq!(TAB_FONT_SIZE, 14.0);
     }
 }
