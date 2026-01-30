@@ -38,7 +38,10 @@ pub use events::{
 };
 
 // Re-export primitive elements
-pub use elements::{button, Button, ButtonVariant, Div, Stack, TextElement, stack, Image, img, img_from_bytes, ObjectFit};
+pub use elements::{
+    button, Button, ButtonVariant, Div, Stack, TextElement, stack, Image, img, img_from_bytes, ObjectFit,
+    CaretElement, BLINK_RATE, ACTIVITY_TIMEOUT, CARET_WIDTH,
+};
 
 // Re-export views
 pub use views::{DialogView, GutterView, SidebarView, StatusBarView, TabBarView};
