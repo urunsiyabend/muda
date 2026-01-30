@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-01-28)
 
 **Core value:** A single, authoritative UI toolkit that eliminates duplicated styling, enforces consistent design tokens, and provides a scalable GPUI-like component model for the entire GPU client.
-**Current focus:** Phase 6 complete, ready for Phase 7: Editor Chrome & Text Editing
+**Current focus:** Phase 7 in progress: Editor Chrome & Text Editing
 
 ## Current Position
 
-Phase: 6 of 9 (Design System)
-Plan: 4 of 4 in current phase
-Status: Phase complete
-Last activity: 2026-01-30 - Completed Phase 6 (Design System foundation)
+Phase: 7 of 9 (Editor Chrome & Text Editing)
+Plan: 2 of 4 in current phase
+Status: In progress
+Last activity: 2026-01-30 - Completed 07-02-PLAN.md (Sidebar and Gutter Views)
 
-Progress: [████████████████████] 100% Phase 6 (4 of 4 plans complete)
+Progress: [██████████████████████████░░] ~87% (29 of ~33 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 27 (Phase 1: 3, Phase 2: 6, Phase 3: 4, Phase 4: 5, Phase 5: 5, Phase 6: 4)
-- Average duration: ~7.6m per plan
-- Total execution time: ~4 hours 40 minutes
+- Total plans completed: 29 (Phase 1: 3, Phase 2: 6, Phase 3: 4, Phase 4: 5, Phase 5: 5, Phase 6: 4, Phase 7: 2)
+- Average duration: ~7.5m per plan
+- Total execution time: ~4 hours 50 minutes
 
 **By Phase:**
 
@@ -33,15 +33,14 @@ Progress: [████████████████████] 100% Ph
 | 04-event-system | 5 | ~74m | ~15m |
 | 05-element-library | 5 | ~34m | ~6m 48s |
 | 06-design-system | 4 | ~42m | ~10m 30s |
+| 07-editor-chrome-text-editing | 2 | ~16m | ~8m |
 
 **Recent Trend:**
-- Phase 6 Design System: **COMPLETE** (4 of 4 plans) ✅
-- Plan 06-04: Element Theme Integration (24m) - Button uses theme tokens, runtime theme switching demo with 'T' key
-- Plan 06-03: Theme Context Integration (7m) - Theme in AppContext, ThemeChanged event, theme() on all contexts
-- Plan 06-01: Color Token Foundation (6m 38s) - PaletteColor with 11-step gray scale, Theme struct, 12 semantic ColorToken variants
-- Plan 06-02: Spacing and Typography Tokens (4m) - sp() spacing scale, TextSize with bundled font/line-height
-- Phase 5 Element Library: **COMPLETE** (5 of 5 plans) ✅
-- All unit tests continue passing (15 tests)
+- Phase 7 Editor Chrome: **IN PROGRESS** (2 of 4 plans)
+- Plan 07-02: Sidebar and Gutter Views (~8m) - SidebarView with collapsed icon rail, GutterView with dynamic width calculation
+- Plan 07-01: TabBar, StatusBar, Dialog Views - TabBarView, StatusBarView, DialogView implemented
+- Phase 6 Design System: **COMPLETE** (4 of 4 plans)
+- All unit tests continue passing (33 tests in ora)
 - Note: wgpu_client token migration deferred to Phase 9 (INT-04, INT-05)
 
 *Updated after each plan completion*
@@ -151,6 +150,10 @@ Recent decisions affecting current work:
 - ButtonVariant::style() accepts &Theme parameter - Enables variant color computation based on current theme (06-04)
 - TextElement::set_color() for paint-time updates - Allows dynamic text color changes after layout measurement (06-04)
 - Demo 'T' key handler in event loop - Temporary workaround for theme toggle until action handlers receive context (06-04)
+- Sidebar collapsed state shows 48px icon rail (not completely hidden) - CONTEXT decision for expand affordance (07-02)
+- Sidebar toggle via dedicated button (not header click) - CONTEXT decision for explicit control (07-02)
+- Gutter current line highlight in text color only (not background) - CONTEXT decision, parent layout handles background (07-02)
+- GutterView dynamic width: LEFT_PADDING + digits*char_width + SEPARATOR_PADDING - Adapts to document size (07-02)
 
 ### Pending Todos
 
@@ -170,10 +173,10 @@ None.
 ## Session Continuity
 
 Last session: 2026-01-30
-Stopped at: Completed Phase 6 (Design System)
+Stopped at: Completed 07-02-PLAN.md (Sidebar and Gutter Views)
 Resume file: None
-Next: Ready for Phase 7 (Editor Chrome & Text Editing)
+Next: Ready for Plan 07-03 (TextAreaView and CaretView)
 
 ---
 *State initialized: 2026-01-28*
-*Last updated: 2026-01-30 after completing Phase 6 (design system foundation established, wgpu_client migration deferred to Phase 9)*
+*Last updated: 2026-01-30 after completing 07-02 (SidebarView with collapsed icon rail, GutterView with dynamic width calculation)*
