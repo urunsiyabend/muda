@@ -27,8 +27,8 @@ use core_editor::view_model::{GutterModel, LinePresentation};
 /// Left padding in pixels before line numbers.
 pub const LEFT_PADDING: f32 = 8.0;
 
-/// Padding for separator (space + separator char width).
-pub const SEPARATOR_PADDING: f32 = 16.0;
+/// Right padding in pixels after line numbers (before border).
+pub const RIGHT_PADDING: f32 = 12.0;
 
 /// Font size for line numbers (matches editor text).
 const LINE_NUMBER_FONT_SIZE: f32 = 14.0;
@@ -142,11 +142,6 @@ impl GutterView {
             .size(LINE_NUMBER_FONT_SIZE)
             .color(number_color);
 
-        // Separator
-        let separator = TextElement::new(" |")
-            .size(LINE_NUMBER_FONT_SIZE)
-            .color(theme.color(ColorToken::Border));
-
         // Row container
         Div::new()
             .flex_row()
@@ -154,7 +149,6 @@ impl GutterView {
             .justify_end()
             .align_center()
             .child(number_element)
-            .child(separator)
     }
 }
 
@@ -174,7 +168,7 @@ pub fn calculate_width(gutter: &GutterModel, char_width: f32) -> f32 {
     }
 
     let digit_count = gutter.line_number_width();
-    LEFT_PADDING + (digit_count as f32 * char_width) + SEPARATOR_PADDING
+    LEFT_PADDING + (digit_count as f32 * char_width) + RIGHT_PADDING
 }
 
 impl View for GutterView {
@@ -200,12 +194,15 @@ impl View for GutterView {
         // Now get theme for container styling
         let theme = cx.theme();
 
-        // Build gutter container
+        // Build gutter container (same bg as editor, right border as separator)
         Div::new()
             .flex_col()
             .w(px(width))
-            .bg(theme.color(ColorToken::BgSecondary))
-            .px(LEFT_PADDING)
+            .shrink(0.0)  // Don't shrink below calculated width
+            .bg(theme.color(ColorToken::BgPrimary))
+            .pl(LEFT_PADDING)
+            .pr(RIGHT_PADDING)
+            .border_right(1.0, theme.color(ColorToken::Border))
             .children(line_rows)
             .into()
     }
@@ -241,8 +238,8 @@ mod tests {
         let char_width = 8.0;
 
         let width = calculate_width(&gutter, char_width);
-        // LEFT_PADDING(8) + digits(3)*char_width(8) + SEPARATOR_PADDING(16) = 48
-        assert_eq!(width, 48.0);
+        // LEFT_PADDING(8) + digits(3)*char_width(8) + RIGHT_PADDING(12) = 44
+        assert_eq!(width, 44.0);
     }
 
     #[test]
@@ -261,20 +258,20 @@ mod tests {
         // Single digit (9 lines or less)
         let gutter = GutterModel::new(true, 9);
         let width = calculate_width(&gutter, char_width);
-        // LEFT_PADDING(8) + digits(1)*8 + SEPARATOR(16) = 32
-        assert_eq!(width, 32.0);
+        // LEFT_PADDING(8) + digits(1)*8 + RIGHT_PADDING(12) = 28
+        assert_eq!(width, 28.0);
 
         // Two digits (10-99 lines)
         let gutter = GutterModel::new(true, 50);
         let width = calculate_width(&gutter, char_width);
-        // LEFT_PADDING(8) + digits(2)*8 + SEPARATOR(16) = 40
-        assert_eq!(width, 40.0);
+        // LEFT_PADDING(8) + digits(2)*8 + RIGHT_PADDING(12) = 36
+        assert_eq!(width, 36.0);
 
         // Four digits (1000+ lines)
         let gutter = GutterModel::new(true, 1500);
         let width = calculate_width(&gutter, char_width);
-        // LEFT_PADDING(8) + digits(4)*8 + SEPARATOR(16) = 56
-        assert_eq!(width, 56.0);
+        // LEFT_PADDING(8) + digits(4)*8 + RIGHT_PADDING(12) = 52
+        assert_eq!(width, 52.0);
     }
 
     #[test]
@@ -283,18 +280,18 @@ mod tests {
         let lines = vec![];
 
         let view = GutterView::new(gutter, lines);
-        assert_eq!(view.calculate_width(), 48.0); // Default char_width = 8.0
+        assert_eq!(view.calculate_width(), 44.0); // Default char_width = 8.0
 
         let mut view2 = GutterView::new(GutterModel::new(true, 100), vec![]);
         view2.set_char_width(10.0);
-        // LEFT_PADDING(8) + digits(3)*char_width(10) + SEPARATOR(16) = 54
-        assert_eq!(view2.calculate_width(), 54.0);
+        // LEFT_PADDING(8) + digits(3)*char_width(10) + RIGHT_PADDING(12) = 50
+        assert_eq!(view2.calculate_width(), 50.0);
     }
 
     #[test]
     fn test_gutter_constants() {
         assert_eq!(LEFT_PADDING, 8.0);
-        assert_eq!(SEPARATOR_PADDING, 16.0);
+        assert_eq!(RIGHT_PADDING, 12.0);
         assert_eq!(LINE_NUMBER_FONT_SIZE, 14.0);
         assert_eq!(LINE_HEIGHT, 21.0);
     }

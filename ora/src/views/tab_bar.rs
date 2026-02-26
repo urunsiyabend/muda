@@ -6,22 +6,22 @@
 use crate::context::ViewContext;
 use crate::element::AnyElement;
 use crate::elements::{Div, TextElement};
-use crate::style::px;
+use crate::style::{pct, px};
 use crate::theme::ColorToken;
 use crate::view::View;
 use core_editor::view_model::{TabBarPresentation, TabPresentation};
 
-/// Minimum tab bar height in logical pixels (content + padding determines actual).
-pub const TAB_BAR_MIN_HEIGHT: f32 = 36.0;
+/// Tab bar height in logical pixels (matches sidebar header for alignment).
+pub const TAB_BAR_HEIGHT: f32 = 36.0;
 
 /// Horizontal padding within each tab.
-const TAB_PADDING_H: f32 = 16.0;
+const TAB_PADDING_H: f32 = 12.0;
 
-/// Vertical padding within each tab (generous padding for comfortable height).
-const TAB_PADDING_V: f32 = 12.0;
+/// Vertical padding within each tab.
+const TAB_PADDING_V: f32 = 8.0;
 
 /// Font size for tab titles (readable size).
-const TAB_FONT_SIZE: f32 = 14.0;
+const TAB_FONT_SIZE: f32 = 13.0;
 
 /// Gap between tabs.
 const TAB_GAP: f32 = 1.0;
@@ -141,10 +141,12 @@ impl View for TabBarView {
         // Now get theme for container styling
         let theme = cx.theme();
 
-        // Build the tab bar container (min_h + padding lets content determine height)
+        // Build the tab bar container (explicit height and width for consistent alignment)
         Div::new()
             .flex_row()
-            .min_h(px(TAB_BAR_MIN_HEIGHT))
+            .w(pct(100.0))  // Full width of parent container
+            .h(px(TAB_BAR_HEIGHT))
+            .shrink(0.0)  // Don't shrink below fixed height
             .align_center()
             .bg(theme.color(ColorToken::BgSecondary))
             .border(1.0, theme.color(ColorToken::Border))
@@ -187,7 +189,7 @@ mod tests {
 
     #[test]
     fn test_tab_bar_constants() {
-        assert_eq!(TAB_BAR_MIN_HEIGHT, 36.0);
-        assert_eq!(TAB_FONT_SIZE, 14.0);
+        assert_eq!(TAB_BAR_HEIGHT, 36.0);
+        assert_eq!(TAB_FONT_SIZE, 13.0);
     }
 }

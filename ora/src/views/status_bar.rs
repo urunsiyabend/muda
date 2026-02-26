@@ -17,17 +17,17 @@ use crate::theme::ColorToken;
 use crate::view::View;
 use core_editor::view_model::StatusPresentation;
 
-/// Minimum status bar height in logical pixels (content + padding determines actual).
-pub const STATUS_BAR_MIN_HEIGHT: f32 = 28.0;
+/// Status bar height in logical pixels (matches tab bar for visual consistency).
+pub const STATUS_BAR_HEIGHT: f32 = 36.0;
 
 /// Font size for status bar text (readable size).
 const STATUS_FONT_SIZE: f32 = 13.0;
 
 /// Horizontal padding for status bar.
-const STATUS_PADDING_H: f32 = 16.0;
+const STATUS_PADDING_H: f32 = 12.0;
 
-/// Vertical padding for status bar.
-const STATUS_PADDING_V: f32 = 8.0;
+/// Vertical padding for status bar (calculated: (36 - ~18 line height) / 2 ≈ 9).
+const STATUS_PADDING_V: f32 = 6.0;
 
 /// Separator character for status sections.
 const SEPARATOR: &str = " | ";
@@ -145,11 +145,12 @@ impl View for StatusBarView {
         // Now get theme for container styling
         let theme = cx.theme();
 
-        // Build the status bar container (min_h + padding, overflow hidden to prevent text overflow)
+        // Build the status bar container (explicit height for consistent sizing)
         Div::new()
             .flex_row()
             .w(pct(100.0))
-            .min_h(px(STATUS_BAR_MIN_HEIGHT))
+            .h(px(STATUS_BAR_HEIGHT))
+            .shrink(0.0)  // Don't shrink below fixed height
             .bg(theme.color(ColorToken::BgSecondary))
             .px(STATUS_PADDING_H)
             .py(STATUS_PADDING_V)
@@ -203,7 +204,7 @@ mod tests {
 
     #[test]
     fn test_status_bar_constants() {
-        assert_eq!(STATUS_BAR_MIN_HEIGHT, 28.0);
+        assert_eq!(STATUS_BAR_HEIGHT, 36.0);
         assert_eq!(STATUS_FONT_SIZE, 13.0);
     }
 

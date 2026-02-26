@@ -2049,6 +2049,7 @@ version = "0.1.0"
 dependencies = [
  "async-executor",
  "bytemuck",
+ "core_editor",
  "env_logger",
  "generational-arena",
  "glyphon",

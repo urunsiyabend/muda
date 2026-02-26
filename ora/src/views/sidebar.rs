@@ -220,8 +220,9 @@ impl SidebarView {
             .flex_col()
             .w(px(SIDEBAR_COLLAPSED_WIDTH))
             .h(pct(100.0))
+            .shrink(0.0)  // Don't shrink below fixed width
             .bg(theme.color(ColorToken::BgSecondary))
-            .border(1.0, theme.color(ColorToken::Border))
+            // No outer border for alignment with main area
             .align_center()
             .py(8.0)
             .child(expand_button)
@@ -235,8 +236,9 @@ impl SidebarView {
             .flex_col()
             .w(px(self.width))
             .h(pct(100.0))
+            .shrink(0.0)  // Don't shrink below fixed width
             .bg(theme.color(ColorToken::BgSecondary))
-            .border(1.0, theme.color(ColorToken::Border))
+            // No outer border - header has its own border for separation
             .child(self.render_header(cx))
             .child(self.render_content(cx))
     }

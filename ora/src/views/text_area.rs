@@ -271,9 +271,10 @@ impl View for TextAreaView {
         // This simplified version uses flex column for line layout.
         Div::new()
             .flex_col()
-            .w(pct(100.0))
+            .grow(1.0)
             .h(pct(100.0))
             .bg(theme.color(ColorToken::BgPrimary))
+            .pl(1.0)
             .overflow_hidden() // Clip content to viewport bounds
             // In a full implementation, we'd use absolute positioning for layers
             // For now, render lines in order with text taking precedence

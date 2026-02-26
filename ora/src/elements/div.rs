@@ -159,6 +159,16 @@ impl Div {
         self
     }
 
+    pub fn pl(mut self, l: f32) -> Self {
+        self.style.padding.left = l;
+        self
+    }
+
+    pub fn pr(mut self, r: f32) -> Self {
+        self.style.padding.right = r;
+        self
+    }
+
     pub fn m(mut self, m: f32) -> Self {
         self.style.margin = Edges::all(m);
         self
@@ -181,6 +191,12 @@ impl Div {
 
     pub fn border(mut self, width: f32, color: Color) -> Self {
         self.style.border.widths = Edges::all(width);
+        self.style.border.color = color;
+        self
+    }
+
+    pub fn border_right(mut self, width: f32, color: Color) -> Self {
+        self.style.border.widths.right = width;
         self.style.border.color = color;
         self
     }
