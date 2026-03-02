@@ -19,15 +19,22 @@ struct TextEntry {
 /// All font resources (FontSystem, TextAtlas, SwashCache) are owned by the framework.
 /// Elements provide text content and style, and text is measured during layout
 /// then batch-rendered during paint phase.
+///
+/// Multi-layer rendering: maintains a pool of TextRenderer instances (one per layer),
+/// all sharing the same TextAtlas. Each layer's text is prepared independently without
+/// overwriting other layers' glyph data. The single-layer API (add_text_area/prepare/render)
+/// is preserved for backward compatibility.
 pub struct TextSystem {
     font_system: FontSystem,
     swash_cache: SwashCache,
     cache: Cache,
     atlas: TextAtlas,
-    text_renderer: TextRenderer,
+    text_renderer: TextRenderer,    // Keep for backward compat (single-layer API)
     viewport: Viewport,
-    // Collected text areas for batch rendering
-    pending_buffers: Vec<TextEntry>,
+    pending_buffers: Vec<TextEntry>, // Keep for backward compat
+    // Multi-layer support
+    layer_renderers: Vec<TextRenderer>,
+    pending_layers: Vec<Vec<TextEntry>>,
 }
 
 impl TextSystem {
@@ -60,6 +67,8 @@ impl TextSystem {
             text_renderer,
             viewport,
             pending_buffers: Vec::new(),
+            layer_renderers: Vec::new(),
+            pending_layers: Vec::new(),
         }
     }
 
@@ -214,16 +223,154 @@ impl TextSystem {
         Ok(())
     }
 
-    /// Clear all pending text areas.
+    /// Clear pending text areas without trimming the atlas.
+    /// Used between layer groups within a single frame.
+    pub fn clear_pending(&mut self) {
+        self.pending_buffers.clear();
+    }
+
+    /// Clear all pending text areas and trim unused atlas space.
     ///
     /// Call this at the start of each frame after rendering is complete.
     pub fn clear(&mut self) {
         self.pending_buffers.clear();
+        // Clear per-layer pending entries
+        for layer in &mut self.pending_layers {
+            layer.clear();
+        }
         self.atlas.trim(); // Free unused atlas space
     }
 
     /// Get mutable access to the FontSystem for advanced text operations.
     pub fn font_system_mut(&mut self) -> &mut FontSystem {
         &mut self.font_system
+    }
+
+    // -------------------------------------------------------------------------
+    // Multi-layer API
+    // -------------------------------------------------------------------------
+
+    /// Ensure at least `count` TextRenderer instances exist for layer rendering.
+    /// New renderers are created on demand sharing the same TextAtlas.
+    /// Renderers are pooled and reused across frames — never shrunk.
+    pub fn ensure_layer_renderers(&mut self, device: &wgpu::Device, count: usize) {
+        while self.layer_renderers.len() < count {
+            let renderer = TextRenderer::new(
+                &mut self.atlas,
+                device,
+                MultisampleState::default(),
+                None,
+            );
+            self.layer_renderers.push(renderer);
+        }
+        // Ensure pending_layers matches
+        while self.pending_layers.len() < count {
+            self.pending_layers.push(Vec::new());
+        }
+    }
+
+    /// Add a text entry to a specific layer for batch rendering.
+    /// The layer_idx must be less than the count passed to ensure_layer_renderers().
+    pub fn add_text_to_layer(
+        &mut self,
+        layer_idx: usize,
+        buffer: Buffer,
+        left: f32,
+        top: f32,
+        clip_bounds: crate::style::Rect,
+        color: Color,
+    ) {
+        let glyphon_color = GlyphonColor::rgba(
+            (color.r * 255.0) as u8,
+            (color.g * 255.0) as u8,
+            (color.b * 255.0) as u8,
+            (color.a * 255.0) as u8,
+        );
+        let bounds = TextBounds {
+            left: clip_bounds.origin.x as i32,
+            top: clip_bounds.origin.y as i32,
+            right: (clip_bounds.origin.x + clip_bounds.size.width) as i32,
+            bottom: (clip_bounds.origin.y + clip_bounds.size.height) as i32,
+        };
+        if layer_idx < self.pending_layers.len() {
+            self.pending_layers[layer_idx].push(TextEntry {
+                buffer,
+                left,
+                top,
+                bounds,
+                default_color: glyphon_color,
+            });
+        }
+    }
+
+    /// Prepare text for a specific layer.
+    /// Must be called after all add_text_to_layer() calls for this layer,
+    /// and before render_layer(). All layer prepares should complete before
+    /// any render_layer() calls to stabilize the atlas.
+    pub fn prepare_layer(
+        &mut self,
+        device: &Device,
+        queue: &Queue,
+        layer_idx: usize,
+        window_width: u32,
+        window_height: u32,
+    ) -> Result<(), glyphon::PrepareError> {
+        // Update viewport (idempotent — same resolution each call within a frame)
+        self.viewport.update(
+            queue,
+            Resolution {
+                width: window_width,
+                height: window_height,
+            },
+        );
+
+        if layer_idx >= self.pending_layers.len() || layer_idx >= self.layer_renderers.len() {
+            return Ok(());
+        }
+
+        let text_areas: Vec<TextArea> = self.pending_layers[layer_idx]
+            .iter()
+            .map(|entry| TextArea {
+                buffer: &entry.buffer,
+                left: entry.left,
+                top: entry.top,
+                scale: 1.0,
+                bounds: entry.bounds,
+                default_color: entry.default_color,
+                custom_glyphs: &[],
+            })
+            .collect();
+
+        self.layer_renderers[layer_idx].prepare(
+            device,
+            queue,
+            &mut self.font_system,
+            &mut self.atlas,
+            &self.viewport,
+            text_areas,
+            &mut self.swash_cache,
+        )?;
+
+        Ok(())
+    }
+
+    /// Render prepared text for a specific layer.
+    /// Must be called after prepare_layer() for this layer.
+    pub fn render_layer(
+        &self,
+        layer_idx: usize,
+        render_pass: &mut RenderPass<'_>,
+    ) -> Result<(), glyphon::RenderError> {
+        if layer_idx >= self.layer_renderers.len() {
+            return Ok(());
+        }
+        self.layer_renderers[layer_idx]
+            .render(&self.atlas, &self.viewport, render_pass)?;
+        Ok(())
+    }
+
+    /// Get the number of available layer renderers.
+    pub fn layer_count(&self) -> usize {
+        self.layer_renderers.len()
     }
 }
