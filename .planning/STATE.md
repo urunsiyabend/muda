@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-01-28)
 
 ## Current Position
 
-Phase: 7 of 9 (Editor Chrome & Text Editing) - COMPLETE
-Plan: 5 of 5 in current phase
-Status: Phase complete
-Last activity: 2026-01-30 - Completed 07-05-PLAN.md (Integration Demo with fixes)
+Phase: 8 of 9 (Advanced UI & Widgets) - In progress
+Plan: 1 of 8 in current phase
+Status: In progress
+Last activity: 2026-03-02 - Completed 08-01-PLAN.md (Widget Foundations: WidgetSize + Input element)
 
-Progress: [████████████████████████████░] ~97% (32 of ~33 plans complete)
+Progress: [████████████████████████████░░] ~83% (33 of ~41 plans complete)
 
 ## Performance Metrics
 
@@ -177,6 +177,11 @@ Recent decisions affecting current work:
 - Sidebar toggle uses Div with always-visible ASCII arrows (< or >) (07-05)
 - Current line highlight via per-line bg color check (is_current_line) (07-05)
 - overflow_hidden on text area/editor for clipping intent (scissor not GPU-rendered) (07-05)
+- WidgetSize enum in button.rs (not a separate file) - co-located with first consumer, imported by all others (08-01)
+- Input uses WidgetSize.height() as min_height (not fixed height) - allows content to expand (08-01)
+- Input text color: FgMuted for placeholder, FgPrimary for value - standard placeholder convention (08-01)
+- Input border: Accent when focused, FgMuted when hovered, Border when normal, BgSecondary when disabled (08-01)
+- Disabled alpha: 0.5 on bg and text - matches Button disabled pattern (08-01)
 
 ### Pending Todos
 
@@ -195,10 +200,10 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-01-30
-Stopped at: Completed 07-05-PLAN.md (Integration Demo with post-checkpoint fixes)
+Last session: 2026-03-02
+Stopped at: Completed 08-01-PLAN.md (Widget Foundations: WidgetSize + Input element)
 Resume file: None
-Next: Ready for Phase 8 (API Layer & File Operations) or Phase 9 (Integration)
+Next: Phase 8 Plan 2 (next widget)
 
 ---
 *State initialized: 2026-01-28*
