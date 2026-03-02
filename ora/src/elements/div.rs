@@ -169,8 +169,50 @@ impl Div {
         self
     }
 
+    pub fn pt(mut self, t: f32) -> Self {
+        self.style.padding.top = t;
+        self
+    }
+
+    pub fn pb(mut self, b: f32) -> Self {
+        self.style.padding.bottom = b;
+        self
+    }
+
     pub fn m(mut self, m: f32) -> Self {
         self.style.margin = Edges::all(m);
+        self
+    }
+
+    pub fn mx(mut self, x: f32) -> Self {
+        self.style.margin.left = x;
+        self.style.margin.right = x;
+        self
+    }
+
+    pub fn my(mut self, y: f32) -> Self {
+        self.style.margin.top = y;
+        self.style.margin.bottom = y;
+        self
+    }
+
+    pub fn mt(mut self, t: f32) -> Self {
+        self.style.margin.top = t;
+        self
+    }
+
+    pub fn mb(mut self, b: f32) -> Self {
+        self.style.margin.bottom = b;
+        self
+    }
+
+    pub fn ml(mut self, l: f32) -> Self {
+        self.style.margin.left = l;
+        self
+    }
+
+    pub fn mr(mut self, r: f32) -> Self {
+        self.style.margin.right = r;
         self
     }
 
