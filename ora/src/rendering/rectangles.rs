@@ -280,7 +280,7 @@ impl RectangleRenderer {
 
     /// Render all prepared rectangles
     /// Draws all instances in a single draw call
-    pub fn render<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
+    pub fn render(&self, render_pass: &mut wgpu::RenderPass<'_>) {
         if self.instance_count == 0 {
             return;
         }
@@ -293,6 +293,25 @@ impl RectangleRenderer {
 
         // Draw 6 vertices (two triangles forming a quad) for each instance
         render_pass.draw(0..6, 0..self.instance_count);
+    }
+
+    /// Render a subset of prepared rectangles by instance range.
+    /// Used for per-layer rendering: draw only the instances belonging to a specific layer.
+    /// `range` specifies the instance indices (e.g., 0..5 draws instances 0-4).
+    pub fn render_range(&self, render_pass: &mut wgpu::RenderPass<'_>, range: std::ops::Range<u32>) {
+        if range.is_empty() || self.bind_group.is_none() {
+            return;
+        }
+        render_pass.set_pipeline(&self.pipeline);
+        if let Some(ref bind_group) = self.bind_group {
+            render_pass.set_bind_group(0, bind_group, &[]);
+        }
+        render_pass.draw(0..6, range);
+    }
+
+    /// Get the number of prepared instances.
+    pub fn instance_count(&self) -> u32 {
+        self.instance_count
     }
 }
 
