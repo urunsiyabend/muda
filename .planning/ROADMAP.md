@@ -19,7 +19,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 5: Element Library** - Styled primitives (Div, Text), builder API, layout containers
 - [x] **Phase 6: Design System** - Color tokens, spacing scale, typography, theme switching
 - [x] **Phase 7: Editor Chrome & Text Editing** - TabBar, StatusBar, Sidebar, Gutter, Dialog, TextArea, Caret, Selection
-- [ ] **Phase 8: Advanced UI & Widgets** - CommandPalette, FileTree, PanelManager, Button, Input, Checkbox, etc.
+- [x] **Phase 8: Advanced UI & Widgets** - CommandPalette, FileTree, PanelManager, Button, Input, Checkbox, etc.
 - [ ] **Phase 9: Transitions & Integration** - CSS-like animations, wgpu_client migration, cleanup
 
 ## Phase Details
@@ -171,14 +171,14 @@ Plans:
 **Plans**: 8 plans
 
 Plans:
-- [ ] 08-01-PLAN.md -- WidgetSize foundation + Button size tiers + Input widget (Wave 1)
-- [ ] 08-02-PLAN.md -- Tab + ListItem + TreeItem navigation widgets (Wave 1)
-- [ ] 08-03-PLAN.md -- Checkbox + Toggle boolean controls (Wave 1)
-- [ ] 08-04-PLAN.md -- Fuzzy match algorithm + CommandPalette view (Wave 2)
-- [ ] 08-05-PLAN.md -- FileTree view + Sidebar integration (Wave 2)
-- [ ] 08-06-PLAN.md -- PanelManager view with resize handle (Wave 2)
-- [ ] 08-07-PLAN.md -- ContextMenu + Toast overlay widgets (Wave 2)
-- [ ] 08-08-PLAN.md -- AppLayout orchestrator + integration demo (Wave 3)
+- [x] 08-01-PLAN.md -- WidgetSize foundation + Button size tiers + Input widget (Wave 1)
+- [x] 08-02-PLAN.md -- Tab + ListItem + TreeItem navigation widgets (Wave 1)
+- [x] 08-03-PLAN.md -- Checkbox + Toggle boolean controls (Wave 1)
+- [x] 08-04-PLAN.md -- Fuzzy match algorithm + CommandPalette view (Wave 2)
+- [x] 08-05-PLAN.md -- FileTree view + Sidebar integration (Wave 2)
+- [x] 08-06-PLAN.md -- PanelManager view with resize handle (Wave 2)
+- [x] 08-07-PLAN.md -- ContextMenu + Toast overlay widgets (Wave 2)
+- [x] 08-08-PLAN.md -- AppLayout orchestrator + integration demo (Wave 3)
 
 ### Phase 9: Transitions & Integration
 **Goal**: Add CSS-like transitions for polish and complete wgpu_client migration to thin app shell

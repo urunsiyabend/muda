@@ -87,21 +87,21 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Component Migration — Advanced UI
 
-- [ ] **UI-01**: CommandPalette migrated to ora View — searchable command overlay with filtered results
-- [ ] **UI-02**: FileTree migrated to ora View — hierarchical file navigation with expand/collapse, icons
-- [ ] **UI-03**: PanelManager migrated to ora View — bottom panel system with tabs (output, problems)
-- [ ] **UI-04**: AppLayout migrated to ora — main layout orchestrator that computes bounds for all regions
+- [x] **UI-01**: CommandPalette migrated to ora View — searchable command overlay with filtered results
+- [x] **UI-02**: FileTree migrated to ora View — hierarchical file navigation with expand/collapse, icons
+- [x] **UI-03**: PanelManager migrated to ora View — bottom panel system with tabs (output, problems)
+- [x] **UI-04**: AppLayout migrated to ora — main layout orchestrator that computes bounds for all regions
 
 ### Component Migration — Widgets
 
-- [ ] **WIDGET-01**: Button widget implemented in ora — with size tiers, hover/active states, label + optional icon
-- [ ] **WIDGET-02**: Input widget implemented in ora — text input with placeholder, focus state, selection
-- [ ] **WIDGET-03**: Checkbox and Toggle widgets in ora — boolean controls with checked/unchecked states
-- [ ] **WIDGET-04**: ListItem widget in ora — selectable list row with label, optional icon, hover state
-- [ ] **WIDGET-05**: Tab widget in ora — individual tab with active/inactive states, close button
-- [ ] **WIDGET-06**: TreeItem widget in ora — tree node with expand/collapse chevron, indentation
-- [ ] **WIDGET-07**: ContextMenu widget in ora — popup menu with items, separators, keyboard navigation
-- [ ] **WIDGET-08**: Toast widget in ora — temporary notification with auto-dismiss
+- [x] **WIDGET-01**: Button widget implemented in ora — with size tiers, hover/active states, label + optional icon
+- [x] **WIDGET-02**: Input widget implemented in ora — text input with placeholder, focus state, selection
+- [x] **WIDGET-03**: Checkbox and Toggle widgets in ora — boolean controls with checked/unchecked states
+- [x] **WIDGET-04**: ListItem widget in ora — selectable list row with label, optional icon, hover state
+- [x] **WIDGET-05**: Tab widget in ora — individual tab with active/inactive states, close button
+- [x] **WIDGET-06**: TreeItem widget in ora — tree node with expand/collapse chevron, indentation
+- [x] **WIDGET-07**: ContextMenu widget in ora — popup menu with items, separators, keyboard navigation
+- [x] **WIDGET-08**: Toast widget in ora — temporary notification with auto-dismiss
 
 ### Integration
 
@@ -203,18 +203,18 @@ Which phases cover which requirements. Updated during roadmap creation.
 | EDIT-01 | Phase 7 | Pending |
 | EDIT-02 | Phase 7 | Pending |
 | EDIT-03 | Phase 7 | Pending |
-| UI-01 | Phase 8 | Pending |
-| UI-02 | Phase 8 | Pending |
-| UI-03 | Phase 8 | Pending |
-| UI-04 | Phase 8 | Pending |
-| WIDGET-01 | Phase 8 | Pending |
-| WIDGET-02 | Phase 8 | Pending |
-| WIDGET-03 | Phase 8 | Pending |
-| WIDGET-04 | Phase 8 | Pending |
-| WIDGET-05 | Phase 8 | Pending |
-| WIDGET-06 | Phase 8 | Pending |
-| WIDGET-07 | Phase 8 | Pending |
-| WIDGET-08 | Phase 8 | Pending |
+| UI-01 | Phase 8 | Complete |
+| UI-02 | Phase 8 | Complete |
+| UI-03 | Phase 8 | Complete |
+| UI-04 | Phase 8 | Complete |
+| WIDGET-01 | Phase 8 | Complete |
+| WIDGET-02 | Phase 8 | Complete |
+| WIDGET-03 | Phase 8 | Complete |
+| WIDGET-04 | Phase 8 | Complete |
+| WIDGET-05 | Phase 8 | Complete |
+| WIDGET-06 | Phase 8 | Complete |
+| WIDGET-07 | Phase 8 | Complete |
+| WIDGET-08 | Phase 8 | Complete |
 | INT-01 | Phase 9 | Pending |
 | INT-02 | Phase 9 | Pending |
 | INT-03 | Phase 9 | Pending |
