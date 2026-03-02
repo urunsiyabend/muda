@@ -18,7 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: Event System** - Mouse/keyboard routing, focus management, two-phase dispatch
 - [x] **Phase 5: Element Library** - Styled primitives (Div, Text), builder API, layout containers
 - [x] **Phase 6: Design System** - Color tokens, spacing scale, typography, theme switching
-- [ ] **Phase 7: Editor Chrome & Text Editing** - TabBar, StatusBar, Sidebar, Gutter, Dialog, TextArea, Caret, Selection
+- [x] **Phase 7: Editor Chrome & Text Editing** - TabBar, StatusBar, Sidebar, Gutter, Dialog, TextArea, Caret, Selection
 - [ ] **Phase 8: Advanced UI & Widgets** - CommandPalette, FileTree, PanelManager, Button, Input, Checkbox, etc.
 - [ ] **Phase 9: Transitions & Integration** - CSS-like animations, wgpu_client migration, cleanup
 
@@ -151,11 +151,11 @@ Plans:
 **Plans**: 5 plans
 
 Plans:
-- [ ] 07-01-PLAN.md -- Views module + TabBarView + StatusBarView (Wave 1)
-- [ ] 07-02-PLAN.md -- SidebarView + GutterView (Wave 1)
-- [ ] 07-03-PLAN.md -- DialogView with modal overlay (Wave 1)
-- [ ] 07-04-PLAN.md -- TextAreaView + CaretElement + syntax highlighting (Wave 2)
-- [ ] 07-05-PLAN.md -- Integration demo and verification (Wave 3)
+- [x] 07-01-PLAN.md -- Views module + TabBarView + StatusBarView (Wave 1)
+- [x] 07-02-PLAN.md -- SidebarView + GutterView (Wave 1)
+- [x] 07-03-PLAN.md -- DialogView with modal overlay (Wave 1)
+- [x] 07-04-PLAN.md -- TextAreaView + CaretElement + syntax highlighting (Wave 2)
+- [x] 07-05-PLAN.md -- Integration demo and verification (Wave 3)
 
 ### Phase 8: Advanced UI & Widgets
 **Goal**: Migrate advanced UI components (CommandPalette, FileTree, PanelManager, AppLayout) and all widget primitives to ora
@@ -168,10 +168,17 @@ Plans:
   4. AppLayout orchestrates main layout computing bounds for all regions using ora Views
   5. Button, Input, Checkbox, Toggle, ListItem, Tab, TreeItem, ContextMenu, Toast widgets work as ora components
   6. All widgets support size tiers, hover/active states, and follow design token system
-**Plans**: TBD
+**Plans**: 8 plans
 
 Plans:
-- (Plans will be created during /gsd:plan-phase 8)
+- [ ] 08-01-PLAN.md -- WidgetSize foundation + Button size tiers + Input widget (Wave 1)
+- [ ] 08-02-PLAN.md -- Tab + ListItem + TreeItem navigation widgets (Wave 1)
+- [ ] 08-03-PLAN.md -- Checkbox + Toggle boolean controls (Wave 1)
+- [ ] 08-04-PLAN.md -- Fuzzy match algorithm + CommandPalette view (Wave 2)
+- [ ] 08-05-PLAN.md -- FileTree view + Sidebar integration (Wave 2)
+- [ ] 08-06-PLAN.md -- PanelManager view with resize handle (Wave 2)
+- [ ] 08-07-PLAN.md -- ContextMenu + Toast overlay widgets (Wave 2)
+- [ ] 08-08-PLAN.md -- AppLayout orchestrator + integration demo (Wave 3)
 
 ### Phase 9: Transitions & Integration
 **Goal**: Add CSS-like transitions for polish and complete wgpu_client migration to thin app shell
@@ -193,7 +200,7 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -203,10 +210,10 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 4. Event System | 5/5 | Complete | 2026-01-29 |
 | 5. Element Library | 5/5 | Complete | 2026-01-30 |
 | 6. Design System | 4/4 | Complete | 2026-01-30 |
-| 7. Editor Chrome & Text Editing | 0/5 | Not started | - |
-| 8. Advanced UI & Widgets | 0/TBD | Not started | - |
+| 7. Editor Chrome & Text Editing | 5/5 | Complete | 2026-01-30 |
+| 8. Advanced UI & Widgets | 0/8 | Planned | - |
 | 9. Transitions & Integration | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-01-28*
-*Last updated: 2026-01-30 after Phase 7 planning complete (5 plans in 3 waves)*
+*Last updated: 2026-03-02 -- Phase 8 planned (8 plans in 3 waves), ready for execution*
