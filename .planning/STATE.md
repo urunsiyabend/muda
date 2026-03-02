@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-01-28)
 
 **Core value:** A single, authoritative UI toolkit that eliminates duplicated styling, enforces consistent design tokens, and provides a scalable GPUI-like component model for the entire GPU client.
-**Current focus:** Phase 7 COMPLETE: Editor Chrome & Text Editing
+**Current focus:** Phase 8: Advanced UI & Widgets - In progress
 
 ## Current Position
 
 Phase: 8 of 9 (Advanced UI & Widgets) - In progress
-Plan: 1 of 8 in current phase
+Plan: 2 of 8 in current phase
 Status: In progress
-Last activity: 2026-03-02 - Completed 08-01-PLAN.md (Widget Foundations: WidgetSize + Input element)
+Last activity: 2026-03-02 - Completed 08-02-PLAN.md (Navigation Widgets: Tab, ListItem, TreeItem)
 
-Progress: [████████████████████████████░░] ~83% (33 of ~41 plans complete)
+Progress: [█████████████████████████████░░] ~85% (34 of ~41 plans complete)
 
 ## Performance Metrics
 
@@ -182,6 +182,11 @@ Recent decisions affecting current work:
 - Input text color: FgMuted for placeholder, FgPrimary for value - standard placeholder convention (08-01)
 - Input border: Accent when focused, FgMuted when hovered, Border when normal, BgSecondary when disabled (08-01)
 - Disabled alpha: 0.5 on bg and text - matches Button disabled pattern (08-01)
+- TAB_HEIGHT=36px matches Phase 7 TAB_BAR_HEIGHT constant — tabs keep their established height (08-02)
+- ListItem uses low-alpha Accent (0.15) for selected state — distinguishable without harsh contrast (08-02)
+- TreeItem chevron uses 'v'/'>' ASCII — no icon system dependency (08-02)
+- Indent guides painted as 1px rects (not borders) — simpler and GPU-efficient (08-02)
+- Color extraction pattern: all cx.theme().color() calls before any mutable cx.paint_* calls — required by Rust borrow checker (08-02)
 
 ### Pending Todos
 
@@ -201,10 +206,10 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-02
-Stopped at: Completed 08-01-PLAN.md (Widget Foundations: WidgetSize + Input element)
+Stopped at: Completed 08-02-PLAN.md (Navigation Widgets: Tab, ListItem, TreeItem)
 Resume file: None
-Next: Phase 8 Plan 2 (next widget)
+Next: Phase 8 Plan 3 (next widget group)
 
 ---
 *State initialized: 2026-01-28*
-*Last updated: 2026-01-30 after completing 07-05 (Integration Demo, layout fixes, readability improvements)*
+*Last updated: 2026-03-02 after completing 08-02 (Navigation Widgets, borrow-fix in checkbox.rs)*
