@@ -5,14 +5,14 @@
 See: .planning/PROJECT.md (updated 2026-01-28)
 
 **Core value:** A single, authoritative UI toolkit that eliminates duplicated styling, enforces consistent design tokens, and provides a scalable GPUI-like component model for the entire GPU client.
-**Current focus:** Phase 8: Advanced UI & Widgets - COMPLETE
+**Current focus:** Phase 8.1: GPU Layered Rendering Pipeline - NOT STARTED
 
 ## Current Position
 
-Phase: 8 of 9 (Advanced UI & Widgets) - COMPLETE
-Plan: 8 of 8 in current phase
-Status: Phase complete
-Last activity: 2026-03-02 - Completed 08-08-PLAN.md (AppLayout capstone view)
+Phase: 8.1 of 9 (GPU Layered Rendering Pipeline) - NOT STARTED
+Plan: 0 of 3 in current phase
+Status: Planned (3 plans in 2 waves), ready for execution
+Last activity: 2026-03-02 - Phase 8.1 inserted (overlay z-ordering fix)
 
 Progress: [████████████████████████████████░] ~91% (40 of ~44 plans complete)
 
@@ -205,6 +205,13 @@ Recent decisions affecting current work:
 
 None.
 
+### Roadmap Evolution
+
+- Phase 8.1 inserted after Phase 8: GPU Layered Rendering Pipeline — fix overlay z-ordering so command palette/dialog/toast correctly occlude lower-layer text (URGENT)
+  - Discovered during Phase 8 UAT: single-pass renderer draws all rects then all text, causing editor text to bleed through overlay backgrounds
+  - Prior fix attempts (multi-pass, two-pass) introduced rendering artifacts (sidebar content loss, empty overlays)
+  - Requires focused research into wgpu render pass lifecycle and glyphon multi-prepare constraints
+
 ### Blockers/Concerns
 
 - Unsafe code in OraWindow::render() should be revisited (not a blocker, but noted for future refactoring)
@@ -219,9 +226,9 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-02
-Stopped at: Completed 08-08-PLAN.md (AppLayout capstone — Phase 8 complete)
+Stopped at: Phase 8.1 inserted after Phase 8 UAT discovered overlay z-ordering issue
 Resume file: None
-Next: Phase 9 (Integration & Polish)
+Next: /gsd:execute-phase 8.1 (GPU Layered Rendering Pipeline)
 
 ---
 *State initialized: 2026-01-28*
