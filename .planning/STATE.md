@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-01-28)
 
 **Core value:** A single, authoritative UI toolkit that eliminates duplicated styling, enforces consistent design tokens, and provides a scalable GPUI-like component model for the entire GPU client.
-**Current focus:** Phase 8.1: GPU Layered Rendering Pipeline - IN PROGRESS
+**Current focus:** Phase 8.1: GPU Layered Rendering Pipeline - COMPLETE. Ready for Phase 9.
 
 ## Current Position
 
-Phase: 8.1 of 9 (GPU Layered Rendering Pipeline) - IN PROGRESS
-Plan: 3 of 3 in current phase (task 1 complete, paused at checkpoint:human-verify)
-Status: In progress (plans 01, 02, and 03 task 1 complete — awaiting visual UAT)
-Last activity: 2026-03-02 - Executed 08.1-03 Task 1: layered render_frame() rewrite; paused at checkpoint
+Phase: 8.1 of 9 (GPU Layered Rendering Pipeline) - COMPLETE
+Plan: 3 of 3 in current phase — ALL COMPLETE
+Status: Phase 8.1 complete (all three plans done, visual UAT approved)
+Last activity: 2026-03-02 - Completed 08.1-03 after checkpoint approval ("LGTM")
 
-Progress: [████████████████████████████████░] ~97% (43 of ~44 plans complete)
+Progress: [█████████████████████████████████] ~100% of planned work (44 of ~44 plans complete)
 
 ## Performance Metrics
 
@@ -37,6 +37,10 @@ Progress: [███████████████████████
 | 08-advanced-ui-widgets | 8 | ~60m | ~7.5m |
 
 **Recent Trend:**
+- Phase 8.1 GPU Layered Rendering Pipeline: **COMPLETE** (3 of 3 plans)
+  - Plan 08.1-01: RectangleRenderer lifetime fix + render_range() (~1m)
+  - Plan 08.1-02: Multi-layer TextSystem API (ensure_layer_renderers/add_text_to_layer/prepare_layer/render_layer) (~1m)
+  - Plan 08.1-03: Layered render_frame() integration, visual UAT approved (~2m)
 - Phase 8 Advanced UI & Widgets: **COMPLETE** (8 of 8 plans)
 - Plan 08-08: AppLayout capstone (~5m) - Stack-based overlay composition, all views orchestrated
 - Plan 08-07: ContextMenu + Toast overlays (~8m) - Padding-positioned context menu, auto-dismiss toasts
@@ -234,10 +238,10 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-02T11:50:15Z
-Stopped at: 08.1-03 checkpoint:human-verify (Task 1 complete: layered render_frame(); awaiting visual UAT)
+Last session: 2026-03-02T12:00:00Z
+Stopped at: Completed 08.1-03-PLAN.md — Phase 8.1 fully complete, visual UAT approved ("LGTM")
 Resume file: None
-Next: Resume 08.1-03 after user approves visual verification of layered rendering
+Next: Phase 9 (integration work — wgpu_client token migration and final integration)
 
 ---
 *State initialized: 2026-01-28*
