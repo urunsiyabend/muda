@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-01-28)
 ## Current Position
 
 Phase: 8.1 of 9 (GPU Layered Rendering Pipeline) - IN PROGRESS
-Plan: 1 of 3 in current phase
-Status: In progress (plan 01 complete, 2 remaining)
-Last activity: 2026-03-02 - Completed 08.1-01-PLAN.md (RectangleRenderer lifetime fix + render_range)
+Plan: 2 of 3 in current phase
+Status: In progress (plans 01 and 02 complete, 1 remaining)
+Last activity: 2026-03-02 - Completed 08.1-02-PLAN.md (Multi-layer TextRenderer support)
 
-Progress: [████████████████████████████████░] ~93% (41 of ~44 plans complete)
+Progress: [████████████████████████████████░] ~95% (42 of ~44 plans complete)
 
 ## Performance Metrics
 
@@ -203,6 +203,9 @@ Recent decisions affecting current work:
 - RenderPass<'_> (elided lifetime) for render() — breaks lifetime coupling with self, safe because GPU objects live on GpuState outliving all render passes (08.1-01)
 - Sorted single-batch approach for rect layers: one prepare() upload with draw range slicing per layer — avoids bind_group invalidation seen in prior multi-pass attempts (08.1-01)
 - instance_count() getter returns u32 to match wgpu draw() API Range<u32> parameter type directly (08.1-01)
+- render_layer() uses RenderPass<'_> unconstrained lifetime matching glyphon's own render() signature — enables use in multi-pass loops (08.1-02)
+- TextRenderer pool grows on demand, never shrinks — TextRenderer::new() is GPU work (pipeline creation), reuse is essential (08.1-02)
+- All layer prepares before any renders: ensures TextAtlas stabilizes before render phase begins (08.1-02)
 
 ### Pending Todos
 
@@ -228,8 +231,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-02T11:50:00Z
-Stopped at: Completed 08.1-01-PLAN.md (RectangleRenderer lifetime fix + render_range)
+Last session: 2026-03-02T11:45:33Z
+Stopped at: Completed 08.1-02-PLAN.md (multi-layer TextSystem with per-layer prepare/render)
 Resume file: None
 Next: /gsd:execute-phase 8.1 plan 02 (TextSystem multi-renderer)
 
