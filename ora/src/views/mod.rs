@@ -21,7 +21,9 @@
 //! - `TextAreaView`: Syntax-highlighted text rendering with caret and selection
 //! - `CommandPaletteView`: VS Code-style command palette overlay with fuzzy search
 //! - `PanelManagerView`: Resizable bottom panel with tabs (Output, Problems, Terminal, Debug)
+//! - `AppLayout`: Top-level layout orchestrator composing all regions with Stack overlays
 
+pub mod app_layout;
 pub mod command_palette;
 pub mod dialog;
 pub mod file_tree;
@@ -32,6 +34,7 @@ pub mod status_bar;
 pub mod tab_bar;
 pub mod text_area;
 
+pub use app_layout::AppLayout;
 pub use command_palette::{CommandPaletteView, CommandItem, fuzzy_match, FuzzyMatch};
 pub use dialog::DialogView;
 pub use file_tree::FileTreeView;

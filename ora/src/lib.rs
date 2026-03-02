@@ -52,6 +52,7 @@ pub use elements::{
 
 // Re-export views
 pub use views::{
+    AppLayout,
     CommandPaletteView, CommandItem, fuzzy_match, FuzzyMatch,
     DialogView, FileTreeView, GutterView, PanelManagerView, PanelKind, PanelState,
     SidebarView, StatusBarView, TabBarView, TextAreaView, LINE_HEIGHT,
