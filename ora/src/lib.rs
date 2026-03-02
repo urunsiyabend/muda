@@ -43,6 +43,9 @@ pub use elements::{
     CaretElement, BLINK_RATE, ACTIVITY_TIMEOUT, CARET_WIDTH,
     input, Input,
     checkbox, Checkbox, CheckboxSize, toggle, Toggle,
+    tab, Tab,
+    list_item, ListItem,
+    tree_item, TreeItem,
 };
 
 // Re-export views
