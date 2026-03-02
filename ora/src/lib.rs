@@ -41,6 +41,7 @@ pub use events::{
 pub use elements::{
     button, Button, ButtonVariant, WidgetSize, Div, Stack, TextElement, stack, Image, img, img_from_bytes, ObjectFit,
     CaretElement, BLINK_RATE, ACTIVITY_TIMEOUT, CARET_WIDTH,
+    input, Input,
 };
 
 // Re-export views
