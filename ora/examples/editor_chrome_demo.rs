@@ -349,7 +349,7 @@ impl View for EditorChromeDemo {
         let status_bar_view = StatusBarView::new(status_data);
 
         // Create sidebar with collapsed state
-        let mut sidebar_view = SidebarView::new(sidebar_data);
+        let mut sidebar_view = SidebarView::new(sidebar_data, Default::default());
         sidebar_view.set_collapsed(sidebar_collapsed);
 
         // Create gutter view

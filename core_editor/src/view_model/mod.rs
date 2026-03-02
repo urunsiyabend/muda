@@ -321,6 +321,54 @@ impl TabPresentation {
     }
 }
 
+/// A node in the file tree hierarchy.
+#[derive(Clone, Debug)]
+pub struct FileTreeNode {
+    /// Display name (file or directory name).
+    pub name: String,
+    /// File extension (e.g., "rs", "js") for icon coloring. Empty for directories.
+    pub extension: String,
+    /// Whether this is a directory.
+    pub is_dir: bool,
+    /// Whether this directory is expanded (only meaningful for directories).
+    pub is_expanded: bool,
+    /// Nested children (only for directories).
+    pub children: Vec<FileTreeNode>,
+}
+
+impl FileTreeNode {
+    /// Create a file node with the given name and extension.
+    pub fn file(name: impl Into<String>, extension: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            extension: extension.into(),
+            is_dir: false,
+            is_expanded: false,
+            children: vec![],
+        }
+    }
+
+    /// Create a directory node with the given name, expanded state, and children.
+    pub fn dir(name: impl Into<String>, expanded: bool, children: Vec<FileTreeNode>) -> Self {
+        Self {
+            name: name.into(),
+            extension: String::new(),
+            is_dir: true,
+            is_expanded: expanded,
+            children,
+        }
+    }
+}
+
+/// Presentation data for the file tree.
+#[derive(Clone, Debug, Default)]
+pub struct FileTreePresentation {
+    /// Root-level nodes.
+    pub roots: Vec<FileTreeNode>,
+    /// Index of the currently selected entry in the flattened list.
+    pub selected_index: Option<usize>,
+}
+
 /// Presentation data for the tab bar showing open documents.
 #[derive(Clone, Debug, Default)]
 pub struct TabBarPresentation {

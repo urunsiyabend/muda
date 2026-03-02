@@ -14,7 +14,8 @@ use crate::events::focus::FocusHandle;
 use crate::style::{pct, px};
 use crate::theme::ColorToken;
 use crate::view::View;
-use core_editor::view_model::SidebarPresentation;
+use crate::views::file_tree::FileTreeView;
+use core_editor::view_model::{SidebarPresentation, FileTreePresentation};
 
 /// Default expanded sidebar width in logical pixels (professional IDE width).
 pub const SIDEBAR_DEFAULT_WIDTH: f32 = 480.0;
@@ -60,7 +61,7 @@ const ENTRY_PADDING_H: f32 = 12.0;
 /// # Example
 ///
 /// ```ignore
-/// let sidebar = SidebarView::new(presentation);
+/// let sidebar = SidebarView::new(presentation, Default::default());
 /// // Toggle collapse state
 /// sidebar.toggle();
 /// // In a parent view's render():
@@ -75,27 +76,36 @@ pub struct SidebarView {
     width: f32,
     /// Focus handle for the toggle button.
     toggle_focus: Option<FocusHandle>,
+    /// File tree view for hierarchical file navigation.
+    file_tree: FileTreeView,
 }
 
 impl SidebarView {
     /// Creates a new sidebar view with the given presentation data.
-    pub fn new(presentation: SidebarPresentation) -> Self {
+    pub fn new(presentation: SidebarPresentation, tree: FileTreePresentation) -> Self {
         Self {
             presentation,
             is_collapsed: false,
             width: SIDEBAR_DEFAULT_WIDTH,
             toggle_focus: None,
+            file_tree: FileTreeView::new(tree),
         }
     }
 
     /// Creates a new sidebar view with a focus handle for the toggle button.
-    pub fn with_focus(presentation: SidebarPresentation, toggle_focus: FocusHandle) -> Self {
+    pub fn with_focus(presentation: SidebarPresentation, tree: FileTreePresentation, toggle_focus: FocusHandle) -> Self {
         Self {
             presentation,
             is_collapsed: false,
             width: SIDEBAR_DEFAULT_WIDTH,
             toggle_focus: Some(toggle_focus),
+            file_tree: FileTreeView::new(tree),
         }
+    }
+
+    /// Updates the file tree presentation data.
+    pub fn set_tree(&mut self, tree: FileTreePresentation) {
+        self.file_tree.set_presentation(tree);
     }
 
     /// Updates the presentation data.
@@ -173,28 +183,28 @@ impl SidebarView {
             .child(toggle_button)
     }
 
-    /// Renders the content area (placeholder for Phase 8 FileTree).
+    /// Renders the content area with FileTree or empty state.
     fn render_content(&self, cx: &mut ViewContext) -> Div {
         let theme = cx.theme();
 
-        // For now, just show the directory name as placeholder
-        // Phase 8 will replace this with FileTree component
-        let placeholder = if self.presentation.directory_name.is_empty() {
-            TextElement::new("No folder open")
-                .size(ENTRY_FONT_SIZE)
-                .color(theme.color(ColorToken::FgMuted))
-        } else {
-            TextElement::new(&self.presentation.directory_name)
-                .size(ENTRY_FONT_SIZE)
-                .color(theme.color(ColorToken::FgPrimary))
-        };
+        if self.file_tree.is_empty() {
+            // Show "No folder open" placeholder
+            return Div::new()
+                .flex_col()
+                .grow(1.0)
+                .p(ENTRY_PADDING_H)
+                .bg(theme.color(ColorToken::BgSecondary))
+                .child(TextElement::new("No folder open")
+                    .size(ENTRY_FONT_SIZE)
+                    .color(theme.color(ColorToken::FgMuted)));
+        }
 
+        // Render FileTree
         Div::new()
             .flex_col()
             .grow(1.0)
-            .p(ENTRY_PADDING_H)
             .bg(theme.color(ColorToken::BgSecondary))
-            .child(placeholder)
+            .child(self.file_tree.render(cx))
     }
 
     /// Renders the collapsed icon rail state.
@@ -278,7 +288,7 @@ mod tests {
             width: 480,
         };
 
-        let view = SidebarView::new(presentation);
+        let view = SidebarView::new(presentation, FileTreePresentation::default());
         assert!(!view.is_collapsed());
         assert_eq!(view.width, SIDEBAR_DEFAULT_WIDTH);
     }
@@ -286,7 +296,7 @@ mod tests {
     #[test]
     fn test_sidebar_toggle() {
         let presentation = SidebarPresentation::default();
-        let mut view = SidebarView::new(presentation);
+        let mut view = SidebarView::new(presentation, FileTreePresentation::default());
 
         assert!(!view.is_collapsed());
         view.toggle();
@@ -302,7 +312,7 @@ mod tests {
             ..Default::default()
         };
 
-        let mut view = SidebarView::new(presentation.clone());
+        let mut view = SidebarView::new(presentation.clone(), FileTreePresentation::default());
         assert_eq!(view.current_width(), SIDEBAR_DEFAULT_WIDTH);
 
         view.set_collapsed(true);
@@ -313,14 +323,14 @@ mod tests {
             visible: false,
             ..Default::default()
         };
-        let hidden_view = SidebarView::new(hidden);
+        let hidden_view = SidebarView::new(hidden, FileTreePresentation::default());
         assert_eq!(hidden_view.current_width(), 0.0);
     }
 
     #[test]
     fn test_sidebar_width_clamping() {
         let presentation = SidebarPresentation::default();
-        let mut view = SidebarView::new(presentation);
+        let mut view = SidebarView::new(presentation, FileTreePresentation::default());
 
         view.set_width(50.0); // Below minimum
         assert_eq!(view.width, 100.0);
