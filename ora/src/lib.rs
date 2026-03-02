@@ -49,7 +49,11 @@ pub use elements::{
 };
 
 // Re-export views
-pub use views::{DialogView, GutterView, SidebarView, StatusBarView, TabBarView, TextAreaView, LINE_HEIGHT};
+pub use views::{
+    CommandPaletteView, CommandItem, fuzzy_match, FuzzyMatch,
+    DialogView, GutterView, PanelManagerView, PanelKind, PanelState,
+    SidebarView, StatusBarView, TabBarView, TextAreaView, LINE_HEIGHT,
+};
 
 /// Run the application.
 /// This is a convenience function that delegates to App::run().
