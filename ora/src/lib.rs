@@ -46,12 +46,14 @@ pub use elements::{
     tab, Tab,
     list_item, ListItem,
     tree_item, TreeItem,
+    ContextMenu, ContextMenuItem,
+    Toast, ToastNotification, ToastSeverity,
 };
 
 // Re-export views
 pub use views::{
     CommandPaletteView, CommandItem, fuzzy_match, FuzzyMatch,
-    DialogView, GutterView, PanelManagerView, PanelKind, PanelState,
+    DialogView, FileTreeView, GutterView, PanelManagerView, PanelKind, PanelState,
     SidebarView, StatusBarView, TabBarView, TextAreaView, LINE_HEIGHT,
 };
 
