@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-01-28)
 
 **Core value:** A single, authoritative UI toolkit that eliminates duplicated styling, enforces consistent design tokens, and provides a scalable GPUI-like component model for the entire GPU client.
-**Current focus:** Phase 8: Advanced UI & Widgets - In progress
+**Current focus:** Phase 8: Advanced UI & Widgets - COMPLETE
 
 ## Current Position
 
-Phase: 8 of 9 (Advanced UI & Widgets) - In progress
-Plan: 3 of 8 in current phase
-Status: In progress
-Last activity: 2026-03-02 - Completed 08-03-PLAN.md (Boolean Controls: Checkbox and Toggle)
+Phase: 8 of 9 (Advanced UI & Widgets) - COMPLETE
+Plan: 8 of 8 in current phase
+Status: Phase complete
+Last activity: 2026-03-02 - Completed 08-08-PLAN.md (AppLayout capstone view)
 
-Progress: [█████████████████████████████░░] ~86% (35 of ~41 plans complete)
+Progress: [████████████████████████████████░] ~91% (40 of ~44 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 32 (Phase 1: 3, Phase 2: 6, Phase 3: 4, Phase 4: 5, Phase 5: 5, Phase 6: 4, Phase 7: 5)
+- Total plans completed: 40 (Phase 1: 3, Phase 2: 6, Phase 3: 4, Phase 4: 5, Phase 5: 5, Phase 6: 4, Phase 7: 5, Phase 8: 8)
 - Average duration: ~7.5m per plan
-- Total execution time: ~5 hours 29 minutes
+- Total execution time: ~5 hours 34 minutes
 
 **By Phase:**
 
@@ -34,17 +34,21 @@ Progress: [███████████████████████
 | 05-element-library | 5 | ~34m | ~6m 48s |
 | 06-design-system | 4 | ~42m | ~10m 30s |
 | 07-editor-chrome-text-editing | 5 | ~54m | ~11m |
+| 08-advanced-ui-widgets | 8 | ~60m | ~7.5m |
 
 **Recent Trend:**
-- Phase 7 Editor Chrome: **COMPLETE** (5 of 5 plans)
-- Plan 07-05: Integration Demo (~15m) - Professional IDE layout, height fixes, toggle improvements
-- Plan 07-04: TextAreaView, CaretElement (~9m) - Syntax highlighting ColorTokens, blink logic with 500ms rate/timeout
-- Plan 07-03: DialogView (14m 15s) - Modal overlay with Stack z-layering, ColorToken::Warning for accent
-- Plan 07-02: Sidebar and Gutter Views (~8m) - SidebarView with collapsed icon rail, GutterView with dynamic width calculation
-- Plan 07-01: TabBar, StatusBar Views (15m) - TabBarView, StatusBarView with theme tokens, presentation data pattern
-- Phase 6 Design System: **COMPLETE** (4 of 4 plans)
-- All unit tests continue passing (49 tests in ora)
+- Phase 8 Advanced UI & Widgets: **COMPLETE** (8 of 8 plans)
+- Plan 08-08: AppLayout capstone (~5m) - Stack-based overlay composition, all views orchestrated
+- Plan 08-07: ContextMenu + Toast overlays (~8m) - Padding-positioned context menu, auto-dismiss toasts
+- Plan 08-06: PanelManagerView (~7m) - Resizable bottom panel with 4 tabs and preset cycling
+- Plan 08-05: FileTreeView + SidebarView integration (~8m) - Hierarchical file tree with indent guides
+- Plan 08-04: CommandPaletteView (~8m) - Fuzzy search with match highlighting and keyboard navigation
+- Plan 08-03: Checkbox + Toggle (~7m) - CheckboxSize local enum, always-paint pattern for glyphon
+- Plan 08-02: Navigation Widgets (~7m) - Tab, ListItem, TreeItem with ASCII chevrons
+- Plan 08-01: Input + WidgetSize (~10m) - Input element with focus/hover/disabled states
+- All unit tests passing: 110 in ora, 103 in core_editor
 - Note: wgpu_client token migration deferred to Phase 9 (INT-04, INT-05)
+- Note: CheckboxSize local enum remains in checkbox.rs (unification with WidgetSize deferred to Phase 9)
 
 *Updated after each plan completion*
 
@@ -192,6 +196,10 @@ Recent decisions affecting current work:
 - Toggle has no label field — users compose toggle() with TextElement for labeling (08-03)
 - Always-paint pattern: child TextElement paint() called even when invisible (transparent color) to consume glyphon Buffer (08-03)
 - Disabled dimming: multiply all Color.a by 0.5 — consistent 50% dimming across checkbox and toggle (08-03)
+- AppLayout::new() accepts all child views as constructor args; Toast/ContextMenu initialized empty — populated at runtime (08-08)
+- Dialog layer always included in AppLayout Stack unconditionally — DialogView renders 0-size div when None (08-08)
+- ContextMenu positioned via padding wrapper (pt/pl on full-screen Div) in Stack overlay — no absolute CSS positioning needed (08-08)
+- CheckboxSize unification deferred: local CheckboxSize enum remains in checkbox.rs, not unified with WidgetSize (08-08)
 
 ### Pending Todos
 
@@ -211,10 +219,10 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-02
-Stopped at: Completed 08-03-PLAN.md (Boolean Controls: Checkbox and Toggle)
+Stopped at: Completed 08-08-PLAN.md (AppLayout capstone — Phase 8 complete)
 Resume file: None
-Next: Phase 8 Plan 3 (next widget group)
+Next: Phase 9 (Integration & Polish)
 
 ---
 *State initialized: 2026-01-28*
-*Last updated: 2026-03-02 after completing 08-02 (Navigation Widgets, borrow-fix in checkbox.rs)*
+*Last updated: 2026-03-02 after completing 08-08 (AppLayout capstone, Phase 8 complete)*
