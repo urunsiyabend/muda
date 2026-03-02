@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-01-28)
 
 **Core value:** A single, authoritative UI toolkit that eliminates duplicated styling, enforces consistent design tokens, and provides a scalable GPUI-like component model for the entire GPU client.
-**Current focus:** Phase 8.1: GPU Layered Rendering Pipeline - NOT STARTED
+**Current focus:** Phase 8.1: GPU Layered Rendering Pipeline - IN PROGRESS
 
 ## Current Position
 
-Phase: 8.1 of 9 (GPU Layered Rendering Pipeline) - NOT STARTED
-Plan: 0 of 3 in current phase
-Status: Planned (3 plans in 2 waves), ready for execution
-Last activity: 2026-03-02 - Phase 8.1 inserted (overlay z-ordering fix)
+Phase: 8.1 of 9 (GPU Layered Rendering Pipeline) - IN PROGRESS
+Plan: 1 of 3 in current phase
+Status: In progress (plan 01 complete, 2 remaining)
+Last activity: 2026-03-02 - Completed 08.1-01-PLAN.md (RectangleRenderer lifetime fix + render_range)
 
-Progress: [████████████████████████████████░] ~91% (40 of ~44 plans complete)
+Progress: [████████████████████████████████░] ~93% (41 of ~44 plans complete)
 
 ## Performance Metrics
 
@@ -200,6 +200,9 @@ Recent decisions affecting current work:
 - Dialog layer always included in AppLayout Stack unconditionally — DialogView renders 0-size div when None (08-08)
 - ContextMenu positioned via padding wrapper (pt/pl on full-screen Div) in Stack overlay — no absolute CSS positioning needed (08-08)
 - CheckboxSize unification deferred: local CheckboxSize enum remains in checkbox.rs, not unified with WidgetSize (08-08)
+- RenderPass<'_> (elided lifetime) for render() — breaks lifetime coupling with self, safe because GPU objects live on GpuState outliving all render passes (08.1-01)
+- Sorted single-batch approach for rect layers: one prepare() upload with draw range slicing per layer — avoids bind_group invalidation seen in prior multi-pass attempts (08.1-01)
+- instance_count() getter returns u32 to match wgpu draw() API Range<u32> parameter type directly (08.1-01)
 
 ### Pending Todos
 
@@ -225,10 +228,10 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-02
-Stopped at: Phase 8.1 inserted after Phase 8 UAT discovered overlay z-ordering issue
+Last session: 2026-03-02T11:50:00Z
+Stopped at: Completed 08.1-01-PLAN.md (RectangleRenderer lifetime fix + render_range)
 Resume file: None
-Next: /gsd:execute-phase 8.1 (GPU Layered Rendering Pipeline)
+Next: /gsd:execute-phase 8.1 plan 02 (TextSystem multi-renderer)
 
 ---
 *State initialized: 2026-01-28*
