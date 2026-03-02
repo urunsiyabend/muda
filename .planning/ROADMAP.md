@@ -20,6 +20,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 6: Design System** - Color tokens, spacing scale, typography, theme switching
 - [x] **Phase 7: Editor Chrome & Text Editing** - TabBar, StatusBar, Sidebar, Gutter, Dialog, TextArea, Caret, Selection
 - [x] **Phase 8: Advanced UI & Widgets** - CommandPalette, FileTree, PanelManager, Button, Input, Checkbox, etc.
+- [ ] **Phase 8.1: GPU Layered Rendering Pipeline** - Fix overlay z-ordering so overlays correctly occlude lower-layer text (INSERTED)
 - [ ] **Phase 9: Transitions & Integration** - CSS-like animations, wgpu_client migration, cleanup
 
 ## Phase Details
@@ -180,9 +181,27 @@ Plans:
 - [x] 08-07-PLAN.md -- ContextMenu + Toast overlay widgets (Wave 2)
 - [x] 08-08-PLAN.md -- AppLayout orchestrator + integration demo (Wave 3)
 
+### Phase 8.1: GPU Layered Rendering Pipeline (INSERTED)
+**Goal**: Fix the rendering pipeline so overlay elements (command palette, dialog, toast) correctly occlude content from lower z-layers, including text rendered by those layers
+**Depends on**: Phase 8
+**Requirements**: REND-07 (overlay z-ordering)
+**Success Criteria** (what must be TRUE):
+  1. Command palette overlay fully hides editor text behind its opaque background — no text bleed-through
+  2. Dialog backdrop + dialog body fully occludes all content from lower layers
+  3. Toast notifications render on top of all other content without artifacts
+  4. Shadow rendering produces correct Gaussian falloff (strongest at box edge, fading with distance)
+  5. Single-pass rendering performance maintained (no excessive render pass overhead)
+  6. Existing sidebar, editor, tab bar, panel, status bar rendering unbroken
+**Plans**: 3 plans
+
+Plans:
+- [ ] 08.1-01-PLAN.md -- RectangleRenderer lifetime fix + draw range support (Wave 1)
+- [ ] 08.1-02-PLAN.md -- TextSystem multi-layer renderer support (Wave 1)
+- [ ] 08.1-03-PLAN.md -- Layered multi-pass render_frame() integration (Wave 2)
+
 ### Phase 9: Transitions & Integration
 **Goal**: Add CSS-like transitions for polish and complete wgpu_client migration to thin app shell
-**Depends on**: Phase 8
+**Depends on**: Phase 8.1
 **Requirements**: TRANS-01, TRANS-02, TRANS-03, TRANS-04, INT-01, INT-02, INT-03, INT-04, INT-05
 **Success Criteria** (what must be TRUE):
   1. Elements can animate opacity, color, background-color, position on state changes with easing functions
@@ -200,7 +219,7 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 8.1 -> 9
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -211,9 +230,10 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9
 | 5. Element Library | 5/5 | Complete | 2026-01-30 |
 | 6. Design System | 4/4 | Complete | 2026-01-30 |
 | 7. Editor Chrome & Text Editing | 5/5 | Complete | 2026-01-30 |
-| 8. Advanced UI & Widgets | 0/8 | Planned | - |
+| 8. Advanced UI & Widgets | 8/8 | Complete | 2026-03-02 |
+| 8.1. GPU Layered Rendering | 0/3 | Not started | - |
 | 9. Transitions & Integration | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-01-28*
-*Last updated: 2026-03-02 -- Phase 8 planned (8 plans in 3 waves), ready for execution*
+*Last updated: 2026-03-02 -- Phase 8.1 planned (3 plans in 2 waves), ready for execution*
