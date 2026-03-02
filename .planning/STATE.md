@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-01-28)
 ## Current Position
 
 Phase: 8 of 9 (Advanced UI & Widgets) - In progress
-Plan: 2 of 8 in current phase
+Plan: 3 of 8 in current phase
 Status: In progress
-Last activity: 2026-03-02 - Completed 08-02-PLAN.md (Navigation Widgets: Tab, ListItem, TreeItem)
+Last activity: 2026-03-02 - Completed 08-03-PLAN.md (Boolean Controls: Checkbox and Toggle)
 
-Progress: [█████████████████████████████░░] ~85% (34 of ~41 plans complete)
+Progress: [█████████████████████████████░░] ~86% (35 of ~41 plans complete)
 
 ## Performance Metrics
 
@@ -187,6 +187,11 @@ Recent decisions affecting current work:
 - TreeItem chevron uses 'v'/'>' ASCII — no icon system dependency (08-02)
 - Indent guides painted as 1px rects (not borders) — simpler and GPU-efficient (08-02)
 - Color extraction pattern: all cx.theme().color() calls before any mutable cx.paint_* calls — required by Rust borrow checker (08-02)
+- CheckboxSize local enum (not WidgetSize) for wave isolation — Plan 08-08 will unify with WidgetSize (08-03)
+- Checkbox box sizes: Sm=14px, Md=18px, Lg=22px — smaller than button heights, checkbox-specific (08-03)
+- Toggle has no label field — users compose toggle() with TextElement for labeling (08-03)
+- Always-paint pattern: child TextElement paint() called even when invisible (transparent color) to consume glyphon Buffer (08-03)
+- Disabled dimming: multiply all Color.a by 0.5 — consistent 50% dimming across checkbox and toggle (08-03)
 
 ### Pending Todos
 
@@ -206,7 +211,7 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-02
-Stopped at: Completed 08-02-PLAN.md (Navigation Widgets: Tab, ListItem, TreeItem)
+Stopped at: Completed 08-03-PLAN.md (Boolean Controls: Checkbox and Toggle)
 Resume file: None
 Next: Phase 8 Plan 3 (next widget group)
 
