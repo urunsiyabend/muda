@@ -47,6 +47,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **REND-04**: Single-batch text rendering — all text from all views collected and rendered in one glyphon prepare/render pass
 - [x] **REND-05**: Draw call batching — all rectangles batched into minimal draw calls using instanced rendering
 - [x] **REND-06**: Render pass structure — UI backgrounds, editor content, UI text, overlays as ordered phases
+- [x] **REND-07**: Overlay z-ordering — overlays (command palette, dialog, toast) correctly occlude lower-layer content including text via layered multi-pass rendering
 
 ### Events
 
@@ -181,6 +182,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | REND-04 | Phase 2 | Complete |
 | REND-05 | Phase 2 | Complete |
 | REND-06 | Phase 2 | Complete |
+| REND-07 | Phase 8.1 | Complete |
 | EVT-01 | Phase 4 | Pending |
 | EVT-02 | Phase 4 | Pending |
 | EVT-03 | Phase 4 | Pending |
@@ -222,10 +224,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | INT-05 | Phase 9 | Pending |
 
 **Coverage:**
-- v1 requirements: 58 total
-- Mapped to phases: 58
+- v1 requirements: 59 total
+- Mapped to phases: 59
 - Unmapped: 0 (100% coverage)
 
 ---
 *Requirements defined: 2026-01-28*
-*Last updated: 2026-01-29 after Phase 3 completion (CORE-03..04, VIEW-03..04 complete)*
+*Last updated: 2026-03-02 after Phase 8.1 completion (REND-07 complete)*

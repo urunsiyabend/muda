@@ -20,7 +20,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 6: Design System** - Color tokens, spacing scale, typography, theme switching
 - [x] **Phase 7: Editor Chrome & Text Editing** - TabBar, StatusBar, Sidebar, Gutter, Dialog, TextArea, Caret, Selection
 - [x] **Phase 8: Advanced UI & Widgets** - CommandPalette, FileTree, PanelManager, Button, Input, Checkbox, etc.
-- [ ] **Phase 8.1: GPU Layered Rendering Pipeline** - Fix overlay z-ordering so overlays correctly occlude lower-layer text (INSERTED)
+- [x] **Phase 8.1: GPU Layered Rendering Pipeline** - Fix overlay z-ordering so overlays correctly occlude lower-layer text (INSERTED)
 - [ ] **Phase 9: Transitions & Integration** - CSS-like animations, wgpu_client migration, cleanup
 
 ## Phase Details
@@ -195,9 +195,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 08.1-01-PLAN.md -- RectangleRenderer lifetime fix + draw range support (Wave 1)
-- [ ] 08.1-02-PLAN.md -- TextSystem multi-layer renderer support (Wave 1)
-- [ ] 08.1-03-PLAN.md -- Layered multi-pass render_frame() integration (Wave 2)
+- [x] 08.1-01-PLAN.md -- RectangleRenderer lifetime fix + draw range support (Wave 1)
+- [x] 08.1-02-PLAN.md -- TextSystem multi-layer renderer support (Wave 1)
+- [x] 08.1-03-PLAN.md -- Layered multi-pass render_frame() integration (Wave 2)
 
 ### Phase 9: Transitions & Integration
 **Goal**: Add CSS-like transitions for polish and complete wgpu_client migration to thin app shell
@@ -231,9 +231,9 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 8.1 -> 
 | 6. Design System | 4/4 | Complete | 2026-01-30 |
 | 7. Editor Chrome & Text Editing | 5/5 | Complete | 2026-01-30 |
 | 8. Advanced UI & Widgets | 8/8 | Complete | 2026-03-02 |
-| 8.1. GPU Layered Rendering | 0/3 | Not started | - |
+| 8.1. GPU Layered Rendering | 3/3 | Complete | 2026-03-02 |
 | 9. Transitions & Integration | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-01-28*
-*Last updated: 2026-03-02 -- Phase 8.1 planned (3 plans in 2 waves), ready for execution*
+*Last updated: 2026-03-02 -- Phase 8.1 complete (3/3 plans, layered rendering verified)*
