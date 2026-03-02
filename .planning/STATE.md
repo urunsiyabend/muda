@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-01-28)
 ## Current Position
 
 Phase: 8.1 of 9 (GPU Layered Rendering Pipeline) - IN PROGRESS
-Plan: 2 of 3 in current phase
-Status: In progress (plans 01 and 02 complete, 1 remaining)
-Last activity: 2026-03-02 - Completed 08.1-02-PLAN.md (Multi-layer TextRenderer support)
+Plan: 3 of 3 in current phase (task 1 complete, paused at checkpoint:human-verify)
+Status: In progress (plans 01, 02, and 03 task 1 complete — awaiting visual UAT)
+Last activity: 2026-03-02 - Executed 08.1-03 Task 1: layered render_frame() rewrite; paused at checkpoint
 
-Progress: [████████████████████████████████░] ~95% (42 of ~44 plans complete)
+Progress: [████████████████████████████████░] ~97% (43 of ~44 plans complete)
 
 ## Performance Metrics
 
@@ -206,6 +206,9 @@ Recent decisions affecting current work:
 - render_layer() uses RenderPass<'_> unconstrained lifetime matching glyphon's own render() signature — enables use in multi-pass loops (08.1-02)
 - TextRenderer pool grows on demand, never shrinks — TextRenderer::new() is GPU work (pipeline creation), reuse is essential (08.1-02)
 - All layer prepares before any renders: ensures TextAtlas stabilizes before render phase begins (08.1-02)
+- Flat rect buffer with Range<u32> range slicing per layer in render_frame() — single prepare() avoids bind_group invalidation (08.1-03)
+- First render pass LoadOp::Clear, subsequent passes LoadOp::Load — Vulkan requires Clear on uninitialized texture; Load preserves prior layer content for correct occlusion (08.1-03)
+- Single queue.submit() for entire multi-pass frame — Vulkan multiple submits cause hangs (08.1-03)
 
 ### Pending Todos
 
@@ -231,10 +234,10 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-02T11:45:33Z
-Stopped at: Completed 08.1-02-PLAN.md (multi-layer TextSystem with per-layer prepare/render)
+Last session: 2026-03-02T11:50:15Z
+Stopped at: 08.1-03 checkpoint:human-verify (Task 1 complete: layered render_frame(); awaiting visual UAT)
 Resume file: None
-Next: /gsd:execute-phase 8.1 plan 02 (TextSystem multi-renderer)
+Next: Resume 08.1-03 after user approves visual verification of layered rendering
 
 ---
 *State initialized: 2026-01-28*
