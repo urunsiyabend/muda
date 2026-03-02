@@ -1,5 +1,6 @@
 pub mod button;
 pub mod caret;
+pub mod checkbox;
 pub mod div;
 pub mod input;
 pub mod list_item;
@@ -11,6 +12,7 @@ pub mod image;
 
 pub use button::{button, Button, ButtonVariant, WidgetSize};
 pub use caret::{CaretElement, BLINK_RATE, ACTIVITY_TIMEOUT, CARET_WIDTH};
+pub use checkbox::{checkbox, Checkbox, CheckboxSize, toggle, Toggle};
 pub use div::Div;
 pub use input::{input, Input};
 pub use list_item::{list_item, ListItem};
