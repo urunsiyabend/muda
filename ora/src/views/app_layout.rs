@@ -22,8 +22,8 @@
 
 use crate::context::ViewContext;
 use crate::element::AnyElement;
-use crate::elements::{stack, Div, Toast, ContextMenu, ContextMenuItem};
-use crate::style::{pct, px};
+use crate::elements::{stack, Div, Toast, ContextMenu};
+use crate::style::pct;
 use crate::theme::ColorToken;
 use crate::view::View;
 use crate::elements::toast::ToastSeverity;
