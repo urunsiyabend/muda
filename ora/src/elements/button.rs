@@ -5,6 +5,33 @@ use crate::events::mouse::HitboxId;
 use crate::style::*;
 use crate::theme::{ColorToken, Theme};
 
+/// Shared size tiers used by all Phase 8 widgets (buttons, inputs, checkboxes, etc.)
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum WidgetSize {
+    Sm,        // compact: height=24px, font=12px, padding_h=8px, padding_v=4px, border_radius=3px
+    #[default]
+    Md,        // standard: height=32px, font=13px, padding_h=12px, padding_v=6px, border_radius=4px
+    Lg,        // prominent: height=40px, font=14px, padding_h=16px, padding_v=8px, border_radius=5px
+}
+
+impl WidgetSize {
+    pub fn height(&self) -> f32 {
+        match self { Self::Sm => 24.0, Self::Md => 32.0, Self::Lg => 40.0 }
+    }
+    pub fn font_size(&self) -> f32 {
+        match self { Self::Sm => 12.0, Self::Md => 13.0, Self::Lg => 14.0 }
+    }
+    pub fn padding_h(&self) -> f32 {
+        match self { Self::Sm => 8.0, Self::Md => 12.0, Self::Lg => 16.0 }
+    }
+    pub fn padding_v(&self) -> f32 {
+        match self { Self::Sm => 4.0, Self::Md => 6.0, Self::Lg => 8.0 }
+    }
+    pub fn border_radius(&self) -> f32 {
+        match self { Self::Sm => 3.0, Self::Md => 4.0, Self::Lg => 5.0 }
+    }
+}
+
 /// Button visual variants
 #[derive(Clone, Copy, Debug, Default)]
 pub enum ButtonVariant {
@@ -175,6 +202,7 @@ impl ButtonVariant {
 pub struct Button {
     label: String,
     variant: ButtonVariant,
+    size: WidgetSize,
     disabled: bool,
     on_click: Option<Box<dyn Fn() + 'static>>,
     focus_handle: Option<FocusHandle>,
@@ -187,11 +215,12 @@ pub fn button(label: impl Into<String>) -> Button {
 }
 
 impl Button {
-    /// Create a new button with the given label (defaults to Primary variant)
+    /// Create a new button with the given label (defaults to Primary variant, Md size)
     pub fn new(label: String) -> Self {
         Self {
             label,
             variant: ButtonVariant::Primary,
+            size: WidgetSize::Md,
             disabled: false,
             on_click: None,
             focus_handle: None,
@@ -220,6 +249,12 @@ impl Button {
     /// Set button to destructive variant (red)
     pub fn destructive(mut self) -> Self {
         self.variant = ButtonVariant::Destructive;
+        self
+    }
+
+    /// Set the size tier (sm/md/lg)
+    pub fn size(mut self, size: WidgetSize) -> Self {
+        self.size = size;
         self
     }
 
@@ -255,20 +290,21 @@ impl Element for Button {
     type RequestLayoutState = ButtonElementState;
 
     fn request_layout(&mut self, cx: &mut LayoutContext) -> (LayoutId, Self::RequestLayoutState) {
-        // Create style for button container
+        // Create style for button container using WidgetSize values
         let mut style = Style::default();
-        style.padding = Edges::xy(16.0, 8.0); // px(16) horizontal, px(8) vertical
-        style.border_radius = Corners::all(4.0);
+        style.padding = Edges::xy(self.size.padding_h(), self.size.padding_v());
+        style.border_radius = Corners::all(self.size.border_radius());
         style.display = Display::Flex;
         style.justify_content = JustifyContent::Center;
         style.align_items = AlignItems::Center;
+        style.min_height = Length::Px(self.size.height());
 
         let layout_id = cx.request_layout(&style);
 
         // Create text element with a placeholder color
         // Note: Text color will be set during paint when we have access to theme
         let mut text_element = TextElement::new(self.label.clone())
-            .size(14.0)
+            .size(self.size.font_size())
             .color(Color::white()); // Placeholder, will be updated in paint
 
         // Request layout for text child
@@ -327,7 +363,7 @@ impl Element for Button {
         // Build Style for rendering
         let mut style = Style::default();
         style.background = Background::Solid(button_style.bg);
-        style.border_radius = Corners::all(4.0);
+        style.border_radius = Corners::all(self.size.border_radius());
         if let Some(border_color) = button_style.border_color {
             style.border.color = border_color;
             style.border.widths = Edges::all(button_style.border_width);

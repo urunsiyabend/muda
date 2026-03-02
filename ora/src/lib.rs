@@ -39,7 +39,7 @@ pub use events::{
 
 // Re-export primitive elements
 pub use elements::{
-    button, Button, ButtonVariant, Div, Stack, TextElement, stack, Image, img, img_from_bytes, ObjectFit,
+    button, Button, ButtonVariant, WidgetSize, Div, Stack, TextElement, stack, Image, img, img_from_bytes, ObjectFit,
     CaretElement, BLINK_RATE, ACTIVITY_TIMEOUT, CARET_WIDTH,
 };
 
