@@ -125,52 +125,52 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FIX-01 | — | Pending |
-| FIX-02 | — | Pending |
-| FIX-03 | — | Pending |
-| FIX-04 | — | Pending |
-| FIX-05 | — | Pending |
-| TAB-01 | — | Pending |
-| TAB-02 | — | Pending |
-| TAB-03 | — | Pending |
-| TAB-04 | — | Pending |
-| TAB-05 | — | Pending |
-| FILE-01 | — | Pending |
-| FILE-02 | — | Pending |
-| FILE-03 | — | Pending |
-| FILE-04 | — | Pending |
-| FILE-05 | — | Pending |
-| FILE-06 | — | Pending |
-| SIDE-01 | — | Pending |
-| SIDE-02 | — | Pending |
-| SIDE-03 | — | Pending |
-| SIDE-04 | — | Pending |
-| SIDE-05 | — | Pending |
-| SIDE-06 | — | Pending |
-| SEL-01 | — | Pending |
-| SEL-02 | — | Pending |
-| SEL-03 | — | Pending |
-| SEL-04 | — | Pending |
-| SEL-05 | — | Pending |
-| SEL-06 | — | Pending |
-| SEL-07 | — | Pending |
-| FIND-01 | — | Pending |
-| FIND-02 | — | Pending |
-| FIND-03 | — | Pending |
-| FIND-04 | — | Pending |
-| FIND-05 | — | Pending |
-| FIND-06 | — | Pending |
-| FIND-07 | — | Pending |
-| FIND-08 | — | Pending |
-| PERF-01 | — | Pending |
-| PERF-02 | — | Pending |
-| PERF-03 | — | Pending |
+| FIX-01 | Phase 10 | Pending |
+| FIX-02 | Phase 10 | Pending |
+| FIX-03 | Phase 10 | Pending |
+| FIX-04 | Phase 10 | Pending |
+| FIX-05 | Phase 10 | Pending |
+| TAB-01 | Phase 11 | Pending |
+| TAB-02 | Phase 11 | Pending |
+| TAB-03 | Phase 11 | Pending |
+| TAB-04 | Phase 11 | Pending |
+| TAB-05 | Phase 11 | Pending |
+| FILE-01 | Phase 12 | Pending |
+| FILE-02 | Phase 12 | Pending |
+| FILE-03 | Phase 12 | Pending |
+| FILE-04 | Phase 12 | Pending |
+| FILE-05 | Phase 12 | Pending |
+| FILE-06 | Phase 12 | Pending |
+| SIDE-01 | Phase 14 | Pending |
+| SIDE-02 | Phase 14 | Pending |
+| SIDE-03 | Phase 14 | Pending |
+| SIDE-04 | Phase 14 | Pending |
+| SIDE-05 | Phase 14 | Pending |
+| SIDE-06 | Phase 14 | Pending |
+| SEL-01 | Phase 13 | Pending |
+| SEL-02 | Phase 13 | Pending |
+| SEL-03 | Phase 13 | Pending |
+| SEL-04 | Phase 13 | Pending |
+| SEL-05 | Phase 13 | Pending |
+| SEL-06 | Phase 13 | Pending |
+| SEL-07 | Phase 13 | Pending |
+| FIND-01 | Phase 15 | Pending |
+| FIND-02 | Phase 15 | Pending |
+| FIND-03 | Phase 15 | Pending |
+| FIND-04 | Phase 15 | Pending |
+| FIND-05 | Phase 15 | Pending |
+| FIND-06 | Phase 15 | Pending |
+| FIND-07 | Phase 15 | Pending |
+| FIND-08 | Phase 15 | Pending |
+| PERF-01 | Phase 16 | Pending |
+| PERF-02 | Phase 16 | Pending |
+| PERF-03 | Phase 16 | Pending |
 
 **Coverage:**
-- v2.0 requirements: 34 total
-- Mapped to phases: 0 (pending roadmap creation)
-- Unmapped: 34
+- v2.0 requirements: 40 total (note: source material stated 34; actual count is FIX(5)+TAB(5)+FILE(6)+SIDE(6)+SEL(7)+FIND(8)+PERF(3)=40)
+- Mapped to phases: 40/40
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-26*
-*Last updated: 2026-03-26 after v2.0 milestone initialization*
+*Last updated: 2026-03-26 after v2.0 roadmap creation — all 40 requirements mapped*

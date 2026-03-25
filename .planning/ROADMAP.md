@@ -1,8 +1,10 @@
-# Roadmap: ora UI Framework
+# Roadmap: ora UI Framework / muda Functional Editor
 
 ## Overview
 
-Build ora as a standalone GPUI-inspired UI framework crate that owns the GPU rendering pipeline, provides reactive state management, and delivers a unified component library for the muda code editor. Starting with core framework primitives (App lifecycle, Entity/Model system), we'll layer on rendering capabilities (simple stack/flex layout, GPU batching, text rendering), add reactivity and event handling, build the design system, and systematically migrate all existing wgpu_client UI components into the framework. The result: a single authoritative UI toolkit that eliminates duplicated styling and enforces consistent design tokens.
+**v1.0 (Complete):** Built ora as a standalone GPUI-inspired UI framework crate that owns the GPU rendering pipeline, provides reactive state management, and delivers a unified component library for the muda code editor. Phases 1-9 delivered app lifecycle, layout, reactive state, events, design system, editor chrome, advanced UI, GPU layered rendering, and transitions — all complete.
+
+**v2.0 (Active):** Transform muda from a visual shell into a functional code editor. Fix foundation issues (event-driven redraw, selection rendering, command audit), build a Buffer Registry as the central data structure, then layer file operations, multi-tab editing, sidebar navigation, selection/clipboard, find/replace, and performance optimization. The result: a real code editor with Zed-level rendering performance.
 
 ## Phases
 
@@ -11,6 +13,8 @@ Build ora as a standalone GPUI-inspired UI framework crate that owns the GPU ren
 - Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
 
 Decimal phases appear between their surrounding integers in numeric order.
+
+### v1.0 Phases (Complete)
 
 - [x] **Phase 1: Foundation & View System** - App lifecycle, Entity/Model, View trait, Element trait basics
 - [x] **Phase 2: Layout & Rendering Pipeline** - Simple stack/flex layout, GPU batching, text rendering via glyphon
@@ -22,6 +26,16 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 8: Advanced UI & Widgets** - CommandPalette, FileTree, PanelManager, Button, Input, Checkbox, etc.
 - [x] **Phase 8.1: GPU Layered Rendering Pipeline** - Fix overlay z-ordering so overlays correctly occlude lower-layer text (INSERTED)
 - [x] **Phase 9: Transitions & Integration** - CSS-like animations, wgpu_client migration, pixel-based scroll, scissor clipping
+
+### v2.0 Phases (Active)
+
+- [ ] **Phase 10: Foundation Fixes** - Event-driven redraw, command audit, EditorDataSource redesign, selection rendering fix
+- [ ] **Phase 11: Buffer Registry + Multi-Tab** - Central buffer deduplication, tab switching, Ctrl+W close, Ctrl+Tab cycle
+- [ ] **Phase 12: File Operations** - Ctrl+O open, Ctrl+S save, Ctrl+Shift+S Save As, Ctrl+N new, async I/O
+- [ ] **Phase 13: Selection + Clipboard** - Click-to-position, drag selection, Shift+arrow, Ctrl+A, Ctrl+C/X/V
+- [ ] **Phase 14: File Browser** - Real directory tree, click to open, expand/collapse state, file watcher
+- [ ] **Phase 15: Find / Replace** - Inline find bar, match highlighting, next/prev, replace one/all, Go to line
+- [ ] **Phase 16: Performance Refinement** - Incremental tree-sitter parsing, glyphon buffer caching, background parse thread
 
 ## Phase Details
 
@@ -224,10 +238,104 @@ Plans:
 - [x] 09-08-PLAN.md -- Strip wgpu_client to thin shell + cleanup (Wave 5)
 - [x] 09-09-PLAN.md -- Final verification + scroll architecture + scissor clipping (Wave 6)
 
+---
+
+### Phase 10: Foundation Fixes
+**Goal**: Eliminate idle GPU waste, audit all v2 commands, redesign EditorDataSource for v2 scope, and fix the selection rendering bug before feature work begins
+**Depends on**: Phase 9 (v1.0 complete)
+**Requirements**: FIX-01, FIX-02, FIX-03, FIX-04, FIX-05
+**Success Criteria** (what must be TRUE):
+  1. The editor is idle at rest — GPU usage drops to near-zero when no typing or animation occurs
+  2. Caret blink animates correctly without continuous frame rendering between blinks
+  3. Shift+arrow key selection renders visible highlights without text disappearing
+  4. All v2 keyboard commands (SwitchTab, CloseTab, OpenFile, SaveAs, New, Find, Replace) are recognized without panicking or being silently dropped
+  5. EditorDataSource is split into focused sub-traits covering workspace, search, and file operations — no single trait accumulating all v2 methods
+**Plans**: TBD
+
+### Phase 11: Buffer Registry + Multi-Tab
+**Goal**: Users can open multiple files in tabs and switch between them — each buffer is deduplicated and preserves its own scroll and cursor state
+**Depends on**: Phase 10
+**Requirements**: TAB-01, TAB-02, TAB-03, TAB-04, TAB-05
+**Success Criteria** (what must be TRUE):
+  1. Opening the same file path twice reuses the existing buffer — no duplicate document instances
+  2. Clicking a tab switches the editor to that buffer with scroll position and cursor preserved from last visit
+  3. Pressing Ctrl+W closes the active tab; if the buffer has unsaved changes, a save-before-close dialog appears
+  4. Pressing Ctrl+Tab and Ctrl+Shift+Tab cycles through open tabs in order
+  5. The tab dirty indicator (dot or asterisk) appears when a buffer has unsaved changes and clears after save
+**Plans**: TBD
+
+### Phase 12: File Operations
+**Goal**: Users can open, save, and create files using OS-native dialogs — disk I/O never blocks the UI thread
+**Depends on**: Phase 11
+**Requirements**: FILE-01, FILE-02, FILE-03, FILE-04, FILE-05, FILE-06
+**Success Criteria** (what must be TRUE):
+  1. Pressing Ctrl+O opens the OS native file picker; selecting a file loads it into a new tab (or switches to existing tab if already open)
+  2. Pressing Ctrl+S on a named file saves it silently with no dialog; on an untitled buffer, it opens Save As dialog
+  3. Pressing Ctrl+Shift+S opens Save As dialog for any buffer, allowing rename or path change
+  4. Pressing Ctrl+N opens a new untitled buffer ready for editing
+  5. Opening a non-UTF-8 file shows a user-visible error message instead of crashing or displaying garbled text
+  6. The editor remains responsive during file load — UI does not freeze on large files
+**Plans**: TBD
+
+### Phase 13: Selection + Clipboard
+**Goal**: Users can select text with mouse and keyboard, and copy/cut/paste through the OS clipboard
+**Depends on**: Phase 10
+**Requirements**: SEL-01, SEL-02, SEL-03, SEL-04, SEL-05, SEL-06, SEL-07
+**Success Criteria** (what must be TRUE):
+  1. Clicking in the text area positions the cursor at the correct line and column (including clicks in the middle of a word)
+  2. Clicking and dragging selects a text range that highlights as the mouse moves
+  3. Shift+arrow extends or shrinks the selection one character/line at a time; Ctrl+Shift+arrow extends by word
+  4. Ctrl+A selects all text in the active buffer
+  5. Ctrl+C copies the selected text to the OS clipboard; the selection remains visible after copy
+  6. Ctrl+X cuts the selected text to the OS clipboard; the selection is deleted from the buffer
+  7. Ctrl+V pastes clipboard text at the cursor position, replacing any active selection
+**Plans**: TBD
+
+### Phase 14: File Browser
+**Goal**: Users can navigate the project directory tree in the sidebar and open files by clicking — the tree reflects real filesystem state
+**Depends on**: Phase 11, Phase 12
+**Requirements**: SIDE-01, SIDE-02, SIDE-03, SIDE-04, SIDE-05, SIDE-06
+**Success Criteria** (what must be TRUE):
+  1. The sidebar shows real files and folders from the workspace root — no mock data visible
+  2. Clicking a file in the sidebar opens it in the editor (routing through the Buffer Registry for deduplication)
+  3. Expanding and collapsing folders persists across renders — a folder does not snap closed on the next frame
+  4. Using Open Folder dialog sets a new workspace root and refreshes the sidebar tree
+  5. When a file is created, deleted, or renamed externally, the sidebar updates without requiring a restart
+  6. Directories like target/, .git/, and node_modules/ are excluded from automatic expansion
+**Plans**: TBD
+
+### Phase 15: Find / Replace
+**Goal**: Users can search for text within the active buffer, navigate matches, and replace occurrences — all without leaving the editor
+**Depends on**: Phase 10, Phase 11
+**Requirements**: FIND-01, FIND-02, FIND-03, FIND-04, FIND-05, FIND-06, FIND-07, FIND-08
+**Success Criteria** (what must be TRUE):
+  1. Pressing Ctrl+F opens the find bar as an inline overlay at the top of the editor area
+  2. Typing in the find bar highlights all matches in the text area and shows a count like "3 of 12"
+  3. Pressing Enter or clicking next/prev navigates between matches, wrapping at end of file
+  4. Case-sensitive, whole-word, and regex toggles change which text is matched in real time
+  5. Pressing Ctrl+H expands the find bar to show a replace row; Replace One replaces the current match and advances; Replace All replaces every match
+  6. Replace All executes as a single undoable Transaction — one Ctrl+Z reverts all replacements
+  7. Pressing Escape closes the find bar and returns keyboard focus to the editor
+  8. Pressing Ctrl+G opens a Go to Line dialog; entering a number jumps the cursor to that line
+**Plans**: TBD
+
+### Phase 16: Performance Refinement
+**Goal**: Editing large files stays responsive — syntax highlighting and text reshaping work are amortized across keystrokes
+**Depends on**: Phase 10, Phase 11, Phase 12, Phase 13, Phase 14, Phase 15
+**Requirements**: PERF-01, PERF-02, PERF-03
+**Success Criteria** (what must be TRUE):
+  1. Typing in a large file (10K+ lines) does not produce visible lag — incremental tree-sitter parsing updates only the changed region
+  2. Scrolling through a file does not re-shape glyphon buffers for lines that have not changed — cached buffers are reused
+  3. Opening a file larger than 100KB does not freeze the UI — tree-sitter parsing runs on a background thread while the file loads
+**Plans**: TBD
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 8.1 -> 9
+v1.0: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 8.1 -> 9
+v2.0: 10 -> 11 -> 12 -> 13 (can follow 10) -> 14 (needs 11+12) -> 15 (needs 10+11) -> 16 (always last)
+
+### v1.0 Progress (Complete)
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -242,6 +350,19 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 8.1 -> 
 | 8.1. GPU Layered Rendering | 3/3 | Complete | 2026-03-02 |
 | 9. Transitions & Integration | 9/9 | Complete | 2026-03-26 |
 
+### v2.0 Progress (Active)
+
+| Phase | Plans Complete | Status | Started |
+|-------|----------------|--------|---------|
+| 10. Foundation Fixes | 0/TBD | Pending | — |
+| 11. Buffer Registry + Multi-Tab | 0/TBD | Pending | — |
+| 12. File Operations | 0/TBD | Pending | — |
+| 13. Selection + Clipboard | 0/TBD | Pending | — |
+| 14. File Browser | 0/TBD | Pending | — |
+| 15. Find / Replace | 0/TBD | Pending | — |
+| 16. Performance Refinement | 0/TBD | Pending | — |
+
 ---
 *Roadmap created: 2026-01-28*
-*Last updated: 2026-03-26 -- v1.0 COMPLETE (all 9 phases done)*
+*v1.0 complete: 2026-03-26*
+*v2.0 roadmap added: 2026-03-26*
