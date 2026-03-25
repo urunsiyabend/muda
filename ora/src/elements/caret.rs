@@ -242,13 +242,17 @@ impl Element for CaretElement {
         let theme = cx.theme();
         let color = self.color.unwrap_or_else(|| theme.color(ColorToken::Accent));
 
-        // Get bounds and override position with our stored x/y
+        // Offset caret position relative to where the element was laid out.
+        // self.x/self.y are offsets within the text area (column * char_width,
+        // row * line_height). The layout system positions the caret element
+        // within the text area container, so we add computed_bounds.origin to
+        // convert to absolute window coordinates.
         let computed_bounds = cx.bounds(state.layout_id);
         let bounds = Rect::new(
-            self.x,
-            self.y,
+            computed_bounds.origin.x + self.x,
+            computed_bounds.origin.y + self.y,
             CARET_WIDTH,
-            self.height.min(computed_bounds.size.height.max(self.height)),
+            self.height,
         );
 
         // Paint the caret as a simple filled rectangle

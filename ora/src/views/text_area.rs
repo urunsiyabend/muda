@@ -26,7 +26,7 @@
 
 use crate::context::ViewContext;
 use crate::element::AnyElement;
-use crate::elements::{CaretElement, Div, TextElement};
+use crate::elements::{stack, CaretElement, Div, TextElement};
 use crate::style::{pct, px, Color};
 use crate::editor_adapter::{CaretPresentation, LinePresentation, RenderModel, TextStyle};
 use crate::theme::{ColorToken, Theme};
@@ -251,35 +251,35 @@ impl TextAreaView {
 
 impl View for TextAreaView {
     fn render(&self, cx: &mut ViewContext) -> AnyElement {
-        // Build all child elements first (each borrows cx mutably)
-        // Note: current_line_bg, selection_rects, and caret are rendered but not yet
-        // integrated into the layered layout (would require Stack with absolute positioning)
-        let _current_line_bg = self.render_current_line_bg(cx);
-        let _selection_rects = self.render_selection_rects(cx);
         let text_lines = self.render_text_lines(cx);
-        let _caret = self.render_caret(cx);
+        let caret = self.render_caret(cx);
 
-        // Get theme for container
         let theme = cx.theme();
 
-        // Build layer structure:
-        // 1. Current line background (integrated into each line div)
-        // 2. Selection backgrounds
-        // 3. Text content
-        // 4. Caret
-        //
-        // Note: Full layering would use Stack for z-ordering.
-        // This simplified version uses flex column for line layout.
-        Div::new()
+        // Text content layer: flex column of line divs
+        let text_layer: AnyElement = Div::new()
             .flex_col()
-            .grow(1.0)
+            .w(pct(100.0))
             .h(pct(100.0))
             .bg(theme.color(ColorToken::BgPrimary))
             .pl(1.0)
-            .overflow_hidden() // Clip content to viewport bounds
-            // In a full implementation, we'd use absolute positioning for layers
-            // For now, render lines in order with text taking precedence
+            .overflow_hidden()
             .children(text_lines)
+            .into();
+
+        // Caret layer: overlaid on top of text via Stack
+        let caret_layer: AnyElement = Div::new()
+            .w(pct(100.0))
+            .h(pct(100.0))
+            .child(caret)
+            .into();
+
+        // Use Stack to layer text (bottom) and caret (top)
+        stack()
+            .w(pct(100.0))
+            .h(pct(100.0))
+            .child(text_layer)
+            .child(caret_layer)
             .into()
     }
 }
