@@ -69,6 +69,10 @@ pub fn translate_editor_command(event: &KeyboardEvent, modifiers: Modifiers) -> 
         Key::Named(NamedKey::Backspace) => Some(EditorCommand::Backspace),
         Key::Named(NamedKey::Delete) => Some(EditorCommand::Delete),
         Key::Named(NamedKey::Enter) => Some(EditorCommand::InsertNewline),
+        Key::Named(NamedKey::Tab) if ctrl => {
+            // Ctrl+Tab cycles to the next tab.
+            Some(EditorCommand::SwitchTab(0))
+        }
         Key::Named(NamedKey::Tab) => {
             // Insert 4 spaces (matching wgpu_client behaviour).
             Some(EditorCommand::InsertText("    ".to_string()))
@@ -87,8 +91,16 @@ pub fn translate_editor_command(event: &KeyboardEvent, modifiers: Modifiers) -> 
             "v" | "V" => Some(EditorCommand::Paste),
             "z" | "Z" => Some(EditorCommand::Undo),
             "y" | "Y" => Some(EditorCommand::Redo),
+            // SaveAs must come before Save so Ctrl+Shift+S is caught first.
+            "s" | "S" if shift => Some(EditorCommand::SaveAs),
             "s" | "S" => Some(EditorCommand::Save),
             "l" | "L" => Some(EditorCommand::ToggleLineNumbers),
+            "w" | "W" => Some(EditorCommand::CloseTab),
+            "o" | "O" => Some(EditorCommand::OpenFile),
+            "n" | "N" => Some(EditorCommand::New),
+            "f" | "F" => Some(EditorCommand::Find),
+            "h" | "H" => Some(EditorCommand::Replace),
+            "g" | "G" => Some(EditorCommand::GoToLine),
             _ => None,
         },
 
@@ -179,5 +191,77 @@ mod tests {
         let ev = make_event(Key::Named(NamedKey::Tab));
         let cmd = translate_editor_command(&ev, Modifiers::none()).unwrap();
         assert!(matches!(cmd, EditorCommand::InsertText(ref s) if s == "    "));
+    }
+
+    #[test]
+    fn test_ctrl_shift_s_save_as() {
+        let ev = make_event(Key::Character("S".to_string()));
+        let mods = Modifiers { ctrl: true, shift: true, ..Modifiers::none() };
+        let cmd = translate_editor_command(&ev, mods).unwrap();
+        assert!(matches!(cmd, EditorCommand::SaveAs));
+    }
+
+    #[test]
+    fn test_ctrl_s_save_not_save_as() {
+        let ev = make_event(Key::Character("s".to_string()));
+        let mods = Modifiers { ctrl: true, ..Modifiers::none() };
+        let cmd = translate_editor_command(&ev, mods).unwrap();
+        assert!(matches!(cmd, EditorCommand::Save));
+    }
+
+    #[test]
+    fn test_ctrl_w_close_tab() {
+        let ev = make_event(Key::Character("w".to_string()));
+        let mods = Modifiers { ctrl: true, ..Modifiers::none() };
+        let cmd = translate_editor_command(&ev, mods).unwrap();
+        assert!(matches!(cmd, EditorCommand::CloseTab));
+    }
+
+    #[test]
+    fn test_ctrl_f_find() {
+        let ev = make_event(Key::Character("f".to_string()));
+        let mods = Modifiers { ctrl: true, ..Modifiers::none() };
+        let cmd = translate_editor_command(&ev, mods).unwrap();
+        assert!(matches!(cmd, EditorCommand::Find));
+    }
+
+    #[test]
+    fn test_ctrl_n_new() {
+        let ev = make_event(Key::Character("n".to_string()));
+        let mods = Modifiers { ctrl: true, ..Modifiers::none() };
+        let cmd = translate_editor_command(&ev, mods).unwrap();
+        assert!(matches!(cmd, EditorCommand::New));
+    }
+
+    #[test]
+    fn test_ctrl_o_open_file() {
+        let ev = make_event(Key::Character("o".to_string()));
+        let mods = Modifiers { ctrl: true, ..Modifiers::none() };
+        let cmd = translate_editor_command(&ev, mods).unwrap();
+        assert!(matches!(cmd, EditorCommand::OpenFile));
+    }
+
+    #[test]
+    fn test_ctrl_h_replace() {
+        let ev = make_event(Key::Character("h".to_string()));
+        let mods = Modifiers { ctrl: true, ..Modifiers::none() };
+        let cmd = translate_editor_command(&ev, mods).unwrap();
+        assert!(matches!(cmd, EditorCommand::Replace));
+    }
+
+    #[test]
+    fn test_ctrl_g_go_to_line() {
+        let ev = make_event(Key::Character("g".to_string()));
+        let mods = Modifiers { ctrl: true, ..Modifiers::none() };
+        let cmd = translate_editor_command(&ev, mods).unwrap();
+        assert!(matches!(cmd, EditorCommand::GoToLine));
+    }
+
+    #[test]
+    fn test_ctrl_tab_switch_tab() {
+        let ev = make_event(Key::Named(NamedKey::Tab));
+        let mods = Modifiers { ctrl: true, ..Modifiers::none() };
+        let cmd = translate_editor_command(&ev, mods).unwrap();
+        assert!(matches!(cmd, EditorCommand::SwitchTab(0)));
     }
 }

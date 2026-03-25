@@ -26,22 +26,25 @@ use ora::editor_adapter::{
 /// receive `&dyn EditorDataSource` and never see core_editor types directly.
 pub struct CoreEditorAdapter {
     pub app: core_editor::app::App,
+    /// Pending status message set by stub command handlers.
+    /// Consumed and injected into `StatusPresentation` during `build_render_model`.
+    pending_status_message: Option<String>,
 }
 
 impl CoreEditorAdapter {
     /// Create an adapter wrapping a new empty document.
     pub fn new() -> Self {
-        Self { app: core_editor::app::App::new() }
+        Self { app: core_editor::app::App::new(), pending_status_message: None }
     }
 
     /// Create an adapter that opens the given file path.
     pub fn open_file(path: &str) -> std::io::Result<Self> {
-        Ok(Self { app: core_editor::app::App::open_file(path)? })
+        Ok(Self { app: core_editor::app::App::open_file(path)?, pending_status_message: None })
     }
 
     /// Create an adapter that opens a directory (shows sidebar).
     pub fn open_directory(path: &str) -> std::io::Result<Self> {
-        Ok(Self { app: core_editor::app::App::open_directory(path)? })
+        Ok(Self { app: core_editor::app::App::open_directory(path)?, pending_status_message: None })
     }
 }
 
@@ -232,6 +235,10 @@ fn to_core_command(cmd: EditorCommand) -> Option<CoreEditorCommand> {
         }
         ToggleLineNumbers => CoreEditorCommand::ToggleLineNumbers,
         Scroll(lines) => CoreEditorCommand::Scroll { lines },
+        // v2 stub commands — handled before to_core_command is called,
+        // but listed here for exhaustiveness.
+        SaveAs | OpenFile | New | CloseTab | SwitchTab(_)
+        | Find | Replace | ReplaceAll | GoToLine => return None,
     })
 }
 
@@ -245,13 +252,21 @@ impl EditorDataSource for CoreEditorAdapter {
         // status_message after building). We cast away const temporarily.
         //
         // SAFETY: Single-threaded GUI application. No other reference to self
-        // exists during this call. The mutation is limited to clearing an
-        // Option<String> field — no structural aliasing issues.
+        // exists during this call. The mutations are limited to clearing
+        // Option<String> fields — no structural aliasing issues.
         let app = unsafe {
             &mut (*(self as *const CoreEditorAdapter as *mut CoreEditorAdapter)).app
         };
         let core_model = app.build_render_model(viewport_lines);
-        convert_render_model(core_model)
+        let mut render_model = convert_render_model(core_model);
+        // Inject pending status message from stub handlers, overriding core's message.
+        let pending = unsafe {
+            &mut (*(self as *const CoreEditorAdapter as *mut CoreEditorAdapter)).pending_status_message
+        };
+        if let Some(msg) = pending.take() {
+            render_model.status.message = Some(msg);
+        }
+        render_model
     }
 
     fn resize_viewport(&mut self, width_chars: usize, height_lines: usize) {
@@ -283,6 +298,24 @@ impl EditorDataSource for CoreEditorAdapter {
         // Save is an app-level operation that doesn't go through the dispatcher.
         if matches!(cmd, EditorCommand::Save) {
             let _ = self.app.save();
+            return;
+        }
+
+        // Stub handlers for v2 commands not yet implemented.
+        let stub_msg = match &cmd {
+            EditorCommand::SaveAs => Some("Save As: not yet available"),
+            EditorCommand::OpenFile => Some("Open File: not yet available"),
+            EditorCommand::New => Some("New File: not yet available"),
+            EditorCommand::CloseTab => Some("Close Tab: not yet available"),
+            EditorCommand::SwitchTab(_) => Some("Switch Tab: not yet available"),
+            EditorCommand::Find => Some("Find: not yet available"),
+            EditorCommand::Replace => Some("Replace: not yet available"),
+            EditorCommand::ReplaceAll => Some("Replace All: not yet available"),
+            EditorCommand::GoToLine => Some("Go to Line: not yet available"),
+            _ => None,
+        };
+        if let Some(msg) = stub_msg {
+            self.pending_status_message = Some(msg.to_string());
             return;
         }
 

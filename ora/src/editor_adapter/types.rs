@@ -470,6 +470,30 @@ pub enum EditorCommand {
     // --- File operations ---
     /// Save the current document.
     Save,
+    /// Save As (Ctrl+Shift+S)
+    SaveAs,
+    /// Open a file (Ctrl+O)
+    OpenFile,
+    /// New file (Ctrl+N)
+    New,
+
+    // --- Tab management ---
+    /// Switch to a specific tab (0 = cycle next, index-based for Ctrl+1..9)
+    SwitchTab(u64),
+    /// Close the current tab (Ctrl+W)
+    CloseTab,
+
+    // --- Search ---
+    /// Find in file (Ctrl+F)
+    Find,
+    /// Replace in file (Ctrl+H)
+    Replace,
+    /// Replace all occurrences (triggered from UI, no default keybinding)
+    ReplaceAll,
+
+    // --- Navigation ---
+    /// Go to line (Ctrl+G)
+    GoToLine,
 
     // --- View toggles ---
     /// Toggle line number visibility.
