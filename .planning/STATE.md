@@ -220,6 +220,8 @@ Recent decisions affecting current work:
 - Mirror types in ora::editor_adapter have no From impls — conversions deferred to wgpu_client where both type namespaces are available (09-02)
 - EditorCommand defined alongside presentation types in editor_adapter::types — single module owns full adapter surface (09-02)
 - Adapter boundary: ora views use &dyn EditorDataSource, never &core_editor::app::App (09-02)
+- ora views import crate::editor_adapter types exclusively — core_editor removed from ora/Cargo.toml [dependencies] (09-03)
+- Examples use ora::editor_adapter types for presentation data construction — no core_editor dependency in examples (09-03)
 - TransitionId explicitly assigned by callers (no auto-generation) — avoids stale-id bugs when elements recreated each frame (09-04)
 - TransitionRegistry in AppContext uses RefCell<T> — PaintContext holds *const AppContext but paint() must advance tweens; RefCell provides safe interior mutability (09-04)
 - advance_* creates new Tween per target change (not retarget) — preserves duration from current TransitionConfig, avoids zero-duration silent failure from retarget() on instant tweens (09-04)
