@@ -98,6 +98,8 @@ pub struct TransitionState {
     last_bg_target: Option<Color>,
     last_opacity_target: Option<f32>,
     last_color_target: Option<Color>,
+    last_position_x_target: Option<f32>,
+    last_position_y_target: Option<f32>,
 }
 
 impl TransitionState {
@@ -112,6 +114,8 @@ impl TransitionState {
             last_bg_target: None,
             last_opacity_target: None,
             last_color_target: None,
+            last_position_x_target: None,
+            last_position_y_target: None,
         }
     }
 
@@ -178,6 +182,48 @@ impl TransitionState {
         }
 
         self.color_tween.as_ref().map(|t| t.value_owned()).unwrap_or(target)
+    }
+
+    /// Advance the horizontal position-offset tween toward `target`.
+    pub fn advance_position_x(&mut self, target: f32, config: &TransitionConfig) -> f32 {
+        let target_changed = self.last_position_x_target
+            .map_or(true, |prev| (prev - target).abs() > f32::EPSILON);
+
+        if target_changed {
+            let from = self.position_x_tween.as_ref()
+                .map(|t| t.value_owned())
+                .unwrap_or(target);
+            let mut tween = Tween::new(from, target, config.duration(), config.easing);
+            tween.start();
+            tween.update();
+            self.position_x_tween = Some(tween);
+            self.last_position_x_target = Some(target);
+        } else if let Some(tween) = &mut self.position_x_tween {
+            tween.update();
+        }
+
+        self.position_x_tween.as_ref().map(|t| t.value_owned()).unwrap_or(target)
+    }
+
+    /// Advance the vertical position-offset tween toward `target`.
+    pub fn advance_position_y(&mut self, target: f32, config: &TransitionConfig) -> f32 {
+        let target_changed = self.last_position_y_target
+            .map_or(true, |prev| (prev - target).abs() > f32::EPSILON);
+
+        if target_changed {
+            let from = self.position_y_tween.as_ref()
+                .map(|t| t.value_owned())
+                .unwrap_or(target);
+            let mut tween = Tween::new(from, target, config.duration(), config.easing);
+            tween.start();
+            tween.update();
+            self.position_y_tween = Some(tween);
+            self.last_position_y_target = Some(target);
+        } else if let Some(tween) = &mut self.position_y_tween {
+            tween.update();
+        }
+
+        self.position_y_tween.as_ref().map(|t| t.value_owned()).unwrap_or(target)
     }
 
     /// Returns `true` if any tween is currently in the `Playing` state.

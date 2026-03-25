@@ -1,3 +1,4 @@
+use crate::animation::transition::{TransitionConfig, TransitionId};
 use crate::entity::EntityStorage;
 use crate::events::focus::{FocusId, FocusState};
 use crate::events::interaction::InteractionState;
@@ -46,6 +47,9 @@ pub enum PaintCommand {
     },
     /// Reset scissor to full viewport
     ResetScissor,
+    /// Marks a boundary between z-layers (e.g., between Stack children).
+    /// The renderer flushes rects and text at each boundary to maintain correct z-ordering.
+    LayerBoundary,
 }
 
 /// Context for computing layout requirements.
@@ -391,6 +395,13 @@ impl<'a> PaintContext<'a> {
         });
     }
 
+    /// Insert a layer boundary marker.
+    /// The GPU renderer uses this to flush rects and text between z-layers,
+    /// ensuring correct occlusion when overlay elements paint over lower content.
+    pub fn push_layer_boundary(&mut self) {
+        self.paint_commands.push(PaintCommand::LayerBoundary);
+    }
+
     /// Get the computed bounds for a layout node.
     pub fn bounds(&self, id: LayoutId) -> Rect {
         self.layout_outputs
@@ -466,6 +477,75 @@ impl<'a> PaintContext<'a> {
                 self.paint_commands.push(PaintCommand::ResetScissor);
             }
         }
+    }
+
+    /// Get or advance the background-color transition for the given element.
+    ///
+    /// SAFETY: app_context pointer is valid for the duration of the paint phase.
+    /// RefCell provides interior mutability — no aliased mutable borrows possible
+    /// since paint is single-threaded and no other code borrows the registry.
+    pub fn advance_transition_bg(
+        &self,
+        id: TransitionId,
+        target: Color,
+        config: &TransitionConfig,
+    ) -> Color {
+        let app_cx = unsafe { &*self.app_context };
+        let mut registry = app_cx.transition_registry.borrow_mut();
+        let state = registry.get_or_create(id);
+        state.advance_bg(target, config)
+    }
+
+    /// Get or advance the opacity transition for the given element.
+    pub fn advance_transition_opacity(
+        &self,
+        id: TransitionId,
+        target: f32,
+        config: &TransitionConfig,
+    ) -> f32 {
+        let app_cx = unsafe { &*self.app_context };
+        let mut registry = app_cx.transition_registry.borrow_mut();
+        let state = registry.get_or_create(id);
+        state.advance_opacity(target, config)
+    }
+
+    /// Get or advance the text/border color transition for the given element.
+    pub fn advance_transition_color(
+        &self,
+        id: TransitionId,
+        target: Color,
+        config: &TransitionConfig,
+    ) -> Color {
+        let app_cx = unsafe { &*self.app_context };
+        let mut registry = app_cx.transition_registry.borrow_mut();
+        let state = registry.get_or_create(id);
+        state.advance_color(target, config)
+    }
+
+    /// Get or advance the horizontal position-offset transition for the given element.
+    pub fn advance_transition_position_x(
+        &self,
+        id: TransitionId,
+        target: f32,
+        config: &TransitionConfig,
+    ) -> f32 {
+        let app_cx = unsafe { &*self.app_context };
+        let mut registry = app_cx.transition_registry.borrow_mut();
+        let state = registry.get_or_create(id);
+        state.advance_position_x(target, config)
+    }
+
+    /// Get or advance the vertical position-offset transition for the given element.
+    pub fn advance_transition_position_y(
+        &self,
+        id: TransitionId,
+        target: f32,
+        config: &TransitionConfig,
+    ) -> f32 {
+        let app_cx = unsafe { &*self.app_context };
+        let mut registry = app_cx.transition_registry.borrow_mut();
+        let state = registry.get_or_create(id);
+        state.advance_position_y(target, config)
     }
 
     /// Extract the collected paint commands.
