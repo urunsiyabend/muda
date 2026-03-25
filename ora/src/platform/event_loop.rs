@@ -603,14 +603,39 @@ impl ApplicationHandler for OraApp {
         }
     }
 
-    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
-        // Tick executor when idle
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        // Tick async executor
         while self.app_context.tick_executor() {}
 
-        // Request redraw if entities are dirty
-        if self.app_context.has_dirty_entities() {
+        // Check if transitions are still running (need continuous frames)
+        let has_active_animations = self.app_context.has_active_transitions();
+
+        if self.app_context.has_dirty_entities() || has_active_animations {
+            // Need another frame immediately
+            event_loop.set_control_flow(ControlFlow::Poll);
             if let Some(gpu_state) = &self.gpu_state {
                 gpu_state.window.request_redraw();
+            }
+        } else {
+            // Sleep until next caret blink or indefinitely
+            match self.next_blink_instant {
+                Some(instant) if instant > Instant::now() => {
+                    event_loop.set_control_flow(ControlFlow::WaitUntil(instant));
+                }
+                Some(_) => {
+                    // Blink instant already passed — request redraw for blink toggle
+                    // and schedule next blink
+                    if let Some(gpu_state) = &self.gpu_state {
+                        gpu_state.window.request_redraw();
+                    }
+                    self.next_blink_instant = Some(Instant::now() + BLINK_RATE);
+                    event_loop.set_control_flow(
+                        ControlFlow::WaitUntil(self.next_blink_instant.unwrap())
+                    );
+                }
+                None => {
+                    event_loop.set_control_flow(ControlFlow::Wait);
+                }
             }
         }
     }
