@@ -9,6 +9,7 @@ path = "src/main.rs"
 
 [dependencies]
 core_editor = { path = "../core_editor" }
+ora = { path = "../ora" }
 
 # GPU rendering
 wgpu = "23"

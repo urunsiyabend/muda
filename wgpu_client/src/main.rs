@@ -5,6 +5,7 @@
 //! - winit for windowing and input
 //! - glyphon for text rendering
 
+mod adapter;
 mod app;
 mod components;
 mod design_system;
