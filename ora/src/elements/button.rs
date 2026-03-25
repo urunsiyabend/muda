@@ -1,3 +1,4 @@
+use crate::animation::transition::{TransitionConfig, TransitionId};
 use crate::element::{Element, LayoutContext, LayoutId, PaintContext, PrepaintContext};
 use crate::elements::text::{TextElement, TextState};
 use crate::events::focus::{FocusHandle, FocusId};
@@ -207,6 +208,9 @@ pub struct Button {
     on_click: Option<Box<dyn Fn() + 'static>>,
     focus_handle: Option<FocusHandle>,
     text_element: Option<TextElement>,
+    /// Optional stable ID for background-color transition.
+    /// Callers must supply a stable ID (not recreated each frame) for transitions to work.
+    transition_id: Option<TransitionId>,
 }
 
 /// Constructor function for button
@@ -225,6 +229,7 @@ impl Button {
             on_click: None,
             focus_handle: None,
             text_element: None,
+            transition_id: None,
         }
     }
 
@@ -273,6 +278,16 @@ impl Button {
     /// Make the button focusable
     pub fn focusable(mut self, handle: FocusHandle) -> Self {
         self.focus_handle = Some(handle);
+        self
+    }
+
+    /// Assign a stable cross-frame transition ID for smooth bg-color animation.
+    ///
+    /// The caller must supply an ID that is stable across frames (not derived from
+    /// a per-frame counter). Once set, the button background will fade between
+    /// states over 150 ms using an EaseOut curve.
+    pub fn transition_id(mut self, id: TransitionId) -> Self {
+        self.transition_id = Some(id);
         self
     }
 }
@@ -360,9 +375,18 @@ impl Element for Button {
         // Get variant-specific style WITH THEME
         let button_style = self.variant.style(button_state, cx.theme());
 
+        // Resolve background color — animate via transition when an ID is set
+        let target_bg = button_style.bg;
+        let final_bg = if let Some(tid) = self.transition_id {
+            let config = TransitionConfig::new(150, crate::animation::easing::Easing::EaseOut);
+            cx.advance_transition_bg(tid, target_bg, &config)
+        } else {
+            target_bg
+        };
+
         // Build Style for rendering
         let mut style = Style::default();
-        style.background = Background::Solid(button_style.bg);
+        style.background = Background::Solid(final_bg);
         style.border_radius = Corners::all(self.size.border_radius());
         if let Some(border_color) = button_style.border_color {
             style.border.color = border_color;

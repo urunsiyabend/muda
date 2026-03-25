@@ -3,6 +3,7 @@
 //! Renders a horizontal bar with tabs for each open document.
 //! Consumes `TabBarPresentation` from ora::editor_adapter for tab data.
 
+use crate::animation::transition::TransitionId;
 use crate::context::ViewContext;
 use crate::element::AnyElement;
 use crate::elements::{Div, TextElement};
@@ -10,6 +11,10 @@ use crate::editor_adapter::{TabBarPresentation, TabPresentation};
 use crate::style::{pct, px};
 use crate::theme::ColorToken;
 use crate::view::View;
+
+/// Base TransitionId namespace for tab elements.
+/// Tab IDs = TAB_TRANSITION_BASE + tab.view_id  (no collision with other views).
+const TAB_TRANSITION_BASE: u64 = 20_000;
 
 /// Tab bar height in logical pixels (matches sidebar header for alignment).
 pub const TAB_BAR_HEIGHT: f32 = 36.0;
@@ -103,7 +108,11 @@ impl TabBarView {
                     .color(theme.color(ColorToken::FgMuted))
             );
 
-        // Build tab container with title and close button
+        // Stable TransitionId per tab: base + view_id (avoids collisions with other views)
+        let tid = TransitionId(TAB_TRANSITION_BASE + tab.view_id);
+
+        // Build tab container with title and close button.
+        // Inactive tabs also get a hover_bg; the transition smoothly interpolates between states.
         let mut tab_div = Div::new()
             .flex_row()
             .align_center()
@@ -111,6 +120,8 @@ impl TabBarView {
             .px(TAB_PADDING_H)
             .py(TAB_PADDING_V)
             .bg(bg_color)
+            .transition_id(tid)
+            .transition_bg(150)
             .child(text)
             .child(close_button);
 

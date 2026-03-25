@@ -7,6 +7,7 @@
 //!
 //! Consumes `SidebarPresentation` from core_editor for visibility and entries.
 
+use crate::animation::transition::TransitionId;
 use crate::context::ViewContext;
 use crate::element::AnyElement;
 use crate::elements::{Div, TextElement};
@@ -16,6 +17,12 @@ use crate::theme::ColorToken;
 use crate::editor_adapter::{FileTreePresentation, SidebarPresentation};
 use crate::view::View;
 use crate::views::file_tree::FileTreeView;
+
+/// TransitionId for the sidebar toggle button (collapse/expand arrow in header).
+const SIDEBAR_TOGGLE_TRANSITION_ID: TransitionId = TransitionId(10_000);
+
+/// TransitionId for the sidebar expand button (shown when collapsed).
+const SIDEBAR_EXPAND_TRANSITION_ID: TransitionId = TransitionId(10_001);
 
 /// Default expanded sidebar width in logical pixels (professional IDE width).
 pub const SIDEBAR_DEFAULT_WIDTH: f32 = 480.0;
@@ -164,6 +171,8 @@ impl SidebarView {
             .h(px(24.0))
             .border_radius(4.0)
             .hover_bg(theme.color(ColorToken::BgElevated))
+            .transition_id(SIDEBAR_TOGGLE_TRANSITION_ID)
+            .transition_bg(150)
             .child(
                 TextElement::new(toggle_icon)
                     .size(TITLE_FONT_SIZE + 2.0)
@@ -220,6 +229,8 @@ impl SidebarView {
             .h(px(32.0))
             .border_radius(4.0)
             .hover_bg(theme.color(ColorToken::BgElevated))
+            .transition_id(SIDEBAR_EXPAND_TRANSITION_ID)
+            .transition_bg(150)
             .child(
                 TextElement::new(">")
                     .size(TITLE_FONT_SIZE + 2.0)
