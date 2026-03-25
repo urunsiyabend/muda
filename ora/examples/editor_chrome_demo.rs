@@ -23,7 +23,7 @@ use ora::{
     TabBarView, StatusBarView, SidebarView, GutterView, TextAreaView, DialogView,
     stack,
 };
-use core_editor::view_model::{
+use ora::editor_adapter::{
     TabBarPresentation, TabPresentation, StatusPresentation,
     SidebarPresentation, GutterModel, LinePresentation, StyledSpan,
     DialogPresentation, CaretPresentation, VisualPosition, TextStyle,
