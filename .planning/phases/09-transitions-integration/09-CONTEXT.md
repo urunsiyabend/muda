@@ -1,82 +1,68 @@
 # Phase 9: Transitions & Integration - Context
 
-**Gathered:** 2026-03-02
+**Gathered:** 2026-03-25
 **Status:** Ready for planning
 
 <domain>
 ## Phase Boundary
 
-Two-part phase:
-1. **CSS-like animation system** — Elements can animate property changes (color, opacity, position) on state transitions with configurable easing and duration
-2. **wgpu_client migration** — Reduce wgpu_client to a thin app shell that delegates all UI to ora; eliminate hardcoded values and duplicated styling logic
-
-This phase does NOT add new UI components or new editor features. It polishes existing interactions and consolidates the rendering ownership.
+Add CSS-like transitions for UI polish (opacity, color, position, size animations with easing) and complete wgpu_client migration to a minimal ora shell. wgpu_client becomes just `main() + ora::run()`. All UI, rendering, input handling, and design tokens live in ora.
 
 </domain>
 
 <decisions>
 ## Implementation Decisions
 
-### Transition feel & timing
-- Claude's Discretion — pick appropriate durations and easing per interaction type
-- Guidance: code editors favor snappy micro-interactions (hover ~100-150ms) with slightly longer macro-transitions (overlay open/close ~200ms)
-- Easing curves should match the interaction — ease-out for most state changes, ease-in-out for position animations
+### Transition Behavior
+- All four property types supported in v1: colors (bg, text, border), opacity, position/transform, size (width, height)
+- Default duration: balanced 150-250ms (standard desktop app feel, like VS Code/Zed)
+- Interruption: reverse from current interpolated value (modern IDE behavior) — no visual jump on state change mid-animation
+- Theme switching is instant swap, NOT animated — colors change immediately on toggle
 
-### What gets animated
-- Claude's Discretion — determine which elements animate by default vs opt-in
-- Guidance: hover/active color transitions on interactive elements (buttons, tabs, list items) are good defaults
-- Caret blink should use smooth fade (VS Code style) rather than hard toggle
-- Focus ring appearance: Claude's discretion on instant vs quick fade
-- Theme switching: Claude's discretion on instant vs cross-fade
+### Animation API Surface
+- Builder method per property: `.transition_bg(200.ms())`, `.transition_opacity(150.ms())` — explicit, granular control
+- Easing: global default (ease-out) with per-transition override via chained method (e.g., `.transition_bg(200.ms()).easing(ease_in_out)`)
+- Auto-drive redraws: transition system requests animation frames at ~60fps while any animation is in-flight
+- Enter + exit transitions supported: elements can define appear/disappear animations (toast slide-in, dialog scale-up, fade-out on dismiss)
 
-### Overlay animations
-- Claude's Discretion — determine entrance/exit animation style per overlay type
-- Guidance: command palette and dialog could benefit from subtle fade; toasts from slide-in; instant show/hide is also acceptable if simpler
+### Migration Boundary
+- wgpu_client becomes minimal shell: only `main()` + `ora::run()` — all UI logic moves to ora
+- Input translation (winit key events → EditorCommand) moves to ora — views handle input via ora's action system
+- Adapter/trait boundary between ora and core_editor — ora views do NOT import core_editor types directly; a trait abstracts the data contract for RenderModel
+- wgpu_client's design_system/ tokens deleted entirely — ora tokens are the single source of truth
 
-### Animatable properties
-- Claude's Discretion — determine which CSS-like properties to support
-- Minimum: background-color, text color, opacity
-- Stretch goal: border-color, position offset for slide animations
-
-### Migration boundary
-- Claude's Discretion — determine how thin the wgpu_client shell becomes
-- Guidance: wgpu_client should own minimal app setup (config, keybindings, root view registration) and delegate all rendering/layout/styling to ora
-- Old wgpu_client rendering code should be removed (not kept as dead code) — ora is the single source of truth
-- Audit and eliminate all hardcoded float literals (heights, widths, padding, font sizes) in wgpu_client
-
-### Editor data bridge
-- Claude's Discretion — determine data flow pattern between core_editor and ora views
-- Guidance: ora views need to consume RenderModel from core_editor's ViewModelBuilder; keyboard events need to translate to EditorCommand
-- Research should investigate current wgpu_client data flow to determine simplest migration path
-- Dependency direction (ora depends on core_editor vs bridge in wgpu_client) should be decided based on keeping ora as generic as practical
+### Migration Strategy
+- Integration first, transitions second — ensure core functionality works before adding polish
+- Incremental migration by component — one component at a time (e.g., TabBar, then Sidebar, then editor) with verification at each step
+- Visual similarity target (not pixel-perfect) — ora's design tokens may produce slightly different results and that's acceptable
+- Delete old code as we migrate — each migrated component's wgpu_client code gets removed immediately
 
 ### Claude's Discretion
-All areas were discussed but specific selections were not captured due to tool limitations. Claude has flexibility across all implementation decisions. Key constraints from the roadmap success criteria:
-1. Elements MUST support animating opacity, color, background-color, position with easing
-2. Hover/active transitions MUST smoothly fade between states
-3. wgpu_client MUST be reduced to thin app shell
-4. ora views MUST consume RenderModel from core_editor
-5. Keyboard events MUST translate to EditorCommand
-6. ALL hardcoded values MUST be eliminated from wgpu_client
-7. ALL duplicated styling logic MUST be removed from wgpu_client
+- Specific easing function defaults per property type
+- Adapter trait design for core_editor RenderModel abstraction
+- Migration order of components (which component to migrate first)
+- Animation frame scheduling mechanism within winit event loop
+- Enter/exit animation implementation approach
 
 </decisions>
 
 <specifics>
 ## Specific Ideas
 
-No specific requirements captured — open to standard approaches within the roadmap success criteria.
+- Transition interruption should match modern IDE behavior (VS Code, Zed) — smooth reversal from current value, never a visual pop
+- wgpu_client has existing animation primitives (Tween, Easing) in its codebase — can reference for easing function implementations
+- The adapter trait boundary means ora could theoretically work with editors other than core_editor in the future
 
 </specifics>
 
 <deferred>
 ## Deferred Ideas
 
-None — discussion stayed within phase scope.
+None — discussion stayed within phase scope
 
 </deferred>
 
 ---
 
 *Phase: 09-transitions-integration*
-*Context gathered: 2026-03-02*
+*Context gathered: 2026-03-25*
