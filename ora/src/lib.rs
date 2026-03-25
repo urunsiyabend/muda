@@ -18,7 +18,7 @@ pub mod layout;
 pub mod rendering;
 pub mod theme;
 
-pub use app::App;
+pub use app::{App, run_with_editor};
 pub use context::{AppContext, ViewContext, WindowContext, ThemeChanged};
 pub use element::{AnyElement, Element, LayoutContext, LayoutId, PaintContext, PrepaintContext};
 pub use entity::Model;

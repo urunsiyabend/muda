@@ -1,4 +1,5 @@
 use crate::context::WindowContext;
+use crate::editor_adapter::EditorDataSource;
 use crate::platform::event_loop::OraApp;
 use winit::event_loop::EventLoop;
 
@@ -53,4 +54,31 @@ impl Default for App {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Run the ora application with an editor backend adapter.
+///
+/// This is the primary launch entry point for the full Muda editor.
+/// The adapter is responsible for providing presentation data and
+/// processing editor commands dispatched from keyboard events.
+///
+/// # Example
+///
+/// ```ignore
+/// let adapter = CoreEditorAdapter::new();
+/// ora::run_with_editor(adapter);  // never returns
+/// ```
+///
+/// # Panics
+///
+/// Panics if the winit event loop cannot be created or if the application
+/// exits abnormally. Under normal circumstances, this function never returns.
+pub fn run_with_editor(adapter: impl EditorDataSource + 'static) -> ! {
+    let event_loop = EventLoop::new().unwrap();
+    let app = App::new()
+        .title("Muda")
+        .size(1280, 720);
+    let mut ora_app = OraApp::new_with_editor(app, Box::new(adapter));
+    event_loop.run_app(&mut ora_app).unwrap();
+    std::process::exit(0);
 }
