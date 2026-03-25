@@ -10,6 +10,7 @@ use crate::events::dispatch::{dispatch_mouse_down, dispatch_mouse_move, dispatch
 use crate::events::keyboard::{translate_key_event, Key, NamedKey};
 use crate::events::actions::KeyContext;
 use crate::platform::gpu::GpuState;
+use crate::views::SharedAdapter;
 use crate::window::OraWindow;
 use std::sync::Arc;
 use winit::application::ApplicationHandler;
@@ -30,7 +31,8 @@ pub struct OraApp {
     /// Optional editor adapter. When present, keyboard events that are not
     /// handled by Tab navigation or the action system are translated to
     /// `EditorCommand` and dispatched through the adapter.
-    editor_adapter: Option<Box<dyn EditorDataSource>>,
+    /// Shared with the `EditorRootView` via `Rc<RefCell<>>`.
+    editor_adapter: Option<SharedAdapter>,
 }
 
 impl OraApp {
@@ -51,9 +53,10 @@ impl OraApp {
 
     /// Create a new OraApp that includes an editor backend adapter.
     ///
-    /// Keyboard events not consumed by Tab navigation or the action system will
-    /// be translated to `EditorCommand` and dispatched to the adapter.
-    pub fn new_with_editor(app: App, adapter: Box<dyn EditorDataSource>) -> Self {
+    /// The adapter is shared via `Rc<RefCell<>>` with the `EditorRootView`
+    /// so both the view (for `build_render_model`) and the event loop
+    /// (for `dispatch_command`) can access it.
+    pub fn new_with_editor(app: App, adapter: SharedAdapter) -> Self {
         Self {
             app_config: Some(app),
             gpu_state: None,
@@ -273,10 +276,10 @@ impl ApplicationHandler for OraApp {
                                     if let Some(gpu_state) = &self.gpu_state {
                                         gpu_state.window.request_redraw();
                                     }
-                                } else if let Some(adapter) = &mut self.editor_adapter {
+                                } else if let Some(adapter) = &self.editor_adapter {
                                     // No action matched: try editor command translation
                                     if let Some(cmd) = translate_editor_command(&keyboard_event, self.modifiers) {
-                                        adapter.dispatch_command(cmd);
+                                        adapter.borrow_mut().dispatch_command(cmd);
                                         log::debug!("Editor command dispatched via adapter");
                                         if let Some(gpu_state) = &self.gpu_state {
                                             gpu_state.window.request_redraw();
@@ -299,10 +302,10 @@ impl ApplicationHandler for OraApp {
                                 if let Some(gpu_state) = &self.gpu_state {
                                     gpu_state.window.request_redraw();
                                 }
-                            } else if let Some(adapter) = &mut self.editor_adapter {
+                            } else if let Some(adapter) = &self.editor_adapter {
                                 // No action matched: try editor command translation
                                 if let Some(cmd) = translate_editor_command(&keyboard_event, self.modifiers) {
-                                    adapter.dispatch_command(cmd);
+                                    adapter.borrow_mut().dispatch_command(cmd);
                                     log::debug!("Editor command dispatched via adapter");
                                     if let Some(gpu_state) = &self.gpu_state {
                                         gpu_state.window.request_redraw();

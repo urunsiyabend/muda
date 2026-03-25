@@ -1,6 +1,10 @@
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use crate::context::WindowContext;
 use crate::editor_adapter::EditorDataSource;
 use crate::platform::event_loop::OraApp;
+use crate::views::EditorRootView;
 use winit::event_loop::EventLoop;
 
 /// Application builder for configuring and running the ora application.
@@ -75,10 +79,21 @@ impl Default for App {
 /// exits abnormally. Under normal circumstances, this function never returns.
 pub fn run_with_editor(adapter: impl EditorDataSource + 'static) -> ! {
     let event_loop = EventLoop::new().unwrap();
+
+    // Wrap the adapter in Rc<RefCell<>> so it can be shared between the root
+    // view (for build_render_model) and the event loop (for dispatch_command).
+    let shared_adapter: Rc<RefCell<Box<dyn EditorDataSource>>> =
+        Rc::new(RefCell::new(Box::new(adapter)));
+    let view_adapter = shared_adapter.clone();
+
     let app = App::new()
         .title("Muda")
-        .size(1280, 720);
-    let mut ora_app = OraApp::new_with_editor(app, Box::new(adapter));
+        .size(1280, 720)
+        .on_open(move |cx| {
+            let root_view = EditorRootView::new(view_adapter, &mut cx.as_view_context());
+            cx.set_root_view(root_view);
+        });
+    let mut ora_app = OraApp::new_with_editor(app, shared_adapter);
     event_loop.run_app(&mut ora_app).unwrap();
     std::process::exit(0);
 }

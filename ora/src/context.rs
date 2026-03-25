@@ -661,6 +661,12 @@ impl<'a> WindowContext<'a> {
         self.app_context
     }
 
+    /// Borrow a ViewContext from this WindowContext.
+    /// Useful when creating views that need a ViewContext for initialization.
+    pub fn as_view_context(&mut self) -> ViewContext<'_> {
+        ViewContext::new(self.app_context)
+    }
+
     // Focus management methods
 
     /// Create a new focus handle with a unique stable ID.

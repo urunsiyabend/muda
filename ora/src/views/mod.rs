@@ -26,6 +26,7 @@
 pub mod app_layout;
 pub mod command_palette;
 pub mod dialog;
+pub mod editor_root;
 pub mod file_tree;
 pub mod gutter;
 pub mod panel_manager;
@@ -35,6 +36,7 @@ pub mod tab_bar;
 pub mod text_area;
 
 pub use app_layout::AppLayout;
+pub use editor_root::{EditorRootView, SharedAdapter};
 pub use command_palette::{CommandPaletteView, CommandItem, fuzzy_match, FuzzyMatch};
 pub use dialog::DialogView;
 pub use file_tree::FileTreeView;
