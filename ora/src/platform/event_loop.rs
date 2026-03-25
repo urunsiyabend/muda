@@ -100,16 +100,13 @@ impl OraApp {
 impl OraApp {
     /// Synchronize `scroll_top_px` after core_editor updates its `scroll_y`.
     ///
-    /// When core_editor moves the viewport (e.g., `ensure_caret_visible` after
-    /// arrow-key navigation), the integral line changes but we want to keep the
-    /// fractional sub-line offset to avoid a jarring visual snap.
-    ///
-    /// We snap the integer part to `new_scroll_y * LINE_HEIGHT` but preserve
-    /// the fractional component `scroll_top_px % LINE_HEIGHT`.
+    /// Called after keyboard-driven caret movement triggers
+    /// `ensure_caret_visible` in core_editor. Snaps to the exact line
+    /// boundary (no fractional offset) so the viewport doesn't judder
+    /// when typing or navigating with arrow keys.
     fn sync_scroll_from_core(&mut self, new_scroll_y: usize) {
         const LINE_HEIGHT: f32 = 21.0;
-        let fractional = self.scroll_top_px % LINE_HEIGHT;
-        self.scroll_top_px = new_scroll_y as f32 * LINE_HEIGHT + fractional;
+        self.scroll_top_px = new_scroll_y as f32 * LINE_HEIGHT;
         if let Some(ref offset) = self.shared_scroll_offset {
             offset.set(self.scroll_top_px);
         }
@@ -320,12 +317,14 @@ impl ApplicationHandler for OraApp {
                 if let Some(adapter) = &self.editor_adapter {
                     use crate::editor_adapter::EditorCommand;
 
-                    // Compute max scroll so the last line sits at the bottom
-                    // of the viewport, not the top. Without this the user can
-                    // scroll past the end of the document into empty space.
+                    // Max scroll: allow the last line to reach the middle of
+                    // the viewport (half-screen overscroll), matching VS Code
+                    // behaviour. This prevents the jarring "last line glued to
+                    // bottom" effect and lets users centre the last line.
                     let total_lines = adapter.borrow().total_lines().max(1);
                     let viewport_lines = adapter.borrow().viewport_lines().max(1);
-                    let scrollable_lines = total_lines.saturating_sub(viewport_lines);
+                    let half_viewport = viewport_lines / 2;
+                    let scrollable_lines = total_lines.saturating_sub(viewport_lines.saturating_sub(half_viewport));
                     let max_scroll_px = scrollable_lines as f32 * LINE_HEIGHT;
 
                     // Apply delta and clamp.
