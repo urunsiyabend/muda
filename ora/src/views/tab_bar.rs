@@ -1,15 +1,15 @@
 //! Tab bar view showing open document tabs.
 //!
 //! Renders a horizontal bar with tabs for each open document.
-//! Consumes `TabBarPresentation` from core_editor for tab data.
+//! Consumes `TabBarPresentation` from ora::editor_adapter for tab data.
 
 use crate::context::ViewContext;
 use crate::element::AnyElement;
 use crate::elements::{Div, TextElement};
+use crate::editor_adapter::{TabBarPresentation, TabPresentation};
 use crate::style::{pct, px};
 use crate::theme::ColorToken;
 use crate::view::View;
-use core_editor::view_model::{TabBarPresentation, TabPresentation};
 
 /// Tab bar height in logical pixels (matches sidebar header for alignment).
 pub const TAB_BAR_HEIGHT: f32 = 36.0;
@@ -159,7 +159,7 @@ impl View for TabBarView {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use core_editor::view_model::{TabBarPresentation, TabPresentation};
+    use crate::editor_adapter::{TabBarPresentation, TabPresentation};
 
     #[test]
     fn test_tab_bar_view_creation() {

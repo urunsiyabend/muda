@@ -285,7 +285,7 @@ impl View for AppLayout {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use core_editor::view_model::{
+    use crate::editor_adapter::{
         CaretPresentation, DialogPresentation, FileTreePresentation, GutterModel,
         RenderModel, SidebarPresentation, StatusPresentation, TabBarPresentation,
         VisualPosition,

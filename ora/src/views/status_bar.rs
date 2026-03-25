@@ -7,15 +7,15 @@
 //! - Total lines
 //! - Optional status messages
 //!
-//! Consumes `StatusPresentation` from core_editor for status data.
+//! Consumes `StatusPresentation` from ora::editor_adapter for status data.
 
 use crate::context::ViewContext;
+use crate::editor_adapter::StatusPresentation;
 use crate::element::AnyElement;
 use crate::elements::{Div, TextElement};
 use crate::style::{px, pct, JustifyContent};
 use crate::theme::ColorToken;
 use crate::view::View;
-use core_editor::view_model::StatusPresentation;
 
 /// Status bar height in logical pixels (matches tab bar for visual consistency).
 pub const STATUS_BAR_HEIGHT: f32 = 36.0;
@@ -164,7 +164,7 @@ impl View for StatusBarView {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use core_editor::view_model::StatusPresentation;
+    use crate::editor_adapter::StatusPresentation;
 
     #[test]
     fn test_status_bar_view_creation() {

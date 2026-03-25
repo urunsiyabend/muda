@@ -28,9 +28,9 @@ use crate::context::ViewContext;
 use crate::element::AnyElement;
 use crate::elements::{CaretElement, Div, TextElement};
 use crate::style::{pct, px, Color};
+use crate::editor_adapter::{CaretPresentation, LinePresentation, RenderModel, TextStyle};
 use crate::theme::{ColorToken, Theme};
 use crate::view::View;
-use core_editor::view_model::{CaretPresentation, LinePresentation, RenderModel, TextStyle};
 
 /// Font size for editor text.
 const TEXT_FONT_SIZE: f32 = 14.0;
@@ -286,7 +286,7 @@ impl View for TextAreaView {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use core_editor::view_model::{StyledSpan, VisualPosition};
+    use crate::editor_adapter::{StyledSpan, VisualPosition};
 
     fn make_line(number: usize, is_current: bool, text: &str) -> LinePresentation {
         LinePresentation::with_spans(

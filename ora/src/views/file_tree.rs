@@ -21,8 +21,8 @@ use crate::elements::Div;
 use crate::elements::tree_item::tree_item;
 use crate::style::Color;
 use crate::theme::ColorToken;
+use crate::editor_adapter::{FileTreeNode, FileTreePresentation};
 use crate::view::View;
-use core_editor::view_model::{FileTreePresentation, FileTreeNode};
 
 // NOTE: Row geometry is delegated to TreeItem element which owns
 // TREE_ITEM_HEIGHT, INDENT_WIDTH, CHEVRON_WIDTH, ICON_WIDTH, and TREE_FONT_SIZE.
@@ -156,7 +156,7 @@ impl View for FileTreeView {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use core_editor::view_model::{FileTreeNode, FileTreePresentation};
+    use crate::editor_adapter::{FileTreeNode, FileTreePresentation};
 
     // -------------------------------------------------------------------------
     // flatten_nodes tests

@@ -13,9 +13,9 @@ use crate::elements::{Div, TextElement};
 use crate::events::focus::FocusHandle;
 use crate::style::{pct, px};
 use crate::theme::ColorToken;
+use crate::editor_adapter::{FileTreePresentation, SidebarPresentation};
 use crate::view::View;
 use crate::views::file_tree::FileTreeView;
-use core_editor::view_model::{SidebarPresentation, FileTreePresentation};
 
 /// Default expanded sidebar width in logical pixels (professional IDE width).
 pub const SIDEBAR_DEFAULT_WIDTH: f32 = 480.0;
@@ -276,7 +276,7 @@ impl View for SidebarView {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use core_editor::view_model::SidebarPresentation;
+    use crate::editor_adapter::SidebarPresentation;
 
     #[test]
     fn test_sidebar_view_creation() {

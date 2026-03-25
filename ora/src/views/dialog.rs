@@ -15,8 +15,8 @@ use crate::elements::{button, Div, TextElement, stack};
 use crate::events::FocusHandle;
 use crate::style::{px, pct, Color};
 use crate::theme::ColorToken;
+use crate::editor_adapter::DialogPresentation;
 use crate::view::View;
-use core_editor::view_model::DialogPresentation;
 
 /// Dialog width in logical pixels (from wgpu_client constants).
 pub const DIALOG_WIDTH: f32 = 420.0;

@@ -17,12 +17,12 @@
 //! - Separator: ColorToken::BorderDefault
 
 use crate::context::ViewContext;
+use crate::editor_adapter::{GutterModel, LinePresentation};
 use crate::element::AnyElement;
 use crate::elements::{Div, TextElement};
 use crate::style::px;
 use crate::theme::ColorToken;
 use crate::view::View;
-use core_editor::view_model::{GutterModel, LinePresentation};
 
 /// Left padding in pixels before line numbers.
 pub const LEFT_PADDING: f32 = 8.0;
@@ -211,7 +211,7 @@ impl View for GutterView {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use core_editor::view_model::{GutterModel, LinePresentation, StyledSpan};
+    use crate::editor_adapter::{GutterModel, LinePresentation, StyledSpan};
 
     fn make_line(number: usize, is_current: bool) -> LinePresentation {
         LinePresentation::with_spans(number, is_current, vec![StyledSpan::raw("")])
