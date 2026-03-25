@@ -11,14 +11,6 @@ path = "src/main.rs"
 core_editor = { path = "../core_editor" }
 ora = { path = "../ora" }
 
-# GPU rendering
-wgpu = "23"
-winit = "0.30"
-glyphon = "0.7"
-pollster = "0.4"
-
 # Utilities
 log = "0.4"
 simplelog = "0.12"
-anyhow = "1.0"
-bytemuck = { version = "1.21", features = ["derive"] }
