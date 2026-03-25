@@ -14,6 +14,13 @@
 //! 4. Dialog (full-screen, handles its own backdrop and centering)
 //! 5. Toast notifications (bottom-right corner, topmost layer)
 //!
+//! # Data Flow
+//!
+//! AppLayout receives all presentation data as [`crate::editor_adapter::RenderModel`]
+//! values produced by calling [`crate::editor_adapter::EditorDataSource::build_render_model`]
+//! on the active adapter. The layout never imports `core_editor` types directly;
+//! all data enters through the `EditorDataSource` adapter boundary.
+//!
 //! # CONTEXT Decisions
 //!
 //! - Toggle sidebar/panel: instant, no animation
@@ -21,6 +28,11 @@
 //! - Panel sizes tracked here; persistence deferred to later
 
 use crate::context::ViewContext;
+// EditorDataSource is the trait that callers use to produce RenderModel data
+// for this view. AppLayout never imports core_editor; all data flows in via
+// EditorDataSource::build_render_model(). See module-level doc for data flow.
+#[allow(unused_imports)]
+use crate::editor_adapter::EditorDataSource;
 use crate::element::AnyElement;
 use crate::elements::{stack, Div, Toast, ContextMenu};
 use crate::style::pct;
