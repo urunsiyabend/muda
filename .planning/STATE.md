@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-03-26)
 
 ## Current Position
 
-Phase: 10 — Foundation Fixes (pending planning)
-Plan: —
-Status: Roadmap created, Phase 10 ready for `/gsd:plan-phase 10`
-Last activity: 2026-03-26 — v2.0 roadmap created (7 phases, 40 requirements mapped)
+Phase: 10 — Foundation Fixes (in progress)
+Plan: 01 of N (event-driven redraw)
+Status: In progress — Plan 01 complete
+Last activity: 2026-03-26 — Completed 10-01-PLAN.md (event-driven redraw + caret blink timer)
 
-Progress: [░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] v2.0 Phase 10 not started
+Progress: [█░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] v2.0 Phase 10 plan 01 complete
 
 ## Performance Metrics
 
@@ -46,6 +46,7 @@ None.
 - Async file I/O return path: `dispatch_command(&mut self, cmd)` returns `()` — need result channel or callback for file operations (Phase 12 design decision, flag in Phase 10 planning)
 - EditorDataSource trait pressure: plan full sub-trait expansion before implementing any new methods (Phase 10 design work)
 - Selection rendering bug is in span composition in adapter, not GPU renderer — debug in correct layer (Phase 10)
+- Idle GPU fixed (10-01): unconditional request_redraw at event_loop.rs removed; ControlFlow state machine now drives frame cadence
 
 ### Known Issues
 
@@ -58,9 +59,9 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-26
-Stopped at: v2.0 roadmap creation complete
+Stopped at: Completed 10-01-PLAN.md (event-driven redraw + caret blink timer)
 Resume file: None
-Next: `/gsd:plan-phase 10` to plan Foundation Fixes
+Next: Continue Phase 10 plans (selection rendering, command audit, trait split)
 
 ---
 *State initialized: 2026-01-28*
