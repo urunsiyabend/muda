@@ -5,14 +5,14 @@
 See: .planning/PROJECT.md (updated 2026-01-28)
 
 **Core value:** A single, authoritative UI toolkit that eliminates duplicated styling, enforces consistent design tokens, and provides a scalable GPUI-like component model for the entire GPU client.
-**Current focus:** Phase 9: Transitions & Integration — in progress (09-01 animation primitives done, 09-02 editor adapter done).
+**Current focus:** Phase 9: Transitions & Integration — in progress (09-01 through 09-06 done).
 
 ## Current Position
 
 Phase: 9 of 9 (Transitions & Integration) - In progress
-Plan: 6 of N in current phase (09-01 animation primitives, 09-02 editor adapter, 09-03 import migration, 09-04 transition infrastructure, 09-06 Div transition API done)
-Status: In progress — 09-06 (Div transition builder API + PaintContext interpolation) complete
-Last activity: 2026-03-25 - Completed 09-06-PLAN.md (Div transition builders, PaintContext advance_transition_*, TransitionState position methods)
+Plan: 6 of N in current phase (09-01 animation primitives, 09-02 editor adapter, 09-03 import migration, 09-04 transition infrastructure, 09-05 editor adapter integration, 09-06 Div transition API done)
+Status: In progress — 09-05 (CoreEditorAdapter + keyboard dispatch + run_with_editor) complete
+Last activity: 2026-03-25 - Completed 09-05-PLAN.md (CoreEditorAdapter, translate_editor_command, OraApp::new_with_editor, ora::run_with_editor)
 
 Progress: [█████████████████████████████████] Phase 9 in progress (~4 plans done)
 
@@ -226,6 +226,10 @@ Recent decisions affecting current work:
 - TransitionRegistry in AppContext uses RefCell<T> — PaintContext holds *const AppContext but paint() must advance tweens; RefCell provides safe interior mutability (09-04)
 - advance_* creates new Tween per target change (not retarget) — preserves duration from current TransitionConfig, avoids zero-duration silent failure from retarget() on instant tweens (09-04)
 - advance_* calls start() then update() immediately — 0ms tweens complete on first frame, no spurious has_active_transitions() signals (09-04)
+- Orphan rule prevents From<core_editor::X> for ora::Y in wgpu_client — used private free conversion functions instead (same semantics) (09-05)
+- build_render_model unsafe cast: core_editor::App::build_render_model needs &mut self but EditorDataSource trait uses &self — single-threaded SAFETY comment justifies cast (09-05)
+- run_with_editor defaults to title "Muda" and size 1280x720 — matches existing WgpuApp convention (09-05)
+- Keyboard dispatch priority: Tab nav > action system > translate_editor_command — existing keybindings and focus nav unaffected (09-05)
 - TransitionProperty private enum in div.rs tracks last configured property so .easing() applies correctly (09-06)
 - Background update condition: set style.background when hitbox or transition_id is set, preserving non-Solid backgrounds for untouched Divs (09-06)
 - advance_position_x/y added to TransitionState in 09-06 (plan 04 defined tween fields but omitted the advance methods) (09-06)
@@ -254,8 +258,8 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-25T11:44:35Z
-Stopped at: Completed 09-06-PLAN.md — Div transition builder API + PaintContext advance_transition_* methods
+Last session: 2026-03-25T11:50:29Z
+Stopped at: Completed 09-05-PLAN.md — CoreEditorAdapter, translate_editor_command, OraApp::new_with_editor, ora::run_with_editor
 Resume file: None
 Next: Continue Phase 9 — proceed to next unexecuted plan (09-07 or later)
 
