@@ -206,6 +206,11 @@ impl TextAreaView {
                 let mut children: Vec<AnyElement> = Vec::new();
                 let mut prev_end: usize = 0;
 
+                // Total character count on this line (for edge-to-edge detection).
+                let total_chars: usize = line.spans.iter()
+                    .map(|s| s.text.chars().count())
+                    .sum();
+
                 for &(start_col, end_col) in &line.selection_ranges {
                     // Spacer before this selection range.
                     if start_col > prev_end {
@@ -215,15 +220,28 @@ impl TextAreaView {
                         );
                     }
                     // Selection highlight rect.
-                    let sel_w = (end_col - start_col) as f32 * self.char_width;
-                    children.push(
-                        Div::new()
-                            .w(px(sel_w))
-                            .h(px(LINE_HEIGHT))
-                            .shrink(0.0)
-                            .bg(selection_color)
-                            .into(),
-                    );
+                    // If the selection extends to or past end of line text,
+                    // use grow(1.0) to fill remaining width (edge-to-edge).
+                    if end_col >= total_chars && total_chars > 0 {
+                        children.push(
+                            Div::new()
+                                .h(px(LINE_HEIGHT))
+                                .shrink(0.0)
+                                .grow(1.0)
+                                .bg(selection_color)
+                                .into(),
+                        );
+                    } else {
+                        let sel_w = (end_col - start_col) as f32 * self.char_width;
+                        children.push(
+                            Div::new()
+                                .w(px(sel_w))
+                                .h(px(LINE_HEIGHT))
+                                .shrink(0.0)
+                                .bg(selection_color)
+                                .into(),
+                        );
+                    }
                     prev_end = end_col;
                 }
 
