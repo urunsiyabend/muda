@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-01-28)
 
 **Core value:** A single, authoritative UI toolkit that eliminates duplicated styling, enforces consistent design tokens, and provides a scalable GPUI-like component model for the entire GPU client.
-**Current focus:** Phase 8.1: GPU Layered Rendering Pipeline - COMPLETE. Ready for Phase 9.
+**Current focus:** Phase 9: Transitions & Integration — in progress (09-01 animation primitives done, 09-02 editor adapter done).
 
 ## Current Position
 
-Phase: 8.1 of 9 (GPU Layered Rendering Pipeline) - COMPLETE
-Plan: 3 of 3 in current phase — ALL COMPLETE
-Status: Phase 8.1 complete (all three plans done, visual UAT approved)
-Last activity: 2026-03-02 - Completed 08.1-03 after checkpoint approval ("LGTM")
+Phase: 9 of 9 (Transitions & Integration) - In progress
+Plan: 2 of N in current phase
+Status: In progress — 09-01 (animation primitives) and 09-02 (EditorDataSource + mirror types) complete
+Last activity: 2026-03-25 - Completed 09-02-PLAN.md (EditorDataSource trait + all mirror presentation types)
 
-Progress: [█████████████████████████████████] ~100% of planned work (44 of ~44 plans complete)
+Progress: [█████████████████████████████████] Phase 9 in progress (~2 plans done)
 
 ## Performance Metrics
 
@@ -213,6 +213,9 @@ Recent decisions affecting current work:
 - Flat rect buffer with Range<u32> range slicing per layer in render_frame() — single prepare() avoids bind_group invalidation (08.1-03)
 - First render pass LoadOp::Clear, subsequent passes LoadOp::Load — Vulkan requires Clear on uninitialized texture; Load preserves prior layer content for correct occlusion (08.1-03)
 - Single queue.submit() for entire multi-pass frame — Vulkan multiple submits cause hangs (08.1-03)
+- Mirror types in ora::editor_adapter have no From impls — conversions deferred to wgpu_client where both type namespaces are available (09-02)
+- EditorCommand defined alongside presentation types in editor_adapter::types — single module owns full adapter surface (09-02)
+- Adapter boundary: ora views use &dyn EditorDataSource, never &core_editor::app::App (09-02)
 
 ### Pending Todos
 
@@ -238,11 +241,11 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-02T12:00:00Z
-Stopped at: Completed 08.1-03-PLAN.md — Phase 8.1 fully complete, visual UAT approved ("LGTM")
+Last session: 2026-03-25T11:26:32Z
+Stopped at: Completed 09-02-PLAN.md — EditorDataSource trait + all mirror types in ora::editor_adapter
 Resume file: None
-Next: Phase 9 (integration work — wgpu_client token migration and final integration)
+Next: 09-03 (migrate ora views to consume &dyn EditorDataSource instead of core_editor types directly)
 
 ---
 *State initialized: 2026-01-28*
-*Last updated: 2026-03-02 after completing 08-08 (AppLayout capstone, Phase 8 complete)*
+*Last updated: 2026-03-25 after completing 09-02 (EditorDataSource trait + mirror presentation types)*
