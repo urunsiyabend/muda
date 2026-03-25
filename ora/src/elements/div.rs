@@ -1,7 +1,19 @@
+use crate::animation::easing::Easing;
+use crate::animation::transition::{TransitionConfig, TransitionId, TransitionSpec};
 use crate::element::{AnyElement, Element, LayoutContext, LayoutId, PaintContext, PrepaintContext};
 use crate::events::focus::{FocusHandle, FocusId};
 use crate::events::mouse::HitboxId;
 use crate::style::*;
+
+/// Tracks which transition property was most recently configured via a builder
+/// method. Used by `.easing()` to apply the easing to the correct property.
+#[derive(Clone, Copy)]
+enum TransitionProperty {
+    Bg,
+    Opacity,
+    Color,
+    Position,
+}
 
 /// Styled rectangle container element.
 /// Implements flexbox layout with background, border, border-radius, and box shadow.
@@ -13,6 +25,10 @@ pub struct Div {
     hover_bg: Option<Color>,
     active_bg: Option<Color>,
     focus_ring_color: Option<Color>,
+    // Transition support
+    transition_id: Option<TransitionId>,
+    transition_spec: Option<TransitionSpec>,
+    last_transition_property: Option<TransitionProperty>,
 }
 
 impl Div {
@@ -24,6 +40,9 @@ impl Div {
             hover_bg: None,
             active_bg: None,
             focus_ring_color: None,
+            transition_id: None,
+            transition_spec: None,
+            last_transition_property: None,
         }
     }
 
@@ -301,6 +320,87 @@ impl Div {
         self.focus_ring_color = Some(color);
         self
     }
+
+    // Transition builders
+
+    /// Assign a stable cross-frame identity for transition state lookup.
+    /// Elements are recreated each frame; this ID persists in the TransitionRegistry.
+    pub fn transition_id(mut self, id: TransitionId) -> Self {
+        self.transition_id = Some(id);
+        self
+    }
+
+    /// Animate the background color over `duration_ms` milliseconds (EaseOut default).
+    /// Chain `.easing(Easing::Linear)` to override the easing function.
+    pub fn transition_bg(mut self, duration_ms: u32) -> Self {
+        self.transition_spec
+            .get_or_insert_with(TransitionSpec::default)
+            .bg = Some(TransitionConfig {
+                duration_ms,
+                easing: Easing::EaseOut,
+            });
+        self.last_transition_property = Some(TransitionProperty::Bg);
+        self
+    }
+
+    /// Animate the opacity over `duration_ms` milliseconds (EaseOut default).
+    pub fn transition_opacity(mut self, duration_ms: u32) -> Self {
+        self.transition_spec
+            .get_or_insert_with(TransitionSpec::default)
+            .opacity = Some(TransitionConfig {
+                duration_ms,
+                easing: Easing::EaseOut,
+            });
+        self.last_transition_property = Some(TransitionProperty::Opacity);
+        self
+    }
+
+    /// Animate the text/border color over `duration_ms` milliseconds (EaseOut default).
+    pub fn transition_color(mut self, duration_ms: u32) -> Self {
+        self.transition_spec
+            .get_or_insert_with(TransitionSpec::default)
+            .color = Some(TransitionConfig {
+                duration_ms,
+                easing: Easing::EaseOut,
+            });
+        self.last_transition_property = Some(TransitionProperty::Color);
+        self
+    }
+
+    /// Animate the paint-time position offset over `duration_ms` milliseconds (EaseOut default).
+    pub fn transition_position(mut self, duration_ms: u32) -> Self {
+        self.transition_spec
+            .get_or_insert_with(TransitionSpec::default)
+            .position = Some(TransitionConfig {
+                duration_ms,
+                easing: Easing::EaseOut,
+            });
+        self.last_transition_property = Some(TransitionProperty::Position);
+        self
+    }
+
+    /// Override the easing on the most recently configured transition property.
+    ///
+    /// Example: `.transition_bg(200).easing(Easing::EaseIn)`
+    pub fn easing(mut self, easing: Easing) -> Self {
+        if let (Some(spec), Some(prop)) = (&mut self.transition_spec, self.last_transition_property) {
+            match prop {
+                TransitionProperty::Bg => {
+                    if let Some(c) = &mut spec.bg { c.easing = easing; }
+                }
+                TransitionProperty::Opacity => {
+                    if let Some(c) = &mut spec.opacity { c.easing = easing; }
+                }
+                TransitionProperty::Color => {
+                    if let Some(c) = &mut spec.color { c.easing = easing; }
+                }
+                TransitionProperty::Position => {
+                    if let Some(c) = &mut spec.position { c.easing = easing; }
+                }
+            }
+        }
+        self
+    }
 }
 
 impl Default for Div {
@@ -357,20 +457,40 @@ impl Element for Div {
         // Build style with interactive states applied
         let mut style = self.style.clone();
 
-        // Apply interactive styling based on state (priority: active > hover > focus > base)
-        if let Some(hitbox_id) = state.hitbox_id {
-            // Check active state (highest priority)
+        // Determine base background color for transition interpolation
+        let base_bg = match &self.style.background {
+            Background::Solid(c) => *c,
+            _ => Color::transparent(),
+        };
+
+        // Determine the target background based on interaction state
+        let target_bg = if let Some(hitbox_id) = state.hitbox_id {
             if cx.is_active(hitbox_id) {
-                if let Some(active_bg) = self.active_bg {
-                    style.background = Background::Solid(active_bg);
-                }
+                self.active_bg.unwrap_or(base_bg)
+            } else if cx.is_hovered(hitbox_id) {
+                self.hover_bg.unwrap_or(base_bg)
+            } else {
+                base_bg
             }
-            // Check hover state
-            else if cx.is_hovered(hitbox_id) {
-                if let Some(hover_bg) = self.hover_bg {
-                    style.background = Background::Solid(hover_bg);
-                }
+        } else {
+            base_bg
+        };
+
+        // Apply background: either via transition interpolation or instant switch
+        let final_bg = if let (Some(tid), Some(spec)) = (self.transition_id, &self.transition_spec) {
+            if let Some(bg_config) = &spec.bg {
+                cx.advance_transition_bg(tid, target_bg, bg_config)
+            } else {
+                target_bg
             }
+        } else {
+            target_bg
+        };
+
+        // Only set background if we changed it from the base (preserves non-Solid backgrounds
+        // when no transitions or interactive states are active)
+        if final_bg != base_bg || self.transition_id.is_some() || state.hitbox_id.is_some() {
+            style.background = Background::Solid(final_bg);
         }
 
         // Apply focus ring if keyboard-focused
