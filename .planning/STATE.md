@@ -261,7 +261,7 @@ None.
 ### Known Issues
 
 - Windows resize flickering: Brief black/white flicker during window resize on Windows is expected wgpu/winit swap chain reconfiguration behavior, not an ora bug (01-03)
-- Scissor clipping infrastructure exists (PaintContext push_clip/pop_clip, SetScissor/ResetScissor PaintCommands) but not wired end-to-end: Div doesn't call push_clip for overflow:hidden, and GPU render_frame logs scissor commands instead of applying them (02-06). Will be completed when needed for overflow:hidden use cases.
+- Scissor clipping is fully wired end-to-end: Div calls push_clip/pop_clip for overflow:hidden, PaintContext emits SetScissor/ResetScissor commands, and render_frame applies wgpu set_scissor_rect per draw group. (STATE.md known issue was stale — all pieces were in place since 08.1-03.)
 
 ## Session Continuity
 

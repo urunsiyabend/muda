@@ -213,14 +213,14 @@ impl View for GutterView {
         // Now get theme for container styling
         let theme = cx.theme();
 
-        // Sub-line scroll offset: shift line number rows upward by fractional
-        // pixels so they stay aligned with the text area's smooth scroll.
-        let scroll_shift = -self.scroll_y_offset_px;
-
-        // Inner wrapper that shifts content by the sub-line offset.
+        // Apply the partial scroll offset: shift the first line upward by the
+        // fractional pixel amount so line boundaries align with the text area.
+        // The outer container's overflow_hidden() clips the partially visible
+        // top and bottom lines at the GPU level via wgpu scissor rectangles.
+        let shift = -(self.scroll_y_offset_px);
         let inner: AnyElement = Div::new()
             .flex_col()
-            .mt(scroll_shift)
+            .mt(shift)
             .children(line_rows)
             .into();
 

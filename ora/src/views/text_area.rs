@@ -263,8 +263,10 @@ impl View for TextAreaView {
 
         let theme = cx.theme();
 
-        // Sub-line scroll offset: shift line content upward by fractional
-        // pixels so scrolling appears smooth between logical line boundaries.
+        // Partial-line scroll offset: shift line content upward by fractional
+        // pixels so line boundaries align exactly during scrolling.
+        // The outer container's overflow_hidden() clips the partially visible
+        // top and bottom lines at the GPU level via wgpu scissor rectangles.
         let scroll_shift = -self.scroll_y_offset_px;
 
         // Inner wrapper that shifts content upward by the sub-line offset.
