@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-01-28)
 ## Current Position
 
 Phase: 9 of 9 (Transitions & Integration) - In progress
-Plan: 4 of N in current phase (09-01 animation primitives, 09-02 editor adapter, 09-03 import migration, 09-04 transition infrastructure done)
-Status: In progress — 09-04 (TransitionRegistry + AppContext integration) complete
-Last activity: 2026-03-25 - Completed 09-04-PLAN.md (TransitionId, TransitionSpec, TransitionState, TransitionRegistry, AppContext.transition_registry)
+Plan: 6 of N in current phase (09-01 animation primitives, 09-02 editor adapter, 09-03 import migration, 09-04 transition infrastructure, 09-06 Div transition API done)
+Status: In progress — 09-06 (Div transition builder API + PaintContext interpolation) complete
+Last activity: 2026-03-25 - Completed 09-06-PLAN.md (Div transition builders, PaintContext advance_transition_*, TransitionState position methods)
 
 Progress: [█████████████████████████████████] Phase 9 in progress (~4 plans done)
 
@@ -226,6 +226,9 @@ Recent decisions affecting current work:
 - TransitionRegistry in AppContext uses RefCell<T> — PaintContext holds *const AppContext but paint() must advance tweens; RefCell provides safe interior mutability (09-04)
 - advance_* creates new Tween per target change (not retarget) — preserves duration from current TransitionConfig, avoids zero-duration silent failure from retarget() on instant tweens (09-04)
 - advance_* calls start() then update() immediately — 0ms tweens complete on first frame, no spurious has_active_transitions() signals (09-04)
+- TransitionProperty private enum in div.rs tracks last configured property so .easing() applies correctly (09-06)
+- Background update condition: set style.background when hitbox or transition_id is set, preserving non-Solid backgrounds for untouched Divs (09-06)
+- advance_position_x/y added to TransitionState in 09-06 (plan 04 defined tween fields but omitted the advance methods) (09-06)
 
 ### Pending Todos
 
@@ -251,10 +254,10 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-25T11:36:21Z
-Stopped at: Completed 09-04-PLAN.md — transition infrastructure (TransitionId, TransitionSpec, TransitionState, TransitionRegistry, AppContext.transition_registry via RefCell)
+Last session: 2026-03-25T11:44:35Z
+Stopped at: Completed 09-06-PLAN.md — Div transition builder API + PaintContext advance_transition_* methods
 Resume file: None
-Next: Continue Phase 9 — proceed to next unexecuted plan (09-05 or 09-06 Div paint-time interpolation)
+Next: Continue Phase 9 — proceed to next unexecuted plan (09-07 or later)
 
 ---
 *State initialized: 2026-01-28*
