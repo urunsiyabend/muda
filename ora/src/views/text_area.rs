@@ -224,6 +224,7 @@ impl TextAreaView {
             .flex_row()
             .w(pct(100.0))
             .h(px(LINE_HEIGHT))
+            .shrink(0.0) // Never compress below LINE_HEIGHT
             .children(span_elements);
 
         // Apply current line background highlight

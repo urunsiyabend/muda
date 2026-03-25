@@ -146,6 +146,7 @@ impl GutterView {
         Div::new()
             .flex_row()
             .h(px(LINE_HEIGHT))
+            .shrink(0.0) // Never compress below LINE_HEIGHT
             .justify_end()
             .align_center()
             .child(number_element)
@@ -199,6 +200,7 @@ impl View for GutterView {
             .flex_col()
             .w(px(width))
             .shrink(0.0)  // Don't shrink below calculated width
+            .overflow_hidden() // Clip line rows when window is shorter than content
             .bg(theme.color(ColorToken::BgPrimary))
             .pl(LEFT_PADDING)
             .pr(RIGHT_PADDING)
