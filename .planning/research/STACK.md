@@ -1,308 +1,305 @@
-# Technology Stack: ora UI Framework
+# Technology Stack: v2.0 Functional Editor Additions
 
-**Project:** ora - GPUI-inspired UI framework crate for muda code editor
-**Researched:** 2026-01-28
-**Confidence:** HIGH
+**Project:** muda — Functional editor capabilities on top of existing ora UI framework
+**Researched:** 2026-03-26
+**Scope:** NEW dependencies only. Existing stack (wgpu 23, winit 0.30, glyphon 0.7, ora, core_editor) is
+validated and not re-researched here.
+**Overall Confidence:** HIGH
 
-## Executive Summary
+---
 
-The standard 2025 stack for building a GPUI-like UI framework in Rust centers on wgpu for GPU rendering, winit for windowing, glyphon (wrapping cosmic-text) for text rendering, and taffy for flexbox layout. For reactive state, the pattern is entity-based systems with observer notifications rather than full signals-based frameworks. Animation requires dedicated keyframe/easing libraries since no standard CSS-transition library exists for wgpu contexts.
+## Baseline Stack (Do Not Change)
 
-## Recommended Stack
+The existing workspace already has these locked in Cargo.lock:
 
-### Core Rendering (GPU Pipeline)
+| Crate | Locked Version | Where |
+|-------|----------------|-------|
+| arboard | 3.6.1 | core_editor (direct dep) |
+| regex | 1.12.2 | transitive (tree-sitter chain) |
+| aho-corasick | 1.1.4 | transitive (via regex) |
+| ropey | 1.6.1 | core_editor (direct dep) |
+| tree-sitter | 0.26.3 | core_editor (direct dep) |
 
-| Technology | Version | Purpose | Why | Confidence |
-|------------|---------|---------|-----|------------|
-| wgpu | 28.0.0 | Cross-platform GPU API | Industry standard for GPU rendering in Rust. Powers Zed, Firefox WebGPU, Servo. v28 adds mesh shaders, multiview support. Breaking changes every 3 months but ecosystem follows quickly. | HIGH |
-| winit | 0.30.12 | Cross-platform window management | De facto standard for windowing in Rust GPU apps. Mature API, excellent platform coverage (Windows/macOS/Linux/Web). v0.31 in beta but 0.30 is stable. | HIGH |
-| pollster | 0.4.0 | Async executor for wgpu setup | Minimal async runtime for blocking on wgpu device/adapter initialization. Standard choice for non-async-heavy GPU apps. | HIGH |
+The key insight: **arboard is already a direct dependency of core_editor** (verified in Cargo.toml).
+Clipboard for text selection and copy/cut/paste requires zero new dependencies.
 
-**Rationale:** wgpu 28 (Dec 2024) is the latest stable. While wgpu has breaking changes every 3 months, v28 is current and glyphon 0.9.0 already supports wgpu 25+, so an upgrade path from wgpu 23 to 28 is viable. winit 0.30.12 (Jul 2024) is stable and widely used; avoid 0.31 betas.
+---
 
-**Migration note:** Existing codebase uses wgpu 23. Upgrade to wgpu 28 will require changes due to v23->v28 breaking API changes (d3d12 crate retirement, new windows crate usage). Budget 1-2 days for migration.
+## New Dependencies Required
 
-### Text Rendering & Shaping
+### 1. Native File Dialogs — `rfd`
 
-| Technology | Version | Purpose | Why | Confidence |
-|------------|---------|---------|-----|------------|
-| glyphon | 0.9.0 | 2D text rendering for wgpu | Fast text renderer wrapping cosmic-text for shaping/layout and etagere for texture atlas packing. Supports HarfBuzz shaping, ligatures, color emoji via swash. Updated to wgpu 25 (v28 compatible). | HIGH |
-| cosmic-text | 0.14.0 | Text shaping & layout | Dependency of glyphon. Pure Rust multi-line text handling with HarfRust for shaping, bidirectional text support, ligatures. Maintained by System76/Pop!_OS. | HIGH |
+**Add to:** `wgpu_client/Cargo.toml`
 
-**Rationale:** glyphon is the standard choice for wgpu text rendering in 2025. Wraps cosmic-text which has mature shaping (HarfRust) and rendering (swash). Existing codebase uses glyphon 0.7 (wgpu 23), upgrade to 0.9.0 required for wgpu 28 compatibility.
-
-**What NOT to use:**
-- wgpu_glyph: Deprecated/archived, superseded by glyphon
-- Raw swash/rustybuzz: Glyphon already provides the integration; don't reinvent
-
-### Layout Engine
-
-| Technology | Version | Purpose | Why | Confidence |
-|------------|---------|---------|-----|------------|
-| taffy | 0.9.2 | Flexbox & CSS Grid layout | High-performance CSS layout engine. Implements Flexbox, Grid, and Block layout algorithms from CSS spec. Used by Dioxus, Bevy. Nov 2024 release fixes absolute positioning and adds named grid lines. | HIGH |
-
-**Rationale:** Taffy is the Rust standard for CSS-like layout. Implements full CSS Flexbox and Grid specs. Faster than browser layout engines due to Rust zero-cost abstractions. v0.9.2 (Nov 2024) is latest stable with important fixes for absolute positioning.
-
-**What NOT to use:**
-- stretch: Archived predecessor to taffy, unmaintained
-- yoga-rs: Bindings to Facebook's Yoga (C++), less idiomatic, slower FFI overhead
-- Custom flexbox: Flexbox spec is 100+ pages, don't reimplement
-
-### Reactive State Management
-
-| Technology | Version | Purpose | Why | Confidence |
-|------------|---------|---------|-----|------------|
-| slotmap | 1.0.7 | Generational arena for entity storage | Fast, safe entity storage with generational indices. Prevents use-after-free with version checking. Secondary maps for component-like associations. Used in game engines and UI frameworks. | MEDIUM |
-
-**Rationale:** GPUI uses an entity-based reactive model where App owns all entities in a central context, and observers subscribe to entity changes. slotmap provides generational arenas (prevents ABA problem) and secondary maps (for ECS-style components). Faster iteration than generational-arena due to compact hop-representation.
-
-**Alternative:** generational-arena (zero unsafe code, but slower iteration). Choose slotmap unless you have strict no-unsafe requirements.
-
-**What NOT to use:**
-- Full signals frameworks (leptos_reactive, dioxus signals): Designed for web VDOM, not immediate-mode GPU UIs
-- Bevy ECS: Overkill for UI, designed for game entities with complex queries
-
-**Implementation pattern (from GPUI research):**
-```rust
-// App owns all entities
-struct App {
-    entities: SlotMap<EntityId, Box<dyn Model>>,
-    observers: HashMap<EntityId, Vec<ObserverFn>>,
-}
-
-// Views subscribe to entity changes
-cx.observe(&entity, |entity, cx| {
-    // Reactive update when entity notifies
-});
-
-// Models notify observers
-cx.notify(); // Triggers re-render
+```toml
+rfd = "0.17"
+pollster = "0.4"   # pollster lives in ora; needs explicit dep in wgpu_client binary too
 ```
 
-### Animation & Transitions
+**Current version:** 0.17.2 (released March 2026, confirmed via crates.io search)
+**Confidence:** HIGH — confirmed via multiple sources including crates.io version listing
 
-| Technology | Version | Purpose | Why | Confidence |
-|------------|---------|---------|-----|------------|
-| keyframe | 1.1.1 | Easing functions & keyframe animation | Provides CSS-like easing (cubic-bezier, etc.) and keyframe sequences. Supports custom Bezier curves. mint integration for 2D/3D vectors. Embedded-compatible. | MEDIUM |
-| mina | 0.1.3 | CSS-like transitions & animation DSL | Framework-independent animation with CSS transition syntax. State-based animators similar to CSS pseudo-classes. Concise API for defining animations. | LOW |
+**Why rfd:**
+- Cross-platform native file dialogs: uses Windows Common Item Dialog (IFileOpenDialog/IFileSaveDialog
+  via COM), macOS NSSavePanel/NSOpenPanel, and GTK/XDG Portal on Linux.
+- Zed does NOT use rfd. Zed implemented its own COM-based Windows dialog directly in GPUI
+  (PR #8919: `windows: Add file dialog using IFileOpenDialog`). That approach required significant
+  Windows-specific COM plumbing. rfd wraps exactly that COM API, already maintained upstream.
+- Both sync (`FileDialog`) and async (`AsyncFileDialog`) APIs are provided.
+- Supports filter lists, default directories, multiple selection.
 
-**Rationale:** No standard CSS transition library exists for wgpu contexts. keyframe is the most popular Rust animation library with CSS-compatible easing. mina provides higher-level CSS-like syntax but is less mature (v0.1.x).
+**Why wgpu_client, not ora:**
+ora is a framework crate. It has no business knowing about OS file dialogs. wgpu_client is the binary
+that owns the winit event loop and the top-level application state. Dialog invocation lives there,
+feeding results back to core_editor's workspace model.
 
-**Recommendation:** Start with keyframe for MVP (proven, stable). Evaluate mina later if CSS-like syntax becomes valuable.
+**Critical Windows integration note:**
+The sync `FileDialog::pick_file()` call blocks the calling thread. On Windows, COM pumps its own
+message loop internally, so the application window freezes while the dialog is open. This is
+technically acceptable for modal file open dialogs. However, the preferred approach is
+`AsyncFileDialog` which spawns a COM thread internally.
 
-**What NOT to use:**
-- Inline lerp/easing: Reinventing solved problems
-- JavaScript-style requestAnimationFrame: Rust has better abstractions
+Note on pollster: `pollster` is declared as a dep of `ora`, not `wgpu_client`. Since wgpu_client
+depends on ora the binary already links it, but to call `pollster::block_on()` from wgpu_client code
+you need it as an explicit direct dependency of wgpu_client. Add `pollster = "0.4"` to wgpu_client's
+Cargo.toml alongside rfd. Do NOT add tokio for this purpose — it is overkill.
 
-**Implementation pattern:**
 ```rust
-use keyframe::{ease, functions::EaseInOut};
+// wgpu_client: async approach using pollster (explicit dep of wgpu_client)
+use rfd::AsyncFileDialog;
 
-// CSS-like easing
-let progress = ease(EaseInOut, from, to, time);
+let future = AsyncFileDialog::new()
+    .add_filter("All files", &["*"])
+    .add_filter("Rust", &["rs"])
+    .set_directory("/")
+    .pick_file();
 
-// Custom bezier (CSS cubic-bezier equivalent)
-let custom_ease = BezierCurve::from([0.42, 0.0, 0.58, 1.0]);
-```
-
-### Color System & Design Tokens
-
-| Technology | Version | Purpose | Why | Confidence |
-|------------|---------|---------|-----|------------|
-| palette | 0.7.6 | Color manipulation & conversion | Linear color calculations, multiple color spaces (RGB, HSL, HSV, Lab, LCh). Type-safe color operations (lighten/darken, hue shift, mixing). SVG blend functions. #[no_std] support. | HIGH |
-
-**Rationale:** palette is the standard Rust library for color manipulation. Type system enforces correctness (can't mix incompatible color spaces). Essential for design tokens (semantic colors derived from base palette) and accessibility (contrast calculations).
-
-**Design token pattern:**
-```rust
-use palette::{Srgb, Hsl, Lighten, Darken};
-
-// Semantic color system
-struct DesignTokens {
-    primary: Srgb,
-    primary_hover: Srgb,    // Derived: primary.lighten(0.1)
-    primary_disabled: Srgb,  // Derived: primary.desaturate(0.3)
+// pollster::block_on is fine here: rfd spawns its own COM thread,
+// so this blocks only while waiting for the user to close the dialog.
+let result = pollster::block_on(future);
+if let Some(file) = result {
+    let path = file.path().to_owned();
+    // Send path to core_editor workspace via event/command
 }
 ```
 
 **What NOT to use:**
-- Manual RGB math: Easy to get wrong (forget gamma correction, etc.)
-- color-rs: Less mature, smaller ecosystem
+- `nfd` / `nfd2` — older alternatives, less maintained, Windows behavior is less reliable
+- `egui_file` / `dear-file-browser` — custom UI file pickers, not native dialogs
+- Rolling your own COM calls — Zed's approach is correct for a framework but wrong for an app
+  that can just pull rfd
 
-### Supporting Libraries
+---
 
-| Library | Version | Purpose | When to Use | Confidence |
-|---------|---------|---------|-------------|------------|
-| bytemuck | 1.21.0 | Zero-copy type casting for GPU buffers | Already in use. Essential for vertex/uniform buffer uploads to wgpu. Derive macros for Pod/Zeroable. | HIGH |
-| anyhow | 1.0.x | Error handling | Already in use. Appropriate for application errors. Keep for app-level code. | HIGH |
-| log + simplelog | 0.4.x / 0.12.x | Logging | Already in use. Standard for Rust applications. Consider env_logger alternative if more flexibility needed. | HIGH |
+### 2. File System Watching — `notify` + `notify-debouncer-full`
+
+**Add to:** `core_editor/Cargo.toml`
+
+```toml
+notify = "8"
+notify-debouncer-full = "0.5"
+```
+
+**Current versions:** notify 8.2.0, notify-debouncer-full 0.5.0 (confirmed via search, March 2026)
+**Confidence:** HIGH — confirmed used by Zed, rust-analyzer, deno, cargo-watch
+
+**Why notify:**
+- Cross-platform filesystem notification library, the de facto standard in the Rust ecosystem.
+- Used by Zed, rust-analyzer, deno, alacritty, mdBook, watchexec.
+- On Windows uses ReadDirectoryChangesW (RDCW), the correct kernel API for directory watching.
+- `notify-debouncer-full` wraps the raw event stream to: (a) deduplicate rapid-fire events into
+  single logical events, (b) stitch together rename FROM+TO pairs, (c) suppress redundant Remove
+  events for directory trees.
+
+**Why core_editor, not ora:**
+File watching is workspace/document-model state. `core_editor/src/domain/workspace.rs` already owns
+workspace lifecycle. The watcher belongs beside the workspace, not in the UI framework.
+
+**Why debouncer, not raw notify:**
+The sidebar file browser and buffer invalidation don't need every individual inotify/RDCW event.
+They need "this file changed once." Debouncing with a 100-200ms timeout collapses burst writes
+(save operations that write multiple times) into one event, preventing spurious reloads.
+
+```rust
+// core_editor: attach watcher to workspace
+use notify_debouncer_full::{new_debouncer, notify::RecursiveMode};
+use std::time::Duration;
+
+let (tx, rx) = std::sync::mpsc::channel();
+let mut debouncer = new_debouncer(Duration::from_millis(200), None, move |res| {
+    let _ = tx.send(res);
+})?;
+debouncer.watch(&workspace_root, RecursiveMode::Recursive)?;
+```
+
+**What NOT to use:**
+- `hotwatch` — thin wrapper around notify with simpler API, but less control and less maintained
+- Manual polling — do not poll directory mtimes on a timer; RDCW events are zero-latency
+
+---
+
+### 3. Clipboard — No New Dependency
+
+**Existing:** `arboard = "3.6.1"` already in `core_editor/Cargo.toml`
+
+arboard is a direct dependency, already integrated in `core_editor/src/commands/dispatcher.rs`:
+- `Clipboard::new()` creates the system clipboard handle
+- `get_text()` / `set_text()` for copy/cut/paste
+- Version 3.6.1 added PNG preference on Windows and file list pasting
+
+**Text selection (mouse drag, shift+arrow) is a UI concern, not a clipboard concern.** Selection state
+is tracked in core_editor's text buffer / editor model. The clipboard is only touched at the moment of
+copy/cut/paste. No new library needed.
+
+**What NOT to add:**
+- `clipboard` crate — older, less maintained, Windows behavior issues
+- `clipboard-rs` — niche, less adoption
+- GPUI-style custom clipboard: Zed found soundness issues in their Windows clipboard implementation
+  (issue #29657, #51278). arboard handles this correctly.
+
+---
+
+### 4. Text Search / Regex — No New Dependency
+
+**Existing in Cargo.lock:** `regex = "1.12.2"` (transitive), `aho-corasick = "1.1.4"` (transitive)
+
+**Promote regex to explicit dependency in core_editor:**
+
+```toml
+# core_editor/Cargo.toml
+regex = "1"
+```
+
+This makes the dependency intentional and version-tracked, but adds zero binary weight since it is
+already present transitively through the tree-sitter dependency chain.
+
+**Why regex is sufficient for find/replace:**
+- Literal string search: `regex::Regex::new(&regex::escape(query))` — no aho-corasick needed
+- Regex search: `Regex::new(pattern)` — direct
+- Case-insensitive: `(?i)` prefix flag
+- Incremental search (as-you-type): compile once per pattern change, search buffer on each keystroke
+
+**Do NOT add aho-corasick as a direct dependency.**
+aho-corasick provides multi-pattern search (finding many needles at once). For editor find/replace,
+you have one pattern at a time. aho-corasick would only be justified for "find-in-files across all
+open buffers simultaneously with many active patterns" — not a v2.0 requirement, and even then only
+after profiling proves regex is the bottleneck.
+
+**On ropey integration — chunk boundary pitfall:**
+regex does not natively iterate `ropey::Rope`. A naive chunk-by-chunk iteration silently drops matches
+that span chunk boundaries (a match starting in one chunk, ending in the next). This is a correctness
+bug, not a performance issue.
+
+The correct approach (what most production editors including Zed use) is to materialize the search
+range to a contiguous `String`, search that, then map byte offsets back to rope positions:
+
+```rust
+// Correct: materialize the search range, search a contiguous string.
+// Do NOT walk rope chunks: matches spanning chunk boundaries are silently dropped.
+fn find_all(rope: &ropey::Rope, pattern: &regex::Regex) -> Vec<(usize, usize)> {
+    // rope.to_string() for full buffer is safe: typical code files are well under 1MB.
+    // For very large files, materialize only the visible range.
+    let text = rope.to_string();
+    pattern.find_iter(&text)
+        .map(|m| (m.start(), m.end()))   // byte offsets in the materialized string
+        .collect()
+}
+
+// Map byte offsets back to rope char positions when needed
+let char_start = rope.byte_to_char(byte_start);
+```
+
+Chunk-walking is a future optimization only if profiling proves materialization is a bottleneck for
+multi-megabyte files. For an editor with typical source files, it will not be.
+
+---
+
+### 5. Performance — No New Libraries
+
+Dirty tracking, layout cache, and incremental rendering are architectural patterns over existing
+primitives, not library problems.
+
+- **Dirty tracking:** Add a `dirty: bool` flag to element/view state; skip layout recomputation
+  when nothing changed. This is a pattern in the core rendering loop, not a crate.
+- **Layout cache:** Cache computed `LayoutResult` per view behind a generation counter.
+  Compare generation to invalidate. This is a data structure decision, not a library.
+- **Incremental rendering:** Track which lines are visible (scroll offset + viewport height),
+  render only those. ropey already supports `byte_to_line()` and `line_to_byte()` for constant-time
+  line range queries.
+
+**Do NOT add:**
+- Any "reactive diffing" crate — they bring VDOM patterns inappropriate for immediate-mode GPU UI
+- An async task scheduler — the existing `async-executor` in ora is sufficient for background tasks
+
+---
+
+## Summary: What Changes Per Crate
+
+### wgpu_client/Cargo.toml — Add
+
+```toml
+rfd = "0.17"
+pollster = "0.4"   # needed directly to call pollster::block_on in wgpu_client code
+```
+
+### core_editor/Cargo.toml — Add
+
+```toml
+notify = "8"
+notify-debouncer-full = "0.5"
+regex = "1"          # Promote from transitive to explicit
+```
+
+### ora/Cargo.toml — No changes
+
+### Nothing Else
+
+Total new crates: **3** (rfd, notify, notify-debouncer-full).
+Total promoted to explicit: **2** (regex in core_editor; pollster in wgpu_client).
+Clipboard: already done (arboard 3.6.1 in core_editor).
+Performance: no library needed.
+
+---
 
 ## Alternatives Considered
 
-| Category | Recommended | Alternative | Why Not | Confidence |
-|----------|-------------|-------------|---------|------------|
-| GPU API | wgpu 28 | raw Vulkan/Metal | wgpu provides safe cross-platform abstraction. Raw APIs require platform-specific code, unsafe, error-prone. | HIGH |
-| Layout | taffy 0.9.2 | yoga-rs | Yoga requires C++ FFI, slower, less idiomatic. Taffy is pure Rust and faster. | HIGH |
-| Text | glyphon 0.9.0 | wgpu_glyph | wgpu_glyph is archived/deprecated. Glyphon is actively maintained successor. | HIGH |
-| Windowing | winit 0.30.12 | sdl2-rs | SDL2 is C library, FFI overhead. winit is pure Rust, better ecosystem integration. | HIGH |
-| Entity storage | slotmap | generational-arena | generational-arena has zero unsafe but slower iteration. slotmap's unsafe usage is justified for performance. | MEDIUM |
-| Animation | keyframe | inline lerp | keyframe provides proven easing functions and avoids reinventing standard easings (cubic-bezier, etc.). | MEDIUM |
-| Color | palette 0.7.6 | manual RGB | palette enforces color space correctness via type system, preventing common gamma/space mixing errors. | HIGH |
+| Feature | Recommended | Alternative | Why Not |
+|---------|-------------|-------------|---------|
+| File dialogs | rfd 0.17 | nfd2 | nfd2 less maintained, Windows edge cases |
+| File dialogs | rfd 0.17 | Custom COM (Zed approach) | Correct for a framework, wrong for an app binary |
+| File watching | notify 8 | hotwatch | hotwatch is a thin wrapper, less control, less maintained |
+| File watching | notify 8 | Manual mtime polling | Inferior latency and CPU cost vs kernel events |
+| Clipboard | arboard (existing) | clipboard-rs | Less adoption, Windows issues reported |
+| Text search | regex (existing) | aho-corasick (direct dep) | Overkill; single-pattern search doesn't need multi-pattern automaton |
+| Rope search | Materialize to String | Chunk-walk with regex | Chunk-walking silently drops matches spanning chunk boundaries |
+| Performance | Architectural patterns | External caches/diff libs | Patterns over data structures are sufficient; libs add complexity |
 
-## What NOT to Include
-
-### Anti-Dependencies
-
-**Do NOT add:**
-
-1. **Full web UI frameworks (Dioxus, Leptos, Yew)**
-   - Why: Designed for VDOM/web targets, not immediate-mode GPU rendering
-   - Overhead of virtual DOM diffing inappropriate for 60fps GPU UI
-   - Use their reactive patterns (signals/observers) as inspiration, not dependencies
-
-2. **Game engines (Bevy, Fyrox)**
-   - Why: Game ECS is overkill for UI entity management
-   - Bevy ECS designed for 10,000s of entities with complex queries; UI has 100s of views
-   - Pulls in physics, audio, input systems not needed for UI framework
-
-3. **egui**
-   - Why: Full immediate-mode UI framework, competes with ora rather than complements
-   - Different rendering model (tessellated paths vs custom GPU pipelines)
-   - Use GPUI patterns instead
-
-4. **iced**
-   - Why: Retained-mode UI framework with different architecture
-   - Elm-like architecture incompatible with GPUI's immediate-mode View::render() model
-
-5. **Old/deprecated crates**
-   - stretch (use taffy instead)
-   - wgpu_glyph (use glyphon instead)
-   - wgpu <v23 (ecosystem has moved on)
-
-## Cargo.toml Recommendations
-
-### For ora crate (GPU pipeline, layout, text, state)
-
-```toml
-[dependencies]
-# GPU rendering
-wgpu = "28"
-winit = "0.30.12"
-pollster = "0.4"
-
-# Text rendering
-glyphon = "0.9"
-
-# Layout
-taffy = "0.9"
-
-# State management
-slotmap = "1.0"
-
-# Animation
-keyframe = "1.1"
-
-# Color system
-palette = "0.7"
-
-# Utilities
-bytemuck = { version = "1.21", features = ["derive"] }
-log = "0.4"
-anyhow = "1.0"
-```
-
-### Migration from current wgpu_client
-
-**Current:**
-- wgpu = "23"
-- winit = "0.30"
-- glyphon = "0.7"
-
-**Upgrade path:**
-1. wgpu 23 -> 28 (breaking changes, see CHANGELOG)
-2. glyphon 0.7 -> 0.9 (requires wgpu 25+)
-3. Add taffy, slotmap, keyframe, palette
-
-**Estimated migration effort:** 2-3 days
-- Day 1: wgpu 23->28 migration (API changes, test rendering)
-- Day 2: glyphon 0.7->0.9 migration (text rendering updates)
-- Day 3: Integrate new dependencies (taffy layout, slotmap entities)
-
-## Version Update Cadence
-
-| Crate | Update Frequency | Breaking Change Risk | Strategy |
-|-------|------------------|---------------------|----------|
-| wgpu | Every 3 months | High (major every release) | Pin to v28, upgrade quarterly, budget 1-2 days per upgrade |
-| winit | Every 6-12 months | Medium (v0.31 coming) | Stay on v0.30.x until v0.31 stable |
-| glyphon | Follows wgpu | Medium (wgpu-dependent) | Upgrade with wgpu |
-| taffy | Every 6 months | Low (minor fixes) | Upgrade when new features needed |
-| slotmap | Stable (v1.0+) | Low (SemVer stable) | Upgrade minor/patch freely |
-| keyframe | Stable | Low | Upgrade when needed |
-| palette | Stable (v0.7.x) | Low | Upgrade when needed |
-
-**General strategy:** Pin exact versions in Cargo.toml for reproducible builds. Test upgrades in feature branches before merging.
+---
 
 ## Confidence Assessment
 
-| Category | Confidence | Reasoning |
-|----------|------------|-----------|
-| GPU (wgpu/winit) | HIGH | Official release pages verified (wgpu v28.0.0 Dec 2024, winit v0.30.12 Jul 2024). Industry standard, used in Firefox/Zed. |
-| Text (glyphon) | HIGH | Official GitHub verified (v0.9.0 Jan 2025). Clear upgrade path from v0.7. |
-| Layout (taffy) | HIGH | Official GitHub verified (v0.9.2 Nov 2024). Maintained by DioxusLabs, used in production. |
-| State (slotmap) | MEDIUM | crates.io verified (v1.0.7). Pattern matches GPUI architecture (web search + technical overview). Implementation details require validation. |
-| Animation (keyframe) | MEDIUM | crates.io verified (v1.1.1). Multiple sources confirm usage. mina (v0.1.3) too immature for production. |
-| Color (palette) | HIGH | crates.io verified (v0.7.6). Comprehensive docs, wide adoption. |
+| Area | Level | Reason |
+|------|-------|--------|
+| arboard (clipboard) | HIGH | Already in project, verified Cargo.toml, 3.6.1 locked |
+| regex (text search) | HIGH | Already in Cargo.lock at 1.12.2, latest confirmed as 1.12.2 |
+| rfd (file dialogs) | HIGH | crates.io confirmed 0.17.2 (March 2026); Windows COM backend verified via Zed PR #8919 context |
+| notify (file watching) | HIGH | 8.2.0 confirmed, debouncer-full 0.5.0 confirmed, used by Zed and rust-analyzer |
+| Performance (no libs) | HIGH | Pattern-based, verified against existing ora/core_editor architecture |
+| Rope+regex integration | HIGH | Chunk boundary pitfall documented; String materialization is the standard approach used in production editors |
 
-**Overall Confidence: HIGH** - Core stack (wgpu, winit, glyphon, taffy) verified via official sources. State/animation patterns extrapolated from GPUI architecture analysis and Rust ecosystem research.
+---
 
 ## Sources
 
-### Official Documentation (HIGH confidence)
-- [wgpu v28.0.0 Release](https://github.com/gfx-rs/wgpu/releases) - Latest stable version verified
-- [winit v0.30.12 Release](https://github.com/rust-windowing/winit/releases) - Latest stable version verified
-- [glyphon v0.9.0 Release](https://github.com/grovesNL/glyphon/releases) - Latest stable version verified
-- [taffy v0.9.2 Release](https://github.com/DioxusLabs/taffy/releases) - Latest stable version verified
-- [wgpu Official Site](https://wgpu.rs/) - Technical overview and design philosophy
-- [glyphon GitHub](https://github.com/grovesNL/glyphon) - Architecture and integration details
-- [cosmic-text GitHub](https://github.com/pop-os/cosmic-text) - Text shaping/layout internals
-- [taffy GitHub](https://github.com/DioxusLabs/taffy) - Layout algorithm implementation
-- [palette crates.io](https://crates.io/crates/palette) - v0.7.6 verified, docs.rs documentation
-- [keyframe GitHub](https://github.com/hannesmann/keyframe) - Animation library details
-
-### Technical Analysis (MEDIUM-HIGH confidence)
-- [GPUI Technical Overview](https://beckmoulton.medium.com/gpui-a-technical-overview-of-the-high-performance-rust-ui-framework-powering-zed-ac65975cda9f) - Architecture patterns
-- [GPUI Ownership Model](https://zed.dev/blog/gpui-ownership) - Entity/observer reactive state design
-- [GPUI DeepWiki](https://deepwiki.com/zed-industries/zed/2.2-gpui-framework) - Framework architecture analysis
-- [wgpu Migration Guide Discussion](https://github.com/gfx-rs/wgpu/discussions/6477) - v23 breaking changes
-- [wgpu CHANGELOG](https://github.com/gfx-rs/wgpu/blob/trunk/CHANGELOG.md) - Version history and breaking changes
-
-### Ecosystem Research (MEDIUM confidence)
-- [Are We GUI Yet?](https://areweguiyet.com/) - Rust GUI ecosystem overview 2025
-- [Rust GUI Libraries Compared 2025](https://an4t.com/rust-gui-libraries-compared/) - egui vs iced vs druid analysis
-- [LogRocket: Rust wgpu Guide](https://blog.logrocket.com/rust-wgpu-cross-platform-graphics/) - wgpu usage patterns
-- [Generational Arenas Guide](https://lucassardois.medium.com/generational-indices-guide-8e3c5f7fd594) - Entity storage patterns
-- [slotmap vs generational-arena Discussion](https://github.com/fitzgen/generational-arena/issues/13) - Performance comparison
-
-### Community Resources (LOW-MEDIUM confidence)
-- [docs.rs/leptos_reactive](https://docs.rs/leptos_reactive/latest/leptos_reactive/index.html) - Signals pattern reference (NOT for direct use)
-- [Dioxus Signals Docs](https://dioxuslabs.com/learn/0.7/essentials/basics/signals/) - Reactive state patterns (NOT for direct use)
-- [keyframe crates.io](https://crates.io/crates/keyframe) - Animation library documentation
-- [mina crates.io](https://crates.io/crates/mina) - CSS-like animation (immature, evaluate later)
-
-## Research Methodology
-
-1. **Version verification:** All versions verified via official GitHub releases or crates.io (Jan 2026)
-2. **Pattern analysis:** GPUI architecture analyzed via official blog posts and technical deep-dives
-3. **Ecosystem survey:** Rust GUI landscape surveyed via Are We GUI Yet, LogRocket, and community comparisons
-4. **Negative verification:** Deprecated crates (wgpu_glyph, stretch) confirmed via GitHub archive status
-5. **Cross-referencing:** Critical claims (wgpu breaking changes, glyphon wgpu compatibility) verified across multiple sources
-
-## Open Questions for Phase-Specific Research
-
-1. **Hot-reloading:** GPUI supports style hot-reloading. What's the implementation pattern? (Phase: Dev Experience)
-2. **Accessibility:** Screen reader integration, keyboard navigation patterns for GPU UIs? (Phase: Accessibility)
-3. **Testing:** How to test immediate-mode GPU rendering without a window? Headless testing strategies? (Phase: Testing Infrastructure)
-4. **Performance profiling:** Best tools for profiling wgpu render passes, layout performance? (Phase: Performance Optimization)
-5. **CSS-like API design:** How to design a type-safe builder API that feels like CSS (e.g., `.bg(color).p(8).rounded(4)`)? (Phase: API Design)
-
-These questions are deferred to phase-specific research flags in the roadmap.
+- [rfd crates.io](https://crates.io/crates/rfd) — version 0.17.2, March 2026
+- [rfd GitHub](https://github.com/PolyMeilex/rfd) — Windows COM backend details
+- [Zed PR #8919: Windows IFileOpenDialog](https://github.com/zed-industries/zed/pull/8919) — Zed's custom COM approach (reference for why rfd is the right choice for an app)
+- [notify crates.io](https://crates.io/crates/notify) — version 8.2.0 confirmed
+- [notify GitHub](https://github.com/notify-rs/notify) — Windows RDCW backend, used by Zed/rust-analyzer
+- [notify-debouncer-full docs.rs](https://docs.rs/notify-debouncer-full/latest/notify_debouncer_full/) — 0.5.0 API
+- [arboard GitHub (1Password)](https://github.com/1Password/arboard) — 3.6.1 changelog (file list, Windows PNG preference)
+- [arboard in project Cargo.toml](/c/Users/uruns/RustroverProjects/muda/core_editor/Cargo.toml) — confirmed direct dependency at 3.6.1
+- [regex docs.rs](https://docs.rs/regex/latest/regex/) — 1.12.2 (2025-10-13 release), latest confirmed
+- [aho-corasick 1.1.4 docs.rs](https://docs.rs/crate/aho-corasick/latest) — already transitive, confirmed not needed as direct dep
+- [Zed clipboard soundness issue #29657](https://github.com/zed-industries/zed/issues/29657) — reason to prefer arboard over custom implementation
+- [Zed clipboard issue #51278](https://github.com/zed-industries/zed/issues/51278) — Windows paste failures in custom clipboard

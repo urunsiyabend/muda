@@ -1,404 +1,328 @@
 # Project Research Summary
 
-**Project:** ora - GPUI-inspired UI framework crate for muda code editor
-**Domain:** GPU-accelerated immediate-mode UI framework for IDE/code editor
-**Researched:** 2026-01-28
+**Project:** muda — v2.0 Functional Editor
+**Domain:** GPU-rendered code editor (wgpu + winit + glyphon + ora UI framework)
+**Researched:** 2026-03-26
 **Confidence:** HIGH
 
 ## Executive Summary
 
-Building a production-quality UI framework for a code editor in Rust requires GPU acceleration via wgpu, flexible layout via taffy (flexbox), high-performance text rendering via glyphon, and a reactive state system based on entity/observer patterns. The standard approach in 2025 follows GPUI's proven architecture: centralized entity ownership in an App context, three-phase rendering (layout/prepaint/paint), deferred effect execution for reactivity, and aggressive GPU batching to achieve 120 FPS targets.
+muda is a GPU-accelerated code editor built on the `ora` UI framework using wgpu 23, winit 0.30, and glyphon 0.7. The v1 shell renders correctly but is not yet a functional editor: file operations are stubs, clipboard is unwired, tabs do not switch buffers, and the file browser reads mock data. v2.0 makes it a real editor by wiring these systems to actual filesystem, OS clipboard, and buffer management. The overall stack requires only 3 new crates (`rfd`, `notify`, `notify-debouncer-full`) plus 2 promotions from transitive to explicit (`regex`, `pollster`). Everything else builds on what already exists.
 
-The recommended stack is mature and battle-tested. wgpu 28 is industry-standard for cross-platform GPU rendering (powers Firefox WebGPU, Zed editor). glyphon 0.9 wraps cosmic-text for HarfBuzz shaping with excellent performance. taffy 0.9 implements the full CSS Flexbox spec and is production-ready. For state management, slotmap provides generational arenas to prevent use-after-free, enabling GPUI's entity-based reactive pattern. This stack is already partially integrated in muda's wgpu_client (wgpu 23, glyphon 0.7), requiring a 2-3 day migration to latest versions.
+The single highest-ROI change in the entire v2 scope is removing the unconditional `request_redraw()` call at line 549 of `ora/src/platform/event_loop.rs`. This one-line fix eliminates approximately 90% of idle GPU work and makes all subsequent profiling meaningful. It must happen before any performance-sensitive work begins. Beyond that, the feature work has a clear dependency ordering anchored by a new **Buffer Registry** — a central data structure that every other v2 feature routes through. FEATURES.md, ARCHITECTURE.md, and PITFALLS.md all independently identify this as the first thing to build. Nothing else can be built correctly until it exists.
 
-The critical risks are architectural: (1) winit's event loop must own the application lifecycle—fighting this causes platform-specific failures, (2) immediate-mode UI rebuild without dirty region tracking causes frame drops at scale, (3) draw call explosion without batching pegs CPU before GPU is saturated, (4) reactive state updates without effect queues cause reentrancy bugs. All four risks are **preventable in Phase 1-3** if GPUI's proven patterns are followed. The existing muda codebase already exhibits symptoms of these risks (RenderModel rebuilt every frame, syntax highlighting re-parsed unnecessarily, manual caching causing invalidation bugs), making ora's architectural discipline critical.
+The primary risks are not architectural — they are specific, named pitfalls in the existing codebase. Synchronous file I/O on the UI thread must be async from day one (retrofitting is expensive and touches every call site). The `can_switch_active()` guard in `workspace.rs` must not be called during normal tab switching or every click triggers a save dialog. The selection rendering bug is in span composition in the adapter, not in the GPU renderer — debugging in the wrong layer would waste significant time. All of these are preventable with upfront awareness, and all are grounded in specific file paths and line numbers.
+
+---
 
 ## Key Findings
 
 ### Recommended Stack
 
-The 2025 standard for building GPUI-like frameworks centers on wgpu for GPU abstraction, winit for windowing, glyphon/cosmic-text for text rendering, taffy for layout, and slotmap for entity storage. Animation requires dedicated easing libraries (keyframe) since no standard CSS transition library exists for wgpu contexts. All core technologies are stable, actively maintained, and proven in production (Zed, Dioxus, Bevy).
+The existing crate set is validated. New additions are minimal and purposeful. See [STACK.md](STACK.md) for full rationale.
 
-**Core technologies:**
-- **wgpu 28**: Cross-platform GPU API (Metal/Vulkan/DX12) — industry standard, powers Firefox WebGPU and Zed; breaking changes every 3 months but ecosystem follows quickly
-- **winit 0.30.12**: Cross-platform windowing — de facto standard for Rust GPU apps; mature API with excellent platform coverage
-- **glyphon 0.9**: 2D text rendering for wgpu — wraps cosmic-text (HarfBuzz shaping) and etagere (atlas packing); supports ligatures, color emoji, bidirectional text
-- **taffy 0.9.2**: Flexbox & CSS Grid layout — high-performance pure Rust implementation of CSS layout specs; faster than browser engines due to zero-cost abstractions
-- **slotmap 1.0.7**: Generational arena for entity storage — prevents ABA problem with version checking; enables GPUI's centralized entity ownership pattern
-- **keyframe 1.1.1**: Easing functions & keyframe animation — CSS-compatible cubic-bezier curves without reinventing standard easings
-- **palette 0.7.6**: Color manipulation & conversion — type-safe color operations across multiple color spaces; essential for design tokens and accessibility
+**New dependencies:**
 
-**Migration from current state:** Existing wgpu_client uses wgpu 23, winit 0.30, glyphon 0.7. Upgrade path requires 2-3 days (wgpu 23→28 API migration, glyphon 0.7→0.9 compatibility). Add taffy, slotmap, keyframe, palette as new dependencies.
+- `rfd = "0.17"` (wgpu_client): Native OS file dialogs — Windows IFileOpenDialog via COM, macOS NSOpenPanel. Use `AsyncFileDialog` + `pollster::block_on` pattern. Do not roll custom COM calls.
+- `pollster = "0.4"` (wgpu_client): Promote to explicit dep for `pollster::block_on` calls in wgpu_client binary.
+- `notify = "8"` (core_editor): Cross-platform filesystem watching via ReadDirectoryChangesW on Windows. De facto standard (used by Zed, rust-analyzer, cargo-watch).
+- `notify-debouncer-full = "0.5"` (core_editor): Debounces burst events into single logical events; stitches rename FROM+TO pairs.
+- `regex = "1"` (core_editor): Promote from transitive to explicit. Already present in Cargo.lock via tree-sitter chain — zero binary weight increase.
 
-**What NOT to include:** Full web UI frameworks (Dioxus, Leptos) are designed for VDOM/web targets, not immediate-mode GPU rendering. Game engines (Bevy) have ECS overkill for UI entity management. Other UI frameworks (egui, iced) are competitors with incompatible architectures. Deprecated crates (stretch, wgpu_glyph) have active maintained replacements.
+**Nothing else needed.** Clipboard is already covered by `arboard 3.6.1` (direct dep of core_editor). Performance optimization is architectural, not a library problem.
+
+**Critical rope+regex pitfall:** Do not walk rope chunks for regex search. Matches spanning chunk boundaries are silently dropped. Always materialize the search range to a contiguous `String` first, then map byte offsets back via `rope.byte_to_char()`.
 
 ### Expected Features
 
-Research identified 12 table stakes features, 11 differentiators, and 14 anti-features to explicitly avoid in v1.
+See [FEATURES.md](FEATURES.md) for full behavior specs and complexity estimates.
 
-**Must have (table stakes):**
-- Flexbox layout engine (taffy integration)
-- GPU text rendering with glyph caching (glyphon wrapper)
-- Scissor clipping for scrollable areas
-- Mouse event routing with hit testing
-- Keyboard event system with action registry
-- Focus management with focus stack
-- Reactive state system (Entity/Model with observers)
-- Element tree diffing for dirty tracking
-- Design token system (colors, spacing, typography)
-- Styled primitives (Div, Text, Image)
-- View trait system for declarative rendering
-- Event loop ownership (framework controls winit)
+**Must have (v2 table stakes):**
 
-**Should have (competitive):**
-- CSS-like transitions (opacity, color, transform animations)
-- Tailwind-style layout API (builder pattern: `.flex().gap(4).p(8)`)
-- Hierarchical bounds calculation (parent provides bounds to children)
-- Centralized typography scale (body, small, code, heading)
-- Semantic color roles (primary_background, secondary_text, accent_active)
-- Component size tiers (Small/Medium/Large variants)
-- Automatic hover/active states (framework tracks mouse position)
-- Integrated glyphon wrapper (hides FontSystem, atlas lifecycle complexity)
-- Single-batch text rendering (all text in one pass with shared atlas)
-- Layout debug overlay (toggle-able bounds visualization)
+1. **Buffer Registry** — new central data structure; enables all other v2 features. Must be built first.
+2. **File Open/Save** — `Ctrl+O`, `Ctrl+S`, `Ctrl+Shift+S`; real filesystem read/write with async I/O wrapper.
+3. **Save-before-close dialog** — wired to existing `DialogView`; triggered on `Ctrl+W` and app exit only (not tab switch).
+4. **Multi-tab switching** — click to switch, `Ctrl+W` close, `Ctrl+Tab` cycle; deduplication on open.
+5. **Sidebar file browser (real data)** — real `std::fs::read_dir`, click to open file, expand/collapse persisted in view state.
+6. **Selection rendering fix** — fix existing visual bug before building anything on top of selection.
+7. **OS clipboard** — `Ctrl+C`, `Ctrl+X`, `Ctrl+V` via arboard at wgpu_client dispatch layer (not in core_editor or ora).
+8. **Mouse click to position cursor** — pixel-to-line/col mapping; `floor((x - gutter_px) / char_width)` is sufficient for monospace.
+9. **Mouse drag selection** — click and drag selects text.
+10. **Find bar** (`Ctrl+F`) — inline overlay at top of editor area, next/prev navigation, match highlighting in TextAreaView.
 
-**Defer (v2+):**
-- Multi-window support (adds cross-window state sync complexity)
-- Custom shader API (breaks abstraction, 99% of UI doesn't need it)
-- Keyframe/spring animations (CSS transitions sufficient for editor chrome)
-- Web rendering target (WASM build, different event loop, missing APIs)
-- Accessibility/screen reader v1 (foundation exists: semantic elements, focus)
-- Hot-reload of themes (compile-time fast enough for theme development)
-- Drag-and-drop API (implement specific cases: tab reorder when needed)
-- Rich animation timeline (editors aren't animation-heavy apps)
-- Virtualized scrolling (implement per-component: file tree, command palette)
-- Built-in gesture recognition (editors are keyboard-first, mouse events sufficient)
-- Component marketplace/plugins (ora is internal to muda in v1)
-- Responsive breakpoints (editor layout is manual: user drags panels)
-- Undo/redo for UI state (document undo/redo exists in core_editor)
+**Should have (round out v2):**
+
+- Regex find + Replace/Replace All (second row in find bar; include in same phase as find bar)
+- Go to line (`Ctrl+G`)
+- Open Folder dialog (sets workspace root for sidebar)
+- Event-driven redraw (performance correctness — this is Phase 1 work, not an enhancement)
+
+**Defer to post-v2:**
+
+- Find across files (`Ctrl+Shift+F`), multi-cursor editing, file tree mutation (rename/delete/new), split panes, tab reordering via drag, all LSP features, bracket matching, minimap.
 
 ### Architecture Approach
 
-GPUI employs a layered architecture separating application state ownership, window management, element tree construction, layout computation, and GPU rendering. The ora framework should follow this proven pattern: centralized entity ownership (App owns all data, Entity<T> handles provide access), three-phase rendering (layout with taffy → prepaint commits hitboxes → paint writes Scene), deferred effect execution (observers queued, not invoked synchronously), and two-phase event dispatch (capture root→target, bubble target→root).
+The ora framework is already immediate-mode and structurally sound. The visual shell is correctly wired to `EditorDataSource`. What is missing is behavioral: commands that trigger real work, and data that flows from real sources. See [ARCHITECTURE.md](ARCHITECTURE.md) for full analysis including Zed/GPUI pattern research.
 
-**Major components:**
-1. **App** — Root context owning all entity data in SlotMap; dispatches effects (notify/emit)
-2. **Context<T>** — Scoped entity access with notify/emit; borrows from App
-3. **Window** — Window state, root view, event dispatch, frame orchestration
-4. **Entity<T>** — Handle to App-owned data; access via update/read
-5. **View trait** — Render method returning element tree; view-specific state
-6. **Element trait** — Layout (request_layout → LayoutId) and paint (write to Scene) implementation
-7. **DispatchTree** — Event routing via hit testing (mouse) or focus path (keyboard)
-8. **Frame** — Hit testing and hitbox tracking for event dispatch
-9. **Taffy** — Flexbox layout computation; computes all bounds in single pass
-10. **Scene** — Retained draw command buffer (quads, text, images) submitted to GPU
-11. **Blade/wgpu** — Cross-platform graphics abstraction generating GPU commands
+**Major components and v2 work:**
 
-**Data flow:** Platform event → Window normalizes → DispatchTree routes (two-phase: capture/bubble) → Handler updates state → cx.notify() queues effect → Effect flush triggers observers → Observers request redraw → Window renders root view → Three-phase rendering (prepaint layout, prepaint hitboxes, paint scene) → Scene submitted to GPU → Present.
+1. **Buffer Registry** (new, in core_editor/Workspace) — `HashMap<PathBuf, DocumentId>` index; deduplication on open; `SwitchTab`, `CloseTab`, `OpenFile` commands. Everything routes through this.
+2. **Event-Driven Redraw** (fix in ora/event_loop.rs) — remove unconditional `request_redraw()` at line 549; add caret-blink timer in `about_to_wait()`. Prerequisite for all performance work.
+3. **EditorDataSource Expansion** (design decision) — plan the full set of new trait methods across all v2 features before implementing any. Consider splitting into sub-traits (`EditorDataSource`, `WorkspaceDataSource`, `SearchDataSource`). This decision must be made upfront, not organically.
+4. **FindReplaceView** (new, in ora/views) — stack overlay above TextAreaView; follows `CommandPaletteView` lifecycle pattern. Requires `TextStyle::SearchHighlight` tokens in the theme (no structural renderer change — two new color tokens).
+5. **Async I/O wrapper** (new, at wgpu_client dispatch layer) — `Document::open/save` stay synchronous in core_editor; the async wrapper lives at the boundary.
 
-**Patterns to follow:**
-- Centralized entity ownership (App owns, Entity<T> handles provide access)
-- Three-phase rendering (separate layout, prepaint, paint to prevent read-after-write)
-- Deferred effect execution (queue effects, flush after update completes)
-- Two-phase event dispatch (capture and bubble like DOM)
-- Tailwind-style builder API (fluent methods for styling)
+**Performance optimizations ranked by impact (for Phase 7):**
 
-**Anti-patterns to avoid:**
-- Direct Scene mutation in prepaint (violates phase separation)
-- Synchronous observer execution (causes reentrancy bugs)
-- Multiple Taffy layout passes per frame (expensive, causes frame drops)
-- Storing mutable references in Elements (impossible with Rust borrow checker)
-- Platform-specific code in Element trait (breaks cross-platform abstraction)
+1. Event-driven redraw — trivial effort, critical impact; do in Phase 1
+2. Incremental tree-sitter parsing — `parser.parse(content, Some(old_tree))`; core_editor only
+3. Glyphon Buffer caching — cache by `(text, font_size, line_height)`; eliminates reshaping for unchanged lines
+4. Background parse thread — for files >100KB; high effort; do after (2) is stable
+5. Layout caching — only after profiling confirms layout is a bottleneck
 
 ### Critical Pitfalls
 
-Research identified 15 pitfalls (5 critical, 6 moderate, 4 minor) with phase-specific warnings.
+See [PITFALLS.md](PITFALLS.md) for full details with specific file paths and line numbers.
 
-1. **Event loop ownership architecture mismatch** — winit's EventLoop::run() never returns; framework must own lifecycle from day one. Attempting external control causes platform-specific failures. **Prevention:** Design ora as `ora::run(app)` pattern. Test on Windows/Linux/macOS early. **Phase 1 critical.**
+1. **Synchronous file I/O blocks the UI thread** (Pitfall #1) — `Document::open/save` in `document.rs` line 132 runs on the UI thread. On Windows, antivirus hooks make even local SSDs unpredictable. Move to async wrapper from day one — retrofitting touches every call site.
 
-2. **Immediate-mode rebuild without incremental rendering** — Rebuilding entire UI tree every frame performs well for small UIs but becomes CPU-bound at scale. Without dirty tracking, scrolling large files causes frame drops. **Prevention:** Implement dirty region tracking and element tree diffing in Phase 2. Profile with 10K+ line files early. **Phase 2 critical, retrofitting is painful (WebRender experience).**
+2. **`can_switch_active()` blocks normal tab switching** (Pitfall #3) — `workspace.rs` line 460 returns `ProtectionError::UnsavedChanges` if the active document is dirty. Never call this during a tab click. Call `workspace.set_active_view(view_id)` directly. Reserve save prompts for close-tab, close-workspace, and quit.
 
-3. **Draw call explosion without aggressive batching** — > 100 draw calls per frame stutters on mobile/integrated GPUs. Typical frame with 20K+ quads requires batching. **Prevention:** Use instanced rendering, batch quads by material, group text glyphs by atlas region. Measure draw call count in debug builds. **Phase 2 critical, cannot be added later without renderer rewrite.**
+3. **Opening the same file twice causes silent data loss** (Pitfall #2) — `open_document()` at `workspace.rs` line 92 creates a new `Document` every time with no path deduplication. Two independent instances diverge; saving one silently overwrites the other. Add `path_to_doc: HashMap<PathBuf, DocumentId>` before any file browser exists.
 
-4. **Reentrancy bugs in reactive state updates** — Emitting events during event handling causes infinite loops or stack overflows. **Prevention:** Use effect queue (GPUI pattern: cx.notify() pushes to queue, processes later with run-to-completion semantics). Add cycle detection in debug builds. **Phase 3 critical, cannot be patched later.**
+4. **Selection rendering bug is in span composition, not the renderer** (Pitfall #4) — "Shift+arrow causes text to disappear" is a bug in the adapter's `build_render_model` span generation. Gutter line numbers still render correctly during disappearance, which proves the GPU renderer is fine. Debugging in the renderer layer wastes time. Consider switching to a selection overlay (list of `(line, col_start, col_end)` rectangles drawn behind text) — the Zed/VS Code approach.
 
-5. **wgpu API churn and breaking changes** — wgpu is pre-1.0, introduces breaking changes every 3 months. Tutorial code breaks within months. **Prevention:** Pin wgpu version explicitly, abstract wgpu behind ora's API (don't expose wgpu types publicly), budget 1-2 weeks per major upgrade, accept 6-12 month lag behind latest. **All phases, design abstraction layer in Phase 1.**
+5. **Clipboard crosses the adapter boundary** (Pitfall #5) — `EditorDataSource` has no clipboard methods. Handle clipboard entirely at wgpu_client dispatch layer: on `Copy`, get selected text from workspace then call `arboard::Clipboard::set_text()`; on `Paste`, call `arboard::Clipboard::get_text()` then dispatch `InsertText`. Keep the clipboard handle alive across operations — repeated construction has overhead on Windows.
 
-6. **Text atlas memory exhaustion** — glyphon's texture atlas grows unbounded; long sessions exhaust VRAM especially on integrated GPUs. **Prevention:** Implement LRU glyph eviction (muda CONCERNS.md flags this), cap atlas size, monitor VRAM usage. **Phase 2, design glyph cache management upfront.**
+6. **`EditorDataSource` trait will accumulate method pressure** (Pitfall #7) — each new v2 feature wants new methods on a dyn trait. Plan the full expansion across all v2 features before implementing any. Design the sub-trait split or lazy sub-model approach upfront. Warning sign: `RenderModel` exceeding 15 fields, or unrelated methods like `find_highlights()` sharing a trait with `scroll_y()`.
 
-7. **Taffy layout integration and coordinate space mismatch** — Mixing logical coordinates (layout) and device coordinates (GPU rendering) causes clipping errors, misaligned text, scissor rect bugs. **Prevention:** Define clear coordinate space types (LogicalPos, DevicePos), centralize conversions, test at multiple DPI scales (100%, 150%, 200%). **Phase 2, establish coordinate system discipline early.**
-
-8. **Missing compositor and invalidation for power efficiency** — Without dirty region tracking, basic interactions consume orders of magnitude more power. Battery life plummets. **Prevention:** Implement dirty region tracking, use compositing layers for static content, skip rendering if nothing changed. **Phase 2, retrofitting is painful (WebRender had to retrofit compositing).**
+---
 
 ## Implications for Roadmap
 
-Based on research, suggested 7-phase structure aligns with GPUI's layered architecture and addresses critical pitfalls in dependency order:
+### Phase 1: Foundation Fixes
 
-### Phase 1: Foundation - Core Framework & Event Loop
-**Rationale:** Event loop ownership must be correct from day one. winit's EventLoop::run() takes full control; fighting this causes platform-specific failures (Pitfall #1). Framework abstractions (App, Context, Entity<T>) enable all subsequent phases. wgpu abstraction prevents API churn (Pitfall #5).
+**Rationale:** Three bugs and one audit must land before feature work begins. The event-driven redraw fix is the highest-ROI change in v2 scope. The command audit prevents per-feature file churn later. The selection bug investigation must precede selection feature work.
 
-**Delivers:**
-- App and Entity<T> system (centralized ownership)
-- Context types (App, Context<T>, AsyncContext)
-- Basic Element trait (without layout or paint)
-- Window wrapper with winit integration (`ora::run(app)` pattern)
-- wgpu abstraction layer (hide wgpu types from public API)
+**Delivers:** A codebase ready for features — correct idle GPU behavior, a complete command vocabulary, no inherited rendering bugs, consistent untitled document title.
 
-**Addresses (from FEATURES.md):**
-- Event loop ownership (table stakes)
-- View trait system (table stakes)
+**Work items:**
+- Remove unconditional `request_redraw()` from `event_loop.rs` line 549; add caret-blink timer in `about_to_wait()`
+- Audit and add all missing `ora::EditorCommand` variants at once: `SwitchTab`, `CloseTab`, `OpenFile`, `SaveAs`, `New`, `Find`, `Replace`, `ReplaceAll` — and update the `From<ora::EditorCommand>` conversion in wgpu_client
+- Design `EditorDataSource` trait expansion strategy (sub-traits or sub-models) to cover all v2 features
+- Investigate and fix selection span composition bug in adapter's `build_render_model` (consider overlay approach)
+- Fix `Document::title()` line 279: change "Yeni Dosya" to "[New File]"
 
-**Avoids (from PITFALLS.md):**
-- Pitfall #1: Event loop ownership mismatch (critical)
-- Pitfall #5: wgpu API churn (critical)
+**Avoids:** Pitfall #4 (selection bug in wrong layer), Pitfall #16 (Turkish title), Pitfall #18 (missing command variants), Pitfall #7 (trait pressure — plan upfront)
 
-**Research flags:** Standard patterns (skip `/gsd:research-phase`). GPUI architecture well-documented.
+**Research flag:** Standard patterns; no additional research needed.
 
-### Phase 2: Layout & Rendering - GPU Pipeline & Flexbox
-**Rationale:** Must implement rendering architecture (three-phase: layout/prepaint/paint) and batching strategy before any components can render. Dirty region tracking and batching cannot be added later without full rewrite (Pitfall #2, #3). Coordinate system discipline prevents layout bugs (Pitfall #7).
+---
 
-**Delivers:**
-- Three-phase rendering (prepaint, paint, present)
-- Taffy integration (request_layout, compute_layout)
-- LayoutId and Bounds types with coordinate space safety (LogicalPos vs DevicePos)
-- Scene structure (draw command buffer)
-- GPU batching strategy (instanced rendering, single-pass text)
-- Dirty region tracking and incremental invalidation
-- wgpu pipeline integration (vertex/fragment shaders for quads)
-- Compositor and invalid region tracking for power efficiency
+### Phase 2: Buffer Registry + Multi-Tab
 
-**Addresses (from FEATURES.md):**
-- Flexbox layout engine (table stakes)
-- GPU text rendering (table stakes)
-- Scissor clipping (table stakes)
-- Styled primitives - Div, Text (table stakes)
-- Single-batch text rendering (differentiator)
+**Rationale:** The Buffer Registry is the central data structure for v2. FEATURES.md, ARCHITECTURE.md, and PITFALLS.md all converge on this as the prerequisite for every other feature. Nothing else can be built correctly until path-deduplication and tab-switching are in place.
 
-**Uses (from STACK.md):**
-- wgpu 28 (GPU rendering)
-- taffy 0.9.2 (flexbox layout)
-- glyphon 0.9 (text rendering)
-- bytemuck (vertex buffer uploads)
+**Delivers:** Functional multi-tab editing — click to switch buffers, `Ctrl+W` close, `Ctrl+Tab` cycle, deduplication on open, dirty indicator per tab.
 
-**Implements (from ARCHITECTURE.md):**
-- Taffy (layout computation)
-- Scene (draw command buffer)
-- Element trait (request_layout, prepaint, paint methods)
-- Three-phase rendering pipeline
+**Work items:**
+- Add `path_to_doc: HashMap<PathBuf, DocumentId>` index to `Workspace`
+- Implement `SwitchTab` / `CloseTab` / `OpenFile` command handlers calling `set_active_view()` directly (not `can_switch_active()`)
+- Wire `TabBarView` click events via `PrepaintContext::register_hitbox()` and `on_mouse_down()` (pattern already exists in codebase)
+- Add per-tab scroll + cursor state preservation on switch (already stored per document in core_editor)
+- Document `with_active_context` unsafe invariant before expanding its usage (Pitfall #14)
 
-**Avoids (from PITFALLS.md):**
-- Pitfall #2: Immediate-mode rebuild without dirty tracking (critical)
-- Pitfall #3: Draw call explosion without batching (critical)
-- Pitfall #6: Text atlas memory exhaustion (moderate)
-- Pitfall #7: Coordinate space mismatch (moderate)
-- Pitfall #8: Missing compositor for power efficiency (moderate)
-- Pitfall #10: Render pipeline state panics (moderate)
+**Avoids:** Pitfall #2 (duplicate open), Pitfall #3 (blocked tab switch), Pitfall #8 (undo history — document limitation), Pitfall #14 (unsafe multi-document access)
 
-**Research flags:** Likely needs `/gsd:research-phase` for:
-- GPU batching strategies (instanced rendering patterns)
-- glyphon atlas management (LRU eviction, multi-atlas strategies)
-- Three-phase rendering lifecycle (prepaint vs paint separation)
+**Stack additions:** None — pure architecture work.
 
-### Phase 3: Reactive State - Entity/Model Observation
-**Rationale:** State management must implement effect queue pattern to prevent reentrancy (Pitfall #4). Observation mechanism enables reactive UI updates. Must exist before event system (event handlers mutate state).
+**Research flag:** Standard patterns; no additional research needed.
 
-**Delivers:**
-- Observation mechanism (cx.observe, cx.notify)
-- Event emission (cx.emit, cx.subscribe)
-- Effect queue and flush logic
-- Model<T> wrapper with change tracking
-- Observer lifecycle management
+---
 
-**Addresses (from FEATURES.md):**
-- Reactive state system (table stakes)
-- Element tree diffing (table stakes)
+### Phase 3: File Operations
 
-**Uses (from STACK.md):**
-- slotmap 1.0.7 (generational arena for entity storage)
+**Rationale:** Depends on Buffer Registry. File open populates the registry; file save persists buffers from it. The async I/O requirement is non-negotiable from day one — it cannot be retrofitted later without touching every call site.
 
-**Implements (from ARCHITECTURE.md):**
-- Entity<T> handle-based access
-- Deferred effect execution pattern
-- Observer registration and notification
+**Delivers:** Real filesystem read/write — `Ctrl+O` (native file picker), `Ctrl+S` (save silently if path known), `Ctrl+Shift+S` (Save As dialog), `Ctrl+N` (new untitled buffer), save-before-close dialog wired to `DialogView`.
 
-**Avoids (from PITFALLS.md):**
-- Pitfall #4: Reentrancy bugs in reactive updates (critical)
-- Pitfall #11: State management lifecycle bugs (moderate)
+**Work items:**
+- Add async file load wrapper at wgpu_client dispatch layer (not in `Document::open` itself)
+- Integrate `rfd::AsyncFileDialog` + `pollster::block_on` for Open and Save As
+- Handle non-UTF-8 files: use `std::fs::read()` + `String::from_utf8()` with user-facing error message
+- Strip UTF-8 BOM (`\xEF\xBB\xBF`) in `Document::from_str` preprocessing
+- Wire save-before-close flow to `DialogView` overlay on `Ctrl+W` and app exit (not on tab switch)
+- Document line-ending detection limitation (PITFALLS #17 — `contains("\r\n")` misclassifies mixed files)
 
-**Research flags:** Standard patterns (skip `/gsd:research-phase`). GPUI's ownership model well-documented.
+**Avoids:** Pitfall #1 (sync I/O), Pitfall #2 (duplicate open — registry already handles this by Phase 2), Pitfall #15 (non-UTF-8 errors)
 
-### Phase 4: Event System - Dispatch & Focus
-**Rationale:** Event routing requires completed rendering pipeline (hit testing against Frame hitboxes) and reactive state (event handlers trigger updates). Two-phase dispatch is architectural, cannot be added later.
+**Stack additions:** `rfd = "0.17"` and `pollster = "0.4"` to `wgpu_client/Cargo.toml`.
 
-**Delivers:**
-- DispatchTree and focus management
-- Two-phase dispatch (capture/bubble)
-- Hit testing and hitbox tracking
-- Mouse and keyboard event normalization
-- Action registry for keyboard shortcuts
-- Focus stack with enter/exit callbacks
+**Research flag:** Needs targeted research on how async file I/O return values thread back through the synchronous `dispatch_command(&mut self, cmd)` path. The current signature returns `()` — a result channel, callback, or new `query()` method is needed.
 
-**Addresses (from FEATURES.md):**
-- Mouse event routing (table stakes)
-- Keyboard event system (table stakes)
-- Focus management (table stakes)
+---
 
-**Implements (from ARCHITECTURE.md):**
-- DispatchTree (event routing)
-- Frame (hitbox registry)
-- Two-phase event dispatch
+### Phase 4: Selection + Clipboard
 
-**Avoids (from PITFALLS.md):**
-- Focus loss bugs (moderate)
+**Rationale:** Depends on Phase 1 (selection rendering bug fixed). Building mouse selection on top of an unfixed rendering bug produces confusion about whether new bugs are regressions or the existing bug. The pixel-to-col mapping must be built once and reused by click, drag, and find/replace jump.
 
-**Research flags:** Standard patterns (skip `/gsd:research-phase`). DOM-like event dispatch well-understood.
+**Delivers:** Full selection model — click to position cursor, drag to select, double-click word, triple-click line, Shift+arrow, Shift+click, Ctrl+Shift+arrow. OS clipboard — `Ctrl+C`, `Ctrl+X`, `Ctrl+V` via arboard at wgpu_client dispatch layer.
 
-### Phase 5: Element Library - Styled Primitives & Builders
-**Rationale:** Reusable element library depends on all foundational layers (rendering, state, events). Builder API provides DX before integrating with core_editor.
+**Work items:**
+- Implement `hit_test(pixel_x, pixel_y) -> (line, col)` in `TextAreaView` using `floor((x - gutter_px) / char_width)` formula
+- Wire mouse-down to cursor positioning; mouse-move during button-hold to drag selection
+- Wire `Copy`/`Cut` to get selected text from workspace then call `arboard::Clipboard::set_text()` — all in wgpu_client dispatcher
+- Wire `Paste` to call `arboard::Clipboard::get_text()` then dispatch `InsertText` — all in wgpu_client dispatcher
+- Keep `arboard::Clipboard` alive (not re-created per operation)
+- Verify `arboard` is called from `wgpu_client`, not added to `core_editor` or `ora`
 
-**Delivers:**
-- Basic elements (div, text, image)
-- Styled element API (Tailwind-style builder pattern)
-- Layout elements (flex container, stack, grid)
-- Interactive elements (button, input)
-- Semantic color roles (primary_background, secondary_text, etc.)
-- Component size tiers (Small/Medium/Large)
-- Automatic hover/active states (framework tracks mouse)
+**Avoids:** Pitfall #4 (selection rendering — fixed in Phase 1), Pitfall #5 (clipboard boundary), Pitfall #6 (mouse hit-testing offset)
 
-**Addresses (from FEATURES.md):**
-- Tailwind-style layout API (differentiator)
-- Semantic color roles (differentiator)
-- Component size tiers (differentiator)
-- Automatic hover/active states (differentiator)
+**Stack additions:** None — arboard already in core_editor; invocation moves to wgpu_client dispatcher.
 
-**Implements (from ARCHITECTURE.md):**
-- Element trait implementations for primitives
-- Builder pattern for element construction
+**Research flag:** Standard patterns; monospace hit-testing formula is documented in PITFALLS #6.
 
-**Research flags:** Standard patterns (skip `/gsd:research-phase`). Tailwind/CSS builder APIs well-established.
+---
 
-### Phase 6: Design System Migration - Tokens & Typography
-**Rationale:** Design token system exists in wgpu_client/design_system but is unused (Pitfall #15). Must be enforced in ora with type-safe tokens to prevent raw value proliferation.
+### Phase 5: File Browser
 
-**Delivers:**
-- Design token system (Color, Spacing, Typography, Elevation enums)
-- Theme switching (dark/light mode palette swap)
-- Centralized typography scale (body, small, code, heading)
-- Hierarchical bounds calculation enforcement
+**Rationale:** Depends on Buffer Registry (Phase 2) and File Operations (Phase 3). Clicking a file in the browser calls `OpenFile` which routes through both. The sidebar shell already exists and renders visual structure; this phase wires it to real data and interactions.
 
-**Addresses (from FEATURES.md):**
-- Design token system (table stakes)
-- Centralized typography scale (differentiator)
-- Hierarchical bounds calculation (differentiator)
+**Delivers:** Functional file browser — reads real directory tree, folder expand/collapse (state persisted in view, not re-collapsed each frame), click to open file, current file highlighted, keyboard navigation (arrow keys, Enter), Open Folder dialog.
 
-**Uses (from STACK.md):**
-- palette 0.7.6 (color manipulation for derived tokens)
+**Work items:**
+- Replace mock data in `FileTreeView` with real `std::fs::read_dir` traversal
+- Add full path to `FileEntryPresentation` (`path: String` field — currently missing)
+- Load directory contents on a background thread; lazy-load on expand (do not read in `render()`)
+- Exclude `target/`, `.git/`, `node_modules/`, `.venv/` from immediate expansion
+- Wire click events to `OpenFile` command; highlight active file based on active buffer path
+- Integrate `notify-debouncer-full` watcher for live tree updates; combine with mtime-check on focus gain as fallback for Windows reliability
 
-**Avoids (from PITFALLS.md):**
-- Pitfall #15: Component size tokens defined but unused (minor)
-- Existing muda pain points (heights hardcoded, spacing tokens unused)
+**Avoids:** Pitfall #9 (sync directory reads in render path), Pitfall #10 (Windows file watcher unreliability)
 
-**Research flags:** Standard patterns (skip `/gsd:research-phase`). Design token systems well-documented.
+**Stack additions:** `notify = "8"` and `notify-debouncer-full = "0.5"` to `core_editor/Cargo.toml`.
 
-### Phase 7: Transitions & Polish - CSS-like Animations
-**Rationale:** Transitions are polish, not core functionality. Can be added after all foundational layers work. Optional for MVP.
+**Research flag:** The file watcher integration with the existing workspace model may need targeted research on how change events propagate to trigger sidebar re-renders without rebuilding the full tree. Standard file tree UI patterns otherwise apply.
 
-**Delivers:**
-- CSS-like transitions (opacity, color, transform animations)
-- Property interpolation with easing
-- Transition state tracking
-- Layout debug overlay (bounds visualization)
+---
 
-**Addresses (from FEATURES.md):**
-- CSS-like transitions (differentiator)
-- Layout debug overlay (differentiator)
+### Phase 6: Find / Replace
 
-**Uses (from STACK.md):**
-- keyframe 1.1.1 (easing functions)
+**Rationale:** Most new code in v2. Architecturally self-contained — adds a new view, new commands, and new fields to `RenderModel`. Depends on Phase 1 (selection span rendering provides the path for match highlight rendering). Can be built after Phase 2; does not require Phases 3-5.
 
-**Avoids (from PITFALLS.md):**
-- Pitfall #14: Animation system undefined value handling (minor)
+**Delivers:** Inline find bar (`Ctrl+F`) — all matches highlighted, match count "N of M", next/prev navigation with wrap, case-sensitive/whole-word/regex toggles, Escape to close. Replace row (`Ctrl+H`) — Replace One (advances to next match), Replace All (batched as single `Transaction` for one-step undo).
 
-**Research flags:** May need `/gsd:research-phase` for:
-- CSS transition semantics in GPU context (not well-documented)
-- Property interpolation strategies (different types: color, position, opacity)
+**Work items:**
+- Add `FindReplaceView` as Stack overlay above TextAreaView (follow `CommandPaletteView` lifecycle pattern)
+- Add `EditorCommand::Find { query, options }` / `FindNext` / `FindPrev` / `Replace` / `ReplaceAll` command handlers
+- Add `TextStyle::SearchHighlight` and `TextStyle::SearchCurrent` tokens (two new theme color entries — no structural renderer change)
+- Add `search_results: Option<SearchResultPresentation>` to `RenderModel`
+- Run search on a background thread; debounce 100-150ms after last keystroke before triggering
+- Use `regex` crate (bounded execution time — no catastrophic backtracking)
+- Materialize rope range to `String` for search; do not chunk-walk (see STACK.md rope+regex pitfall)
+- Batch Replace All into a single `Transaction` (type exists at `core_editor/src/commands/transaction.rs`); save/restore caret and scroll position before/after
+
+**Avoids:** Pitfall #11 (regex stalls UI — background thread + debounce), Pitfall #12 (Replace All cursor loss — Transaction + position restore)
+
+**Stack additions:** `regex = "1"` promoted to explicit dep in `core_editor/Cargo.toml`.
+
+**Research flag:** Needs research on focus/keyboard routing lifecycle. The `CommandPaletteView` pattern (Escape to close) is the right starting point, but the find bar stays open while the user types in the editor — the focus model differs from the palette.
+
+---
+
+### Phase 7: Performance Refinement
+
+**Rationale:** Always last. The Phase 1 event-driven redraw fix makes profiling accurate. Only after all features are working and real usage patterns are visible should further performance work begin. Profile first; optimize second. Premature caching creates cache invalidation bugs that are harder to fix than the performance problem (PITFALLS #13).
+
+**Delivers:** Responsive editing on large files — incremental tree-sitter parsing (~30ms to ~0.5ms per keystroke on 10K-line files), glyphon buffer caching (~97.5% reshaping reduction for unchanged lines), background parse thread for files >100KB.
+
+**Work items:**
+- Measure `build_render_model` time using `std::time::Instant`; use `document.revision()` as cheap staleness check before optimizing
+- Implement incremental tree-sitter parsing: `parser.parse(content, Some(old_tree))` with `TextEdit` structs from buffer mutations
+- Cache `glyphon::Buffer` objects keyed by `(text, font_size, line_height)` with LRU eviction in `TextSystem`
+- Move tree-sitter parsing to background thread (std::thread + mpsc channel) after incremental parsing is stable
+- Do not cache individual `LinePresentation` objects — complexity is not worth it for v2
+
+**Avoids:** Pitfall #13 (premature caching — measure first, use `document.revision()`)
+
+**Stack additions:** None.
+
+**Research flag:** Standard patterns, thoroughly documented in ARCHITECTURE.md. Primary constraint is "measure first" — do not begin until profiling data is available after Phase 1 fix.
+
+---
 
 ### Phase Ordering Rationale
 
-- **Phase 1-2 foundational:** Event loop ownership and rendering architecture cannot be fixed later (Pitfall #1, #2, #3). Must be correct from day one.
-- **Phase 3 before 4:** Event handlers trigger state updates; reactive system must exist first to handle updates correctly (prevent Pitfall #4).
-- **Phase 4 before 5:** Element library needs event system for interactive components (buttons, inputs).
-- **Phase 5 before 6:** Design tokens are applied via element builder API; builder must exist first.
-- **Phase 7 optional:** Transitions are polish; can be deferred to post-MVP if schedule pressure exists.
-
-**Critical path dependencies:** Phase 1 → Phase 2 → Phase 3 → Phase 4 → Phase 5. Phases 6-7 can be parallelized or deferred.
+- Phase 1 is not optional: the event-driven redraw fix must precede profiling; the command audit must precede feature implementation; the selection bug investigation must precede selection features.
+- Phase 2 must precede everything else: three independent research files converge on Buffer Registry as the root dependency.
+- Phase 3 follows Phase 2: file open/save creates and populates registry entries.
+- Phase 4 follows Phase 1: selection features require the rendering bug to be understood and fixed first.
+- Phase 5 follows Phases 2-3: file browser click-to-open requires both the registry and file operations.
+- Phase 6 can proceed after Phases 1 and 2; it does not depend on Phases 3-5 and can run in parallel with them if desired.
+- Phase 7 is always last: profiling only becomes meaningful after the event-driven redraw fix in Phase 1.
 
 ### Research Flags
 
-Phases likely needing deeper research during planning:
-- **Phase 2 (Layout & Rendering):** GPU batching strategies, glyphon atlas management (LRU eviction), three-phase rendering lifecycle. Complex integration with niche documentation.
-- **Phase 7 (Transitions):** CSS transition semantics in GPU context, property interpolation strategies. Sparse domain-specific resources.
+Phases needing deeper research during planning:
+- **Phase 3 (File Operations):** How async file I/O return values thread back through the synchronous `dispatch_command(&mut self, cmd) -> ()` signature. A result channel, callback, or new query method is needed; the design must be settled before implementation begins.
+- **Phase 6 (Find/Replace):** Focus and keyboard routing lifecycle when find bar stays open while editing in the text area — this is a different focus model than the `CommandPaletteView` pattern.
 
-Phases with standard patterns (skip research-phase):
-- **Phase 1 (Foundation):** GPUI architecture well-documented via official blog posts and GitHub docs.
-- **Phase 3 (Reactive State):** GPUI ownership model and effect queue pattern thoroughly explained in Zed blog posts.
-- **Phase 4 (Event System):** Two-phase dispatch is standard DOM pattern, well-understood.
-- **Phase 5 (Element Library):** Tailwind builder APIs and styled component patterns established.
-- **Phase 6 (Design System):** Token systems and theme switching well-documented in design system literature.
+Phases with standard, well-documented patterns (skip research-phase):
+- **Phase 1 (Foundation Fixes):** The event loop fix is one line; command audit is mechanical; bug investigation is localized.
+- **Phase 2 (Buffer Registry):** HashMap index + hitbox registration — established patterns already present in the codebase.
+- **Phase 4 (Selection/Clipboard):** Monospace hit-testing formula documented in PITFALLS #6; arboard API is well-understood.
+- **Phase 5 (File Browser):** Lazy-load tree pattern is standard; file watcher integration is the only uncertainty.
+- **Phase 7 (Performance):** Patterns fully documented in ARCHITECTURE.md; constraint is "measure first."
+
+---
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | Core stack (wgpu, winit, glyphon, taffy) verified via official GitHub releases and crates.io. Versions confirmed current (Jan 2026). State/animation patterns extrapolated from GPUI architecture analysis. |
-| Features | MEDIUM-HIGH | Table stakes validated by existing muda codebase (technologies already integrated). Differentiators based on GPUI patterns (some not yet implemented). Anti-features based on scope creep research and GPUI's explicit non-goals. |
-| Architecture | HIGH | GPUI architecture extensively documented via official Zed blog posts (ownership model, 120 FPS optimization). DeepWiki community docs recent (Jan 2026). Three-phase rendering and effect queue patterns verified across multiple sources. |
-| Pitfalls | MEDIUM | Critical pitfalls (event loop, reentrancy, batching) validated by multiple sources (official winit docs, GPUI technical articles, existing muda CONCERNS.md). Performance thresholds (draw call counts) are community consensus, not ora-specific profiling. |
+| Stack | HIGH | All crate versions confirmed on crates.io (March 2026); arboard already in project at 3.6.1; no speculative additions |
+| Features | HIGH | Derived from direct codebase analysis of core_editor commands and ora views; complexity estimates are MEDIUM |
+| Architecture | HIGH (ora) / MEDIUM (Zed) | ora findings from direct source reading; Zed patterns from DeepWiki + WebSearch summaries (WebFetch blocked during research) |
+| Pitfalls | HIGH | Every pitfall traceable to a specific file path, struct name, and line number; no pitfall based solely on generic advice |
 
 **Overall confidence:** HIGH
 
 ### Gaps to Address
 
-Research was comprehensive for architectural patterns and technology stack, but implementation details require validation during execution:
+- **Async dispatch return path:** The `dispatch_command(&mut self, cmd)` signature returns `()`. File open/save results (success, error, loaded content) need a mechanism to return to the UI. Options: a result channel, a callback, or a new `query()` method on `EditorDataSource`. This design decision must be resolved during Phase 3 planning before implementation begins.
 
-- **GPUI Entity/Model implementation specifics:** How exactly does GPUI implement change notifications? Need to review Zed source code for specifics during Phase 3 planning.
-- **Text rendering performance at scale:** What's the atlas size needed for 200K line file? Need profiling data during Phase 2 implementation.
-- **Transition animation performance:** What's the frame time impact of animating 20 elements simultaneously? Need benchmarking during Phase 7.
-- **Focus management edge cases:** How does GPUI handle focus when nested dialogs open? Need deeper dive into focus stack implementation during Phase 4.
-- **GPU batching implementation details:** Instanced rendering patterns for 20K+ quads per frame. Need research-phase investigation during Phase 2 planning.
-- **glyphon atlas management strategies:** LRU eviction implementation, multi-atlas partitioning for varied font sizes. Need research-phase investigation during Phase 2 planning.
+- **EditorDataSource sub-trait strategy:** The research recommends splitting the trait but does not prescribe the exact split. The Phase 1 design work must produce a concrete proposal (which methods on which trait) before Phase 2 begins adding new commands.
 
-**Mitigation:** These gaps are expected for a new framework implementation. Use `/gsd:research-phase` for Phase 2 (GPU batching, atlas management) and optionally Phase 7 (CSS transitions). Other phases have sufficient documentation to proceed with standard planning.
+- **Zed source verification:** WebFetch was blocked during research. All Zed architecture findings are from WebSearch summaries and DeepWiki, cross-validated against ora source code. The findings are internally consistent but are not primary-source verified. Verify against current GPUI README before closely following any GPUI-specific pattern.
+
+---
 
 ## Sources
 
-### Primary (HIGH confidence)
-- [wgpu v28.0.0 Release](https://github.com/gfx-rs/wgpu/releases) — Latest stable version verified (Dec 2024)
-- [winit v0.30.12 Release](https://github.com/rust-windowing/winit/releases) — Latest stable version verified (Jul 2024)
-- [glyphon v0.9.0 Release](https://github.com/grovesNL/glyphon/releases) — Latest stable version verified (Jan 2025)
-- [taffy v0.9.2 Release](https://github.com/DioxusLabs/taffy/releases) — Latest stable version verified (Nov 2024)
-- [GPUI Context Architecture](https://github.com/zed-industries/zed/blob/main/crates/gpui/docs/contexts.md) — Official GPUI docs on App, Context<T>, Entity<T>
-- [GPUI Ownership and Data Flow](https://zed.dev/blog/gpui-ownership) — Official Zed blog on centralized ownership pattern
-- [GPUI README](https://github.com/zed-industries/zed/blob/main/crates/gpui/README.md) — Official GPUI architecture overview
-- [Optimizing the Metal pipeline to maintain 120 FPS in GPUI](https://zed.dev/blog/120fps) — Official Zed blog on rendering optimization
+### Primary — direct codebase analysis (HIGH confidence)
+- `ora/src/platform/event_loop.rs` — continuous redraw bug at line 549, render pipeline
+- `ora/src/rendering/text.rs` — atlas persistence, `clear()` semantics
+- `ora/src/views/*.rs` — existing view coverage, integration gaps
+- `core_editor/src/domain/document.rs` — `open()`, `save()`, `title()`, `LineEnding::detect()`
+- `core_editor/src/domain/workspace.rs` — `open_document()`, `can_switch_active()`, `with_active_context()`
+- `ora/src/editor_adapter/types.rs` + `mod.rs` — `EditorDataSource` trait, `RenderModel`, `EditorCommand`
 
-### Secondary (MEDIUM confidence)
-- [GPUI Technical Overview by Beck Moulton](https://beckmoulton.medium.com/gpui-a-technical-overview-of-the-high-performance-rust-ui-framework-powering-zed-ac65975cda9f) — GPU acceleration, hybrid immediate/retained mode
-- [GPUI Framework DeepWiki](https://deepwiki.com/zed-industries/zed/2.2-gpui-framework) — Element trait, layout pipeline, rendering phases
-- [Event Flow DeepWiki](https://deepwiki.com/zed-industries/zed/2.4-keybinding-and-action-dispatch) — Two-phase dispatch, event routing
-- [Focus Management DeepWiki](https://deepwiki.com/zed-industries/zed/2.5-keybinding-and-action-system) — Focus paths, dispatch tree
-- [Building a GPU-Accelerated Terminal Emulator with Rust and GPUI](https://dev.to/zhiwei_ma_0fc08a668c1eb51/building-a-gpu-accelerated-terminal-emulator-with-rust-and-gpui-4103) — Frame time budgeting, batching
-- [Eight million pixels and counting – GUIs on the GPU](https://nical.github.io/drafts/gui-gpu-notes.html) — Draw call batching, compositor, power efficiency
-- [EventLoop 3.0 Changes · Issue #2900](https://github.com/rust-windowing/winit/issues/2900) — Event loop ownership architecture
-- [Honest Feedback on WGPU · Issue #8010](https://github.com/gfx-rs/wgpu/issues/8010) — wgpu API churn, breaking changes
-- Existing muda codebase (PROJECT.md, ARCHITECTURE.md, CONCERNS.md) — Pain points, context, tech debt
+### Secondary — external crate documentation (HIGH confidence)
+- [rfd 0.17.2 crates.io](https://crates.io/crates/rfd) — confirmed version, Windows COM backend
+- [notify 8.2.0 crates.io](https://crates.io/crates/notify) — confirmed version, Windows RDCW backend
+- [notify-debouncer-full 0.5.0 docs.rs](https://docs.rs/notify-debouncer-full) — debouncer API
+- [arboard GitHub (1Password)](https://github.com/1Password/arboard) — 3.6.1, already in project
+- [regex 1.12.2 docs.rs](https://docs.rs/regex) — confirmed version, bounded execution guarantee
 
-### Tertiary (LOW confidence, needs validation)
-- [Generational Arenas Guide](https://lucassardois.medium.com/generational-indices-guide-8e3c5f7fd594) — Entity storage patterns (needs verification against slotmap docs)
-- [slotmap vs generational-arena Discussion](https://github.com/fitzgen/generational-arena/issues/13) — Performance comparison (community claims, not benchmarked)
-- [keyframe crates.io](https://crates.io/crates/keyframe) — Animation library documentation (v1.1.1 verified but usage patterns unverified)
-- [mina crates.io](https://crates.io/crates/mina) — CSS-like animation (v0.1.3 too immature, flagged for future evaluation)
+### Secondary — Zed architecture research (MEDIUM confidence)
+- DeepWiki (zed-industries/zed) — EditorElement, DisplayMap, ScrollManager, snapshot pattern
+- Zed blog: "Rope & SumTree", "Syntax-Aware Editing", "videogame", "120fps" (via WebSearch summaries)
+- Zed blog "Quality Week Dec 2025" — idle GPU reduction via conditional frame presentation confirms event-driven redraw pattern
+- GitHub PR #25009 summary — `AnyView::cached`; scroll/mousemove no longer trigger full render
+- Zed PR #8919 — Windows IFileOpenDialog (reference for `rfd` choice over custom COM)
+- Zed issues #29657, #51278 — Windows clipboard soundness (reference for arboard preference)
 
 ---
-*Research completed: 2026-01-28*
+*Research completed: 2026-03-26*
 *Ready for roadmap: yes*
