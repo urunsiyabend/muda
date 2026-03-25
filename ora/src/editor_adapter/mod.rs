@@ -43,6 +43,12 @@ pub trait EditorDataSource {
     /// Returns the current viewport height in lines.
     fn viewport_lines(&self) -> usize;
 
+    /// Returns the current vertical scroll offset in lines.
+    ///
+    /// Used by the smooth-scroll accumulator to detect document boundaries
+    /// without building a full RenderModel.
+    fn scroll_y(&self) -> usize;
+
     /// Get the window title (for title bar updates).
     fn window_title(&self) -> String;
 }

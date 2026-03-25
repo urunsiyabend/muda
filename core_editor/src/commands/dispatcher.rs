@@ -363,6 +363,7 @@ impl CommandDispatcher {
     fn handle_scroll(&self, ctx: &mut CommandContext, lines: i32) {
         let total_lines = ctx.document.len_lines();
         let viewport_height = ctx.view.viewport.height;
+        let scroll_off = ctx.view.options.scroll_off;
 
         let current_scroll = ctx.view.viewport.scroll_y as i64;
         let new_scroll = (current_scroll + lines as i64)
@@ -371,24 +372,35 @@ impl CommandDispatcher {
 
         ctx.view.viewport.scroll_y = new_scroll;
 
-        // Move the caret to stay within the visible viewport
+        // Move the caret to stay within the visible viewport. When the
+        // caret must be repositioned (it fell outside the viewport), place
+        // it inside the scroll_off margin so that the subsequent
+        // ensure_caret_visible call in App::dispatch does not push scroll_y
+        // away from where the user explicitly scrolled to.
         let caret_offset = ctx.view.caret_offset();
         let caret_pos = self.offset_to_position(ctx, caret_offset);
 
         if caret_pos.line < new_scroll {
-            // Caret is above viewport, move it to the first visible line
+            // Caret is above viewport — move it into the safe top zone.
+            let target_line = (new_scroll + scroll_off)
+                .min(total_lines.saturating_sub(1));
             let new_offset = self.position_to_offset(
                 ctx,
-                TextPosition::new(new_scroll, caret_pos.column.min(self.line_len(ctx, new_scroll))),
+                TextPosition::new(target_line, caret_pos.column.min(self.line_len(ctx, target_line))),
             );
             ctx.view.move_caret_to(new_offset, false);
             ctx.view.clear_selection();
         } else if caret_pos.line >= new_scroll + viewport_height {
-            // Caret is below viewport, move it to the last visible line
-            let last_visible = (new_scroll + viewport_height).saturating_sub(1).min(total_lines.saturating_sub(1));
+            // Caret is below viewport — move it into the safe bottom zone.
+            let target_line = if viewport_height > scroll_off {
+                (new_scroll + viewport_height - scroll_off).saturating_sub(1)
+                    .min(total_lines.saturating_sub(1))
+            } else {
+                new_scroll.min(total_lines.saturating_sub(1))
+            };
             let new_offset = self.position_to_offset(
                 ctx,
-                TextPosition::new(last_visible, caret_pos.column.min(self.line_len(ctx, last_visible))),
+                TextPosition::new(target_line, caret_pos.column.min(self.line_len(ctx, target_line))),
             );
             ctx.view.move_caret_to(new_offset, false);
             ctx.view.clear_selection();

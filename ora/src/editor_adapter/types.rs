@@ -399,6 +399,12 @@ pub struct RenderModel {
     pub scroll_x: usize,
     /// Viewport scroll offset (for reference).
     pub scroll_y: usize,
+    /// Sub-line vertical scroll offset in pixels (0.0 .. LINE_HEIGHT).
+    ///
+    /// Set by the ora event loop's pixel accumulator for smooth scrolling.
+    /// Views apply this as a negative vertical shift to the text content,
+    /// producing smooth pixel-level scrolling between logical line boundaries.
+    pub scroll_y_offset_px: f32,
 }
 
 impl RenderModel {

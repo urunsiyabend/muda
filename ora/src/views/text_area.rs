@@ -76,6 +76,11 @@ pub struct TextAreaView {
     scroll_y: usize,
     /// Character width for position calculations.
     char_width: f32,
+    /// Sub-line vertical scroll offset in pixels (smooth scroll).
+    ///
+    /// Applied as a negative vertical shift to the text content layer,
+    /// producing pixel-level smooth scrolling between logical line boundaries.
+    scroll_y_offset_px: f32,
 }
 
 impl TextAreaView {
@@ -87,6 +92,7 @@ impl TextAreaView {
             scroll_x: model.scroll_x,
             scroll_y: model.scroll_y,
             char_width: crate::rendering::measured_char_width(),
+            scroll_y_offset_px: model.scroll_y_offset_px,
         }
     }
 
@@ -98,6 +104,7 @@ impl TextAreaView {
             scroll_x: 0,
             scroll_y: 0,
             char_width: crate::rendering::measured_char_width(),
+            scroll_y_offset_px: 0.0,
         }
     }
 
@@ -256,7 +263,20 @@ impl View for TextAreaView {
 
         let theme = cx.theme();
 
-        // Text content layer: flex column of line divs
+        // Sub-line scroll offset: shift line content upward by fractional
+        // pixels so scrolling appears smooth between logical line boundaries.
+        let scroll_shift = -self.scroll_y_offset_px;
+
+        // Inner wrapper that shifts content upward by the sub-line offset.
+        // The outer container clips via overflow_hidden.
+        let inner_text: AnyElement = Div::new()
+            .flex_col()
+            .w(pct(100.0))
+            .mt(scroll_shift)
+            .children(text_lines)
+            .into();
+
+        // Text content layer: flex column of line divs (clips inner content)
         let text_layer: AnyElement = Div::new()
             .flex_col()
             .w(pct(100.0))
@@ -264,14 +284,21 @@ impl View for TextAreaView {
             .bg(theme.color(ColorToken::BgPrimary))
             .pl(1.0)
             .overflow_hidden()
-            .children(text_lines)
+            .child(inner_text)
+            .into();
+
+        // Inner wrapper for caret with same scroll shift for alignment.
+        let inner_caret: AnyElement = Div::new()
+            .w(pct(100.0))
+            .mt(scroll_shift)
+            .child(caret)
             .into();
 
         // Caret layer: overlaid on top of text via Stack
         let caret_layer: AnyElement = Div::new()
             .w(pct(100.0))
             .h(pct(100.0))
-            .child(caret)
+            .child(inner_caret)
             .into();
 
         // Use Stack to layer text (bottom) and caret (top)

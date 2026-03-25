@@ -29,6 +29,8 @@ pub type SharedAdapter = Rc<RefCell<Box<dyn EditorDataSource>>>;
 /// fresh presentation data and constructs the complete AppLayout tree.
 pub struct EditorRootView {
     adapter: SharedAdapter,
+    /// Shared smooth-scroll pixel offset from the event loop accumulator.
+    scroll_offset: crate::app::SharedScrollOffset,
     /// Persistent focus handles (created once, reused across frames).
     dialog_save_focus: FocusHandle,
     dialog_dont_save_focus: FocusHandle,
@@ -41,9 +43,14 @@ impl EditorRootView {
     ///
     /// Focus handles are allocated once and reused across frames to avoid
     /// FocusId explosion (per Phase 4 decision: persistent FocusHandles).
-    pub fn new(adapter: SharedAdapter, cx: &mut ViewContext) -> Self {
+    pub fn new(
+        adapter: SharedAdapter,
+        scroll_offset: crate::app::SharedScrollOffset,
+        cx: &mut ViewContext,
+    ) -> Self {
         Self {
             adapter,
+            scroll_offset,
             dialog_save_focus: cx.focus_handle(),
             dialog_dont_save_focus: cx.focus_handle(),
             dialog_cancel_focus: cx.focus_handle(),
@@ -91,7 +98,11 @@ impl EditorRootView {
         let file_tree = Self::build_file_tree(&model.sidebar);
         let sidebar = SidebarView::new(model.sidebar.clone(), file_tree);
         let tab_bar = TabBarView::new(model.tab_bar.clone());
-        let gutter = GutterView::new(model.gutter.clone(), model.visible_lines.clone());
+        let gutter = GutterView::new_with_scroll_offset(
+            model.gutter.clone(),
+            model.visible_lines.clone(),
+            model.scroll_y_offset_px,
+        );
         let text_area = TextAreaView::new(model);
         let status_bar = StatusBarView::new(model.status.clone());
         let panel_manager = PanelManagerView::new();
@@ -136,10 +147,15 @@ impl View for EditorRootView {
         };
 
         // Build fresh RenderModel from the adapter
-        let model = {
+        let mut model = {
             let adapter = self.adapter.borrow();
             adapter.build_render_model(viewport_lines)
         };
+
+        // Inject the smooth-scroll sub-line pixel offset from the event
+        // loop's accumulator. This produces smooth visual scrolling between
+        // logical line boundaries without changing core_editor's scroll_y.
+        model.scroll_y_offset_px = self.scroll_offset.get();
 
         // Construct the AppLayout from fresh data and render it
         let layout = self.build_layout(&model);

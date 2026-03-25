@@ -33,6 +33,17 @@ pub struct OraApp {
     /// `EditorCommand` and dispatched through the adapter.
     /// Shared with the `EditorRootView` via `Rc<RefCell<>>`.
     editor_adapter: Option<SharedAdapter>,
+    /// Pixel-level scroll accumulator for smooth mouse-wheel scrolling.
+    ///
+    /// Mouse wheel deltas are converted to pixel amounts and accumulated here.
+    /// When the accumulator exceeds one line height, a `Scroll(1)` or
+    /// `Scroll(-1)` command is sent to core_editor and the line height is
+    /// subtracted. The fractional remainder produces sub-line visual offset
+    /// for smooth rendering.
+    scroll_accumulator_px: f32,
+    /// Shared smooth-scroll pixel offset, read by EditorRootView.
+    /// `None` when running without an editor adapter.
+    shared_scroll_offset: Option<crate::app::SharedScrollOffset>,
 }
 
 impl OraApp {
@@ -48,6 +59,8 @@ impl OraApp {
             event_handlers: EventHandlers::new(),
             modifiers: Modifiers::none(),
             editor_adapter: None,
+            scroll_accumulator_px: 0.0,
+            shared_scroll_offset: None,
         }
     }
 
@@ -56,7 +69,14 @@ impl OraApp {
     /// The adapter is shared via `Rc<RefCell<>>` with the `EditorRootView`
     /// so both the view (for `build_render_model`) and the event loop
     /// (for `dispatch_command`) can access it.
-    pub fn new_with_editor(app: App, adapter: SharedAdapter) -> Self {
+    ///
+    /// `scroll_offset` is the shared smooth-scroll pixel offset, also read
+    /// by `EditorRootView` for sub-line visual scrolling.
+    pub fn new_with_editor(
+        app: App,
+        adapter: SharedAdapter,
+        scroll_offset: crate::app::SharedScrollOffset,
+    ) -> Self {
         Self {
             app_config: Some(app),
             gpu_state: None,
@@ -67,6 +87,8 @@ impl OraApp {
             event_handlers: EventHandlers::new(),
             modifiers: Modifiers::none(),
             editor_adapter: Some(adapter),
+            scroll_accumulator_px: 0.0,
+            shared_scroll_offset: Some(scroll_offset),
         }
     }
 }
@@ -243,30 +265,73 @@ impl ApplicationHandler for OraApp {
                 }
             }
             WindowEvent::MouseWheel { delta, .. } => {
-                // Translate mouse wheel to scroll commands via the editor adapter.
-                let scroll_lines = match delta {
+                // Smooth pixel-level scrolling via accumulator.
+                //
+                // Mouse wheel deltas are converted to pixel amounts and added
+                // to scroll_accumulator_px. When the accumulator exceeds one
+                // LINE_HEIGHT, a Scroll(1) or Scroll(-1) is dispatched to
+                // core_editor and the line height is subtracted. The remaining
+                // fractional pixels produce sub-line visual offset for smooth
+                // rendering (applied by TextAreaView / GutterView).
+                const LINE_HEIGHT: f32 = 21.0;
+                // Pixels per notch for LineDelta (one "line" in OS terms).
+                const PIXELS_PER_LINE: f32 = 40.0;
+
+                let delta_px = match delta {
                     winit::event::MouseScrollDelta::LineDelta(_x, y) => {
-                        // y is positive for "scroll up" (content moves down),
-                        // negative for "scroll down" (content moves up).
-                        // We negate so positive = scroll down in the document.
-                        -(y as i32) * 3 // 3 lines per notch
+                        // y > 0 = scroll up (content moves down in viewport),
+                        // y < 0 = scroll down (content moves up).
+                        // Negate so positive accumulator = scroll down in doc.
+                        -y * PIXELS_PER_LINE
                     }
                     winit::event::MouseScrollDelta::PixelDelta(pos) => {
-                        // Convert pixel delta to line count
-                        const LINE_HEIGHT: f64 = 21.0;
-                        -(pos.y / LINE_HEIGHT) as i32
+                        // Precision touchpad: already in pixels, just negate.
+                        -(pos.y as f32)
                     }
                 };
 
-                if scroll_lines != 0 {
-                    if let Some(adapter) = &self.editor_adapter {
-                        use crate::editor_adapter::EditorCommand;
-                        adapter.borrow_mut().dispatch_command(EditorCommand::Scroll(scroll_lines));
-                        log::debug!("Mouse wheel scroll: {} lines", scroll_lines);
+                self.scroll_accumulator_px += delta_px;
+
+                // Dispatch whole-line scrolls while accumulator exceeds a line.
+                if let Some(adapter) = &self.editor_adapter {
+                    use crate::editor_adapter::EditorCommand;
+
+                    let scroll_y_before = adapter.borrow().scroll_y();
+
+                    while self.scroll_accumulator_px >= LINE_HEIGHT {
+                        adapter.borrow_mut().dispatch_command(EditorCommand::Scroll(1));
+                        self.scroll_accumulator_px -= LINE_HEIGHT;
                     }
-                    if let Some(gpu_state) = &self.gpu_state {
-                        gpu_state.window.request_redraw();
+                    while self.scroll_accumulator_px <= -LINE_HEIGHT {
+                        adapter.borrow_mut().dispatch_command(EditorCommand::Scroll(-1));
+                        self.scroll_accumulator_px += LINE_HEIGHT;
                     }
+
+                    let scroll_y_after = adapter.borrow().scroll_y();
+
+                    // If core_editor didn't actually scroll (at document
+                    // boundary), reset the accumulator so sub-line offset
+                    // doesn't show content beyond the boundary.
+                    if scroll_y_before == scroll_y_after && scroll_y_before == 0
+                        && self.scroll_accumulator_px < 0.0
+                    {
+                        self.scroll_accumulator_px = 0.0;
+                    }
+
+                    // Publish the fractional offset for the view to consume.
+                    if let Some(ref offset) = self.shared_scroll_offset {
+                        offset.set(self.scroll_accumulator_px);
+                    }
+
+                    log::debug!(
+                        "Mouse wheel: delta_px={:.1}, accumulator={:.1}",
+                        delta_px,
+                        self.scroll_accumulator_px,
+                    );
+                }
+
+                if let Some(gpu_state) = &self.gpu_state {
+                    gpu_state.window.request_redraw();
                 }
             }
             WindowEvent::KeyboardInput { event: key_event, .. } => {

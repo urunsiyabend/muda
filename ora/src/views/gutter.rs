@@ -74,6 +74,8 @@ pub struct GutterView {
     visible_lines: Vec<LinePresentation>,
     /// Monospace character width for calculations (default 8.0).
     char_width: f32,
+    /// Sub-line vertical scroll offset in pixels (smooth scroll).
+    scroll_y_offset_px: f32,
 }
 
 impl GutterView {
@@ -83,6 +85,21 @@ impl GutterView {
             gutter,
             visible_lines,
             char_width: crate::rendering::measured_char_width(),
+            scroll_y_offset_px: 0.0,
+        }
+    }
+
+    /// Creates a new gutter view with a sub-line scroll offset.
+    pub fn new_with_scroll_offset(
+        gutter: GutterModel,
+        visible_lines: Vec<LinePresentation>,
+        scroll_y_offset_px: f32,
+    ) -> Self {
+        Self {
+            gutter,
+            visible_lines,
+            char_width: crate::rendering::measured_char_width(),
+            scroll_y_offset_px,
         }
     }
 
@@ -96,6 +113,7 @@ impl GutterView {
             gutter,
             visible_lines,
             char_width,
+            scroll_y_offset_px: 0.0,
         }
     }
 
@@ -195,6 +213,18 @@ impl View for GutterView {
         // Now get theme for container styling
         let theme = cx.theme();
 
+        // Sub-line scroll offset: shift line number rows upward by fractional
+        // pixels so they stay aligned with the text area's smooth scroll.
+        let scroll_shift = -self.scroll_y_offset_px;
+
+        // Inner wrapper that shifts content by the sub-line offset.
+        let inner: AnyElement = Div::new()
+            .flex_col()
+            .w(px(width))
+            .mt(scroll_shift)
+            .children(line_rows)
+            .into();
+
         // Build gutter container (same bg as editor, right border as separator)
         Div::new()
             .flex_col()
@@ -205,7 +235,7 @@ impl View for GutterView {
             .pl(LEFT_PADDING)
             .pr(RIGHT_PADDING)
             .border_right(1.0, theme.color(ColorToken::Border))
-            .children(line_rows)
+            .child(inner)
             .into()
     }
 }

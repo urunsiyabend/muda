@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use crate::context::WindowContext;
@@ -6,6 +6,12 @@ use crate::editor_adapter::EditorDataSource;
 use crate::platform::event_loop::OraApp;
 use crate::views::EditorRootView;
 use winit::event_loop::EventLoop;
+
+/// Shared smooth-scroll pixel offset.
+///
+/// Written by the event loop's scroll accumulator, read by `EditorRootView`
+/// to set `RenderModel.scroll_y_offset_px` for sub-line visual scrolling.
+pub type SharedScrollOffset = Rc<Cell<f32>>;
 
 /// Application builder for configuring and running the ora application.
 pub struct App {
@@ -86,14 +92,23 @@ pub fn run_with_editor(adapter: impl EditorDataSource + 'static) -> ! {
         Rc::new(RefCell::new(Box::new(adapter)));
     let view_adapter = shared_adapter.clone();
 
+    // Shared smooth-scroll pixel offset: written by OraApp's scroll
+    // accumulator, read by EditorRootView to shift text sub-line.
+    let scroll_offset: SharedScrollOffset = Rc::new(Cell::new(0.0));
+    let view_scroll_offset = scroll_offset.clone();
+
     let app = App::new()
         .title("Muda")
         .size(1280, 720)
         .on_open(move |cx| {
-            let root_view = EditorRootView::new(view_adapter, &mut cx.as_view_context());
+            let root_view = EditorRootView::new(
+                view_adapter,
+                view_scroll_offset,
+                &mut cx.as_view_context(),
+            );
             cx.set_root_view(root_view);
         });
-    let mut ora_app = OraApp::new_with_editor(app, shared_adapter);
+    let mut ora_app = OraApp::new_with_editor(app, shared_adapter, scroll_offset);
     event_loop.run_app(&mut ora_app).unwrap();
     std::process::exit(0);
 }

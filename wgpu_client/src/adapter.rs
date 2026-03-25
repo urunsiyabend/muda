@@ -177,6 +177,10 @@ fn convert_render_model(m: core_editor::view_model::RenderModel) -> RenderModel 
         sidebar: convert_sidebar_presentation(m.sidebar),
         scroll_x: m.scroll_x,
         scroll_y: m.scroll_y,
+        // Sub-line offset is managed by ora's event loop, not core_editor.
+        // The adapter always sets this to 0.0; EditorRootView overwrites it
+        // from the shared scroll offset cell.
+        scroll_y_offset_px: 0.0,
     }
 }
 
@@ -259,6 +263,13 @@ impl EditorDataSource for CoreEditorAdapter {
             .active_view()
             .map(|v| v.viewport.height)
             .unwrap_or(40)
+    }
+
+    fn scroll_y(&self) -> usize {
+        self.app.workspace
+            .active_view()
+            .map(|v| v.viewport.scroll_y)
+            .unwrap_or(0)
     }
 
     fn dispatch_command(&mut self, cmd: EditorCommand) {
