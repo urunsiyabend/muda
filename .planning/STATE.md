@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-01-28)
 
 **Core value:** A single, authoritative UI toolkit that eliminates duplicated styling, enforces consistent design tokens, and provides a scalable GPUI-like component model for the entire GPU client.
-**Current focus:** Phase 9: Transitions & Integration — in progress (09-01 through 09-06 done).
+**Current focus:** Phase 9: Transitions & Integration — in progress (09-01 through 09-07 done).
 
 ## Current Position
 
 Phase: 9 of 9 (Transitions & Integration) - In progress
-Plan: 6 of N in current phase (09-01 animation primitives, 09-02 editor adapter, 09-03 import migration, 09-04 transition infrastructure, 09-05 editor adapter integration, 09-06 Div transition API done)
-Status: In progress — 09-05 (CoreEditorAdapter + keyboard dispatch + run_with_editor) complete
-Last activity: 2026-03-25 - Completed 09-05-PLAN.md (CoreEditorAdapter, translate_editor_command, OraApp::new_with_editor, ora::run_with_editor)
+Plan: 7 of N in current phase (09-01 animation primitives, 09-02 editor adapter, 09-03 import migration, 09-04 transition infrastructure, 09-05 editor adapter integration, 09-06 Div transition API, 09-07 hover/active transitions on all interactive elements done)
+Status: In progress — 09-07 (hover/active transitions: Button, TabBar, Sidebar, CommandPalette, Dialog) complete
+Last activity: 2026-03-25 - Completed 09-07-PLAN.md (transition_bg on all interactive elements, TRANS-04 satisfied)
 
-Progress: [█████████████████████████████████] Phase 9 in progress (~4 plans done)
+Progress: [█████████████████████████████████] Phase 9 in progress (~7 plans done)
 
 ## Performance Metrics
 
@@ -233,6 +233,10 @@ Recent decisions affecting current work:
 - TransitionProperty private enum in div.rs tracks last configured property so .easing() applies correctly (09-06)
 - Background update condition: set style.background when hitbox or transition_id is set, preserving non-Solid backgrounds for untouched Divs (09-06)
 - advance_position_x/y added to TransitionState in 09-06 (plan 04 defined tween fields but omitted the advance methods) (09-06)
+- Button transition_id opt-in via builder; None default preserves all existing callers' behavior (09-07)
+- CommandPalette uses row_index (slot 0..VISIBLE_ROWS) as TransitionId suffix, not command index — stable as filter results shuffle (09-07)
+- TransitionId namespaces: sidebar=10000, tabs=20000, palette=30000, dialog=40000 — prevents cross-view collision (09-07)
+- Enter/exit EnterExitTween deferred to gap closure plan — TRANS-04 (hover/active) is satisfied; enter/exit is stretch goal (09-07)
 
 ### Pending Todos
 
@@ -258,11 +262,11 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-25T11:50:29Z
-Stopped at: Completed 09-05-PLAN.md — CoreEditorAdapter, translate_editor_command, OraApp::new_with_editor, ora::run_with_editor
+Last session: 2026-03-25T11:57:13Z
+Stopped at: Completed 09-07-PLAN.md — hover/active transitions on Button, TabBarView, SidebarView, CommandPaletteView, DialogView; TRANS-04 satisfied
 Resume file: None
-Next: Continue Phase 9 — proceed to next unexecuted plan (09-07 or later)
+Next: Continue Phase 9 — proceed to 09-08 or later
 
 ---
 *State initialized: 2026-01-28*
-*Last updated: 2026-03-25 after completing 09-04 (transition infrastructure: TransitionRegistry, TransitionState, AppContext.transition_registry)*
+*Last updated: 2026-03-25 after completing 09-07 (hover/active transitions on all interactive elements: Button, TabBar, Sidebar, CommandPalette, Dialog)*
