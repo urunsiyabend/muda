@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-01-28)
 
 **Core value:** A single, authoritative UI toolkit that eliminates duplicated styling, enforces consistent design tokens, and provides a scalable GPUI-like component model for the entire GPU client.
-**Current focus:** Phase 9: Transitions & Integration — in progress (09-01 through 09-07 done).
+**Current focus:** Phase 9: Transitions & Integration — COMPLETE (09-01 through 09-08 done).
 
 ## Current Position
 
-Phase: 9 of 9 (Transitions & Integration) - In progress
-Plan: 7 of N in current phase (09-01 animation primitives, 09-02 editor adapter, 09-03 import migration, 09-04 transition infrastructure, 09-05 editor adapter integration, 09-06 Div transition API, 09-07 hover/active transitions on all interactive elements done)
-Status: In progress — 09-07 (hover/active transitions: Button, TabBar, Sidebar, CommandPalette, Dialog) complete
-Last activity: 2026-03-25 - Completed 09-07-PLAN.md (transition_bg on all interactive elements, TRANS-04 satisfied)
+Phase: 9 of 9 (Transitions & Integration) - COMPLETE
+Plan: 8 of 8 in current phase (09-01 animation primitives, 09-02 editor adapter, 09-03 import migration, 09-04 transition infrastructure, 09-05 editor adapter integration, 09-06 Div transition API, 09-07 hover/active transitions, 09-08 thin shell cleanup done)
+Status: Phase 9 COMPLETE — 09-08 (wgpu_client thin shell: delete all migrated modules, ora is sole source of truth) complete
+Last activity: 2026-03-25 - Completed 09-08-PLAN.md (wgpu_client stripped to main.rs+adapter.rs, INT-01/INT-04/INT-05 satisfied)
 
-Progress: [█████████████████████████████████] Phase 9 in progress (~7 plans done)
+Progress: [█████████████████████████████████████] Phase 9 COMPLETE (all 9 phases done)
 
 ## Performance Metrics
 
@@ -237,6 +237,9 @@ Recent decisions affecting current work:
 - CommandPalette uses row_index (slot 0..VISIBLE_ROWS) as TransitionId suffix, not command index — stable as filter results shuffle (09-07)
 - TransitionId namespaces: sidebar=10000, tabs=20000, palette=30000, dialog=40000 — prevents cross-view collision (09-07)
 - Enter/exit EnterExitTween deferred to gap closure plan — TRANS-04 (hover/active) is satisfied; enter/exit is stretch goal (09-07)
+- Delete-then-check pattern: write thin main.rs first (remove all mod declarations), then delete orphaned files with cargo check between each — Rust only compiles declared modules (09-08)
+- wgpu_client Cargo.toml retains only core_editor, ora, log, simplelog; all wgpu/winit/glyphon/pollster/anyhow/bytemuck deps removed with migrated modules (09-08)
+- main() returns () (not Result) for thin shell: ora::run_with_editor() diverges (!), setup errors use .expect() (09-08)
 
 ### Pending Todos
 
@@ -262,10 +265,10 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-25T11:57:13Z
-Stopped at: Completed 09-07-PLAN.md — hover/active transitions on Button, TabBarView, SidebarView, CommandPaletteView, DialogView; TRANS-04 satisfied
+Last session: 2026-03-25T12:04:46Z
+Stopped at: Completed 09-08-PLAN.md — wgpu_client thin shell cleanup; all migrated modules deleted; ora is sole source of truth; INT-01/INT-04/INT-05 satisfied; Phase 9 COMPLETE
 Resume file: None
-Next: Continue Phase 9 — proceed to 09-08 or later
+Next: All 9 phases complete — project goals achieved
 
 ---
 *State initialized: 2026-01-28*
