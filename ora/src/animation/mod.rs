@@ -6,6 +6,8 @@
 
 pub mod easing;
 pub mod tween;
+pub mod transition;
 
 pub use easing::{Easing, CubicBezier, Spring};
 pub use tween::{Tween, TweenState, Tweenable};
+pub use transition::{TransitionId, TransitionSpec, TransitionConfig, TransitionState, TransitionRegistry};
