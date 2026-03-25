@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-03-26)
 ## Current Position
 
 Phase: 10 — Foundation Fixes (in progress)
-Plan: 01 of N (event-driven redraw)
-Status: In progress — Plan 01 complete
-Last activity: 2026-03-26 — Completed 10-01-PLAN.md (event-driven redraw + caret blink timer)
+Plan: 02 of N (v2 commands + trait split)
+Status: In progress — Plans 01 and 02 complete
+Last activity: 2026-03-26 — Completed 10-02-PLAN.md (FIX-03 v2 commands + FIX-04 trait split)
 
-Progress: [█░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] v2.0 Phase 10 plan 01 complete
+Progress: [██░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] v2.0 Phase 10 plans 01-02 complete
 
 ## Performance Metrics
 
@@ -44,7 +44,7 @@ None.
 ### Blockers/Concerns
 
 - Async file I/O return path: `dispatch_command(&mut self, cmd)` returns `()` — need result channel or callback for file operations (Phase 12 design decision, flag in Phase 10 planning)
-- EditorDataSource trait pressure: plan full sub-trait expansion before implementing any new methods (Phase 10 design work)
+- EditorDataSource trait pressure: RESOLVED (10-02) — split into BufferDataSource + CommandDispatcher + WindowDataSource with blanket super-trait
 - Selection rendering bug is in span composition in adapter, not GPU renderer — debug in correct layer (Phase 10)
 - Idle GPU fixed (10-01): unconditional request_redraw at event_loop.rs removed; ControlFlow state machine now drives frame cadence
 
@@ -59,10 +59,10 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-26
-Stopped at: Completed 10-01-PLAN.md (event-driven redraw + caret blink timer)
+Stopped at: Completed 10-02-PLAN.md (v2 commands + EditorDataSource trait split)
 Resume file: None
-Next: Continue Phase 10 plans (selection rendering, command audit, trait split)
+Next: Continue Phase 10 plans (selection rendering, Document::title localization fix, remaining FIX items)
 
 ---
 *State initialized: 2026-01-28*
-*Last updated: 2026-03-26 after v2.0 roadmap creation*
+*Last updated: 2026-03-26 after 10-02 completion*
