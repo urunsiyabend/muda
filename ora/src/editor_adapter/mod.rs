@@ -20,19 +20,22 @@
 pub mod types;
 pub use types::*;
 
-/// Trait abstracting over an editor backend.
+// =============================================================================
+// Sub-traits (FIX-04): split the monolithic EditorDataSource into three
+// focused traits. This allows future phases to add methods to the correct
+// sub-trait and narrows method signatures for views that only need rendering.
+// =============================================================================
+
+/// Read-only buffer/viewport data for rendering.
 ///
-/// `wgpu_client` implements this for `core_editor::app::App`.
-/// ora views receive `&dyn EditorDataSource` to query presentation data.
-pub trait EditorDataSource {
+/// Views that only read data (e.g. text area, gutter) can accept
+/// `&dyn BufferDataSource` instead of the full `&dyn EditorDataSource`.
+pub trait BufferDataSource {
     /// Build the complete render model for the current frame.
     ///
     /// `viewport_lines` is the number of text lines currently visible
     /// in the editor viewport (used to compute `visible_lines` in the model).
     fn build_render_model(&self, viewport_lines: usize) -> RenderModel;
-
-    /// Dispatch an editor command (from keyboard input or UI action).
-    fn dispatch_command(&mut self, cmd: EditorCommand);
 
     /// Resize the editor viewport (called on window resize).
     ///
@@ -54,7 +57,36 @@ pub trait EditorDataSource {
     /// Used to compute the maximum scroll position for clamping:
     /// `max_scroll_px = (total_lines - 1) * LINE_HEIGHT`
     fn total_lines(&self) -> usize;
+}
 
+/// Command dispatch to the editor backend.
+pub trait CommandDispatcher {
+    /// Dispatch an editor command (from keyboard input or UI action).
+    fn dispatch_command(&mut self, cmd: EditorCommand);
+}
+
+/// Window/chrome metadata.
+pub trait WindowDataSource {
     /// Get the window title (for title bar updates).
     fn window_title(&self) -> String;
 }
+
+// =============================================================================
+// EditorDataSource — convenience super-trait combining all sub-traits.
+//
+// The blanket impl means any type implementing all three sub-traits
+// automatically implements EditorDataSource, preserving full backward
+// compatibility. Existing Box<dyn EditorDataSource> usage is unchanged.
+// =============================================================================
+
+/// Trait abstracting over an editor backend.
+///
+/// `wgpu_client` implements this for `core_editor::app::App`.
+/// ora views receive `&dyn EditorDataSource` to query presentation data.
+///
+/// This is a convenience super-trait combining `BufferDataSource`,
+/// `CommandDispatcher`, and `WindowDataSource`. Implement those three
+/// sub-traits and this trait is satisfied automatically via blanket impl.
+pub trait EditorDataSource: BufferDataSource + CommandDispatcher + WindowDataSource {}
+
+impl<T> EditorDataSource for T where T: BufferDataSource + CommandDispatcher + WindowDataSource {}

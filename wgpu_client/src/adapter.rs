@@ -10,10 +10,10 @@
 use core_editor::commands::editor_command::{Direction, MoveScope as CoreMoveScope};
 use core_editor::commands::EditorCommand as CoreEditorCommand;
 use ora::editor_adapter::{
-    CaretPresentation, CursorDirection, DialogPresentation, EditorCommand, EditorDataSource,
-    FileEntryPresentation, GutterModel, LinePresentation,
+    BufferDataSource, CaretPresentation, CommandDispatcher, CursorDirection, DialogPresentation,
+    EditorCommand, FileEntryPresentation, GutterModel, LinePresentation,
     MoveScope as OraMoveScope, RenderModel, SidebarPresentation, StyledSpan, StatusPresentation,
-    TabBarPresentation, TabPresentation, TextStyle, VisualPosition,
+    TabBarPresentation, TabPresentation, TextStyle, VisualPosition, WindowDataSource,
 };
 
 // =============================================================================
@@ -243,10 +243,11 @@ fn to_core_command(cmd: EditorCommand) -> Option<CoreEditorCommand> {
 }
 
 // =============================================================================
-// EditorDataSource implementation
+// Sub-trait implementations (FIX-04)
+// EditorDataSource is satisfied automatically by the blanket impl in ora.
 // =============================================================================
 
-impl EditorDataSource for CoreEditorAdapter {
+impl BufferDataSource for CoreEditorAdapter {
     fn build_render_model(&self, viewport_lines: usize) -> RenderModel {
         // build_render_model requires &mut self on core_editor::App (it clears
         // status_message after building). We cast away const temporarily.
@@ -293,7 +294,9 @@ impl EditorDataSource for CoreEditorAdapter {
             .map(|d| d.len_lines())
             .unwrap_or(1)
     }
+}
 
+impl CommandDispatcher for CoreEditorAdapter {
     fn dispatch_command(&mut self, cmd: EditorCommand) {
         // Save is an app-level operation that doesn't go through the dispatcher.
         if matches!(cmd, EditorCommand::Save) {
@@ -323,7 +326,9 @@ impl EditorDataSource for CoreEditorAdapter {
             self.app.dispatch(core_cmd);
         }
     }
+}
 
+impl WindowDataSource for CoreEditorAdapter {
     fn window_title(&self) -> String {
         let doc_title = self.app.workspace
             .active_document()
@@ -340,3 +345,4 @@ impl EditorDataSource for CoreEditorAdapter {
         }
     }
 }
+// EditorDataSource is satisfied automatically by the blanket impl in ora.
