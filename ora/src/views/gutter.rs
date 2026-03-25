@@ -220,17 +220,20 @@ impl View for GutterView {
         // Inner wrapper that shifts content by the sub-line offset.
         let inner: AnyElement = Div::new()
             .flex_col()
-            .w(px(width))
             .mt(scroll_shift)
             .children(line_rows)
             .into();
 
-        // Build gutter container (same bg as editor, right border as separator)
+        // Build gutter container.
+        // Width includes LEFT_PADDING + digits + RIGHT_PADDING + 1px border.
+        // We set the total width on the outer div and use padding to position
+        // the line numbers within that width. shrink(0.0) prevents the flex
+        // algorithm from compressing the gutter below its calculated width.
         Div::new()
             .flex_col()
-            .w(px(width))
-            .shrink(0.0)  // Don't shrink below calculated width
-            .overflow_hidden() // Clip line rows when window is shorter than content
+            .w(px(width + 1.0)) // +1 for the right border
+            .shrink(0.0)
+            .overflow_hidden()
             .bg(theme.color(ColorToken::BgPrimary))
             .pl(LEFT_PADDING)
             .pr(RIGHT_PADDING)

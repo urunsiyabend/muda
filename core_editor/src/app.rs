@@ -126,6 +126,11 @@ impl App {
     /// Returns true if the command was handled, false if it requires
     /// additional application-level handling.
     pub fn dispatch(&mut self, cmd: EditorCommand) -> bool {
+        // Scroll commands manage their own viewport positioning — calling
+        // ensure_caret_visible afterwards would drag the viewport back to
+        // the caret, making mouse-wheel scrolling impossible.
+        let is_scroll = matches!(cmd, EditorCommand::Scroll { .. });
+
         let dispatcher = &mut self.dispatcher;
 
         let result = self
@@ -143,14 +148,17 @@ impl App {
         match result {
             Some(DispatchResult::Executed) => {
                 self.needs_render = true;
-                // After any command, ensure the caret is visible by updating
-                // the viewport scroll position. Without this, typing or moving
-                // the cursor past the viewport boundary would never scroll.
-                let cursor_pos = self.workspace.active_cursor_position();
-                if let (Some(pos), Some(view)) =
-                    (cursor_pos, self.workspace.active_view_mut())
-                {
-                    view.ensure_caret_visible(pos.line, pos.column);
+                // After non-scroll commands, ensure the caret is visible by
+                // updating the viewport scroll position. Without this, typing
+                // or moving the cursor past the viewport boundary would never
+                // scroll.
+                if !is_scroll {
+                    let cursor_pos = self.workspace.active_cursor_position();
+                    if let (Some(pos), Some(view)) =
+                        (cursor_pos, self.workspace.active_view_mut())
+                    {
+                        view.ensure_caret_visible(pos.line, pos.column);
+                    }
                 }
                 true
             }
