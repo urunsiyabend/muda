@@ -102,6 +102,24 @@ impl DialogView {
         }
     }
 
+    /// Creates a dialog view reusing pre-allocated focus handles.
+    ///
+    /// Use this in long-lived views (like EditorRootView) to avoid
+    /// allocating new FocusIds every frame.
+    pub fn with_focus_handles(
+        presentation: DialogPresentation,
+        save_focus: FocusHandle,
+        dont_save_focus: FocusHandle,
+        cancel_focus: FocusHandle,
+    ) -> Self {
+        Self {
+            presentation,
+            save_focus,
+            dont_save_focus,
+            cancel_focus,
+        }
+    }
+
     /// Updates the presentation data.
     pub fn set_presentation(&mut self, presentation: DialogPresentation) {
         self.presentation = presentation;

@@ -645,6 +645,23 @@ impl App {
 
     /// Builds a render-ready model for the UI.
     pub fn build_render_model(&mut self, viewport_height: usize) -> RenderModel {
+        // Ensure the active view's viewport is properly sized.
+        // The GUI renderer passes viewport_height (in lines); for width we use a
+        // generous default (in characters) since the GPU renderer is not
+        // constrained by terminal columns. The old TUI code called
+        // check_scrolling() before rendering, but the new adapter path did not.
+        if let Some(view) = self.workspace.active_view_mut() {
+            let vp = &view.viewport;
+            if vp.width == 0 || vp.height == 0 {
+                // Use 200 char width as default; real width doesn't matter much
+                // for GPU rendering since lines are not clipped by character count
+                // in the display pipeline, only in the view-model projection.
+                view.viewport.resize(200, viewport_height);
+            } else if vp.height != viewport_height {
+                view.viewport.resize(vp.width, viewport_height);
+            }
+        }
+
         let status_message = self.status_message.as_deref();
         let open_views = self.get_open_views_info();
 
@@ -679,6 +696,41 @@ impl App {
 impl Default for App {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod app_render_tests {
+    use super::*;
+
+    #[test]
+    fn test_new_app_render_model_for_gui() {
+        let mut app = App::new();
+        let model = app.build_render_model(40);
+
+        // Should have at least 1 visible line (empty document has 1 line)
+        assert!(!model.visible_lines.is_empty(),
+            "visible_lines should not be empty for new doc, got {} lines", model.visible_lines.len());
+
+        // Gutter should be visible with 1 line
+        assert!(model.gutter.visible, "gutter should be visible");
+        assert_eq!(model.gutter.total_lines, 1, "new doc should have 1 line");
+
+        // Caret should be visible at (0,0)
+        assert!(model.caret.visible, "caret should be visible");
+        assert_eq!(model.caret.position.row, 0);
+        assert_eq!(model.caret.position.column, 0);
+
+        // Tab bar should be visible with 1 tab
+        assert!(model.tab_bar.visible, "tab bar should be visible");
+        assert!(!model.tab_bar.tabs.is_empty(), "should have at least 1 tab");
+
+        // Status should have valid cursor position
+        assert_eq!(model.status.cursor_line, 1); // 1-indexed
+        assert_eq!(model.status.cursor_column, 1);
+
+        // Sidebar should NOT be visible (no directory opened)
+        assert!(!model.sidebar.visible, "sidebar should not be visible for new app");
     }
 }
 

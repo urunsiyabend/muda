@@ -11,7 +11,7 @@ use core_editor::commands::editor_command::{Direction, MoveScope as CoreMoveScop
 use core_editor::commands::EditorCommand as CoreEditorCommand;
 use ora::editor_adapter::{
     CaretPresentation, CursorDirection, DialogPresentation, EditorCommand, EditorDataSource,
-    FileEntryPresentation, FileTreeNode, FileTreePresentation, GutterModel, LinePresentation,
+    FileEntryPresentation, GutterModel, LinePresentation,
     MoveScope as OraMoveScope, RenderModel, SidebarPresentation, StyledSpan, StatusPresentation,
     TabBarPresentation, TabPresentation, TextStyle, VisualPosition,
 };
@@ -163,32 +163,6 @@ fn convert_sidebar_presentation(s: core_editor::view_model::SidebarPresentation)
             is_selected: e.is_selected,
         }).collect(),
         width: s.width,
-    }
-}
-
-/// Build a FileTreePresentation from core_editor's flat sidebar entries.
-///
-/// core_editor exposes a flat list; we build a single-level tree so that
-/// ora's FileTreeView can render the file explorer.
-pub fn file_tree_from_sidebar(
-    sidebar: &core_editor::view_model::SidebarPresentation,
-) -> FileTreePresentation {
-    let roots: Vec<FileTreeNode> = sidebar.entries.iter().map(|e| {
-        if e.is_dir {
-            FileTreeNode::dir(&e.name, false, vec![])
-        } else {
-            let ext = std::path::Path::new(&e.name)
-                .extension()
-                .and_then(|s| s.to_str())
-                .unwrap_or("")
-                .to_string();
-            FileTreeNode::file(&e.name, ext)
-        }
-    }).collect();
-
-    FileTreePresentation {
-        roots,
-        selected_index: sidebar.entries.iter().position(|e| e.is_selected),
     }
 }
 

@@ -8,7 +8,9 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::context::ViewContext;
-use crate::editor_adapter::{EditorDataSource, FileTreePresentation, RenderModel};
+use crate::editor_adapter::{
+    EditorDataSource, FileTreeNode, FileTreePresentation, RenderModel, SidebarPresentation,
+};
 use crate::element::AnyElement;
 use crate::events::FocusHandle;
 use crate::view::View;
@@ -49,12 +51,45 @@ impl EditorRootView {
         }
     }
 
+    /// Build a FileTreePresentation from the sidebar's flat entry list.
+    ///
+    /// core_editor provides a flat list of file/directory entries via
+    /// SidebarPresentation. We convert these into FileTreeNode roots so
+    /// the FileTreeView in SidebarView can render a proper file explorer.
+    fn build_file_tree(sidebar: &SidebarPresentation) -> FileTreePresentation {
+        if !sidebar.visible || sidebar.entries.is_empty() {
+            return FileTreePresentation::default();
+        }
+
+        let roots: Vec<FileTreeNode> = sidebar
+            .entries
+            .iter()
+            .map(|entry| {
+                if entry.is_dir {
+                    FileTreeNode::dir(&entry.name, false, vec![])
+                } else {
+                    let ext = std::path::Path::new(&entry.name)
+                        .extension()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("")
+                        .to_string();
+                    FileTreeNode::file(&entry.name, ext)
+                }
+            })
+            .collect();
+
+        let selected_index = sidebar.entries.iter().position(|e| e.is_selected);
+
+        FileTreePresentation {
+            roots,
+            selected_index,
+        }
+    }
+
     /// Build the AppLayout from a fresh RenderModel.
-    fn build_layout(&self, model: &RenderModel, cx: &mut ViewContext) -> AppLayout {
-        let sidebar = SidebarView::new(
-            model.sidebar.clone(),
-            FileTreePresentation::default(),
-        );
+    fn build_layout(&self, model: &RenderModel) -> AppLayout {
+        let file_tree = Self::build_file_tree(&model.sidebar);
+        let sidebar = SidebarView::new(model.sidebar.clone(), file_tree);
         let tab_bar = TabBarView::new(model.tab_bar.clone());
         let gutter = GutterView::new(model.gutter.clone(), model.visible_lines.clone());
         let text_area = TextAreaView::new(model);
@@ -68,20 +103,36 @@ impl EditorRootView {
             ],
             self.palette_focus.clone(),
         );
-        let dialog = DialogView::new(model.dialog.clone(), cx);
+        let dialog = DialogView::with_focus_handles(
+            model.dialog.clone(),
+            self.dialog_save_focus.clone(),
+            self.dialog_dont_save_focus.clone(),
+            self.dialog_cancel_focus.clone(),
+        );
 
-        AppLayout::new(
+        let mut layout = AppLayout::new(
             sidebar, tab_bar, gutter, text_area, status_bar,
             panel_manager, command_palette, dialog,
-        )
+        );
+
+        // Sync sidebar visibility from the model data.
+        // AppLayout defaults sidebar_visible to true, but if the core_editor
+        // sidebar is not visible (no directory opened), we must hide it so
+        // AppLayout::render_root_row skips the 0-width sidebar div entirely.
+        layout.sidebar_visible = model.sidebar.visible;
+
+        layout
     }
 }
 
 impl View for EditorRootView {
     fn render(&self, cx: &mut ViewContext) -> AnyElement {
-        // Get the current window size to compute viewport lines
-        // Use a reasonable default if we can't determine it
-        let viewport_lines = 40; // TODO: compute from window height / LINE_HEIGHT
+        // Use a generous viewport line count.
+        // The default window is 720px tall; subtract chrome (~72px for tab bar
+        // + status bar) and divide by LINE_HEIGHT (21px) -> ~31 lines.
+        // Using 40 provides a comfortable buffer so the view-model produces
+        // enough lines even if the window is resized larger.
+        let viewport_lines = 40;
 
         // Build fresh RenderModel from the adapter
         let model = {
@@ -90,7 +141,7 @@ impl View for EditorRootView {
         };
 
         // Construct the AppLayout from fresh data and render it
-        let layout = self.build_layout(&model, cx);
+        let layout = self.build_layout(&model);
         layout.render(cx)
     }
 }
