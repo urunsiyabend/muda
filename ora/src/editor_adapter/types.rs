@@ -468,6 +468,10 @@ pub enum EditorCommand {
     // --- View toggles ---
     /// Toggle line number visibility.
     ToggleLineNumbers,
+
+    // --- Scrolling ---
+    /// Scroll the viewport by the given number of lines (positive = down).
+    Scroll(i32),
 }
 
 /// Direction for cursor movement.

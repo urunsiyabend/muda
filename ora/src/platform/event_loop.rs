@@ -93,7 +93,16 @@ impl ApplicationHandler for OraApp {
         let window = Arc::new(window);
 
         // Initialize GPU state
-        let gpu_state = pollster::block_on(GpuState::new(window.clone()));
+        let mut gpu_state = pollster::block_on(GpuState::new(window.clone()));
+
+        // Measure actual monospace character width for accurate caret positioning.
+        // This must happen after GPU/font init so glyphon can shape real glyphs.
+        {
+            let char_width = gpu_state.text_system.measure_monospace_char_width(14.0, 21.0);
+            crate::rendering::set_measured_char_width(char_width);
+            log::info!("Measured monospace char width: {:.2}px", char_width);
+        }
+
         self.gpu_state = Some(gpu_state);
 
         // Call on_open callback if present
@@ -233,6 +242,33 @@ impl ApplicationHandler for OraApp {
                     }
                 }
             }
+            WindowEvent::MouseWheel { delta, .. } => {
+                // Translate mouse wheel to scroll commands via the editor adapter.
+                let scroll_lines = match delta {
+                    winit::event::MouseScrollDelta::LineDelta(_x, y) => {
+                        // y is positive for "scroll up" (content moves down),
+                        // negative for "scroll down" (content moves up).
+                        // We negate so positive = scroll down in the document.
+                        -(y as i32) * 3 // 3 lines per notch
+                    }
+                    winit::event::MouseScrollDelta::PixelDelta(pos) => {
+                        // Convert pixel delta to line count
+                        const LINE_HEIGHT: f64 = 21.0;
+                        -(pos.y / LINE_HEIGHT) as i32
+                    }
+                };
+
+                if scroll_lines != 0 {
+                    if let Some(adapter) = &self.editor_adapter {
+                        use crate::editor_adapter::EditorCommand;
+                        adapter.borrow_mut().dispatch_command(EditorCommand::Scroll(scroll_lines));
+                        log::debug!("Mouse wheel scroll: {} lines", scroll_lines);
+                    }
+                    if let Some(gpu_state) = &self.gpu_state {
+                        gpu_state.window.request_redraw();
+                    }
+                }
+            }
             WindowEvent::KeyboardInput { event: key_event, .. } => {
                 // Translate winit key event to ora keyboard event
                 if let Some(keyboard_event) = translate_key_event(&key_event, self.modifiers) {
@@ -292,6 +328,7 @@ impl ApplicationHandler for OraApp {
                                     // No action matched: try editor command translation
                                     if let Some(cmd) = translate_editor_command(&keyboard_event, self.modifiers) {
                                         adapter.borrow_mut().dispatch_command(cmd);
+                                        crate::elements::notify_caret_activity();
                                         log::debug!("Editor command dispatched via adapter");
                                         if let Some(gpu_state) = &self.gpu_state {
                                             gpu_state.window.request_redraw();
@@ -318,6 +355,7 @@ impl ApplicationHandler for OraApp {
                                 // No action matched: try editor command translation
                                 if let Some(cmd) = translate_editor_command(&keyboard_event, self.modifiers) {
                                     adapter.borrow_mut().dispatch_command(cmd);
+                                    crate::elements::notify_caret_activity();
                                     log::debug!("Editor command dispatched via adapter");
                                     if let Some(gpu_state) = &self.gpu_state {
                                         gpu_state.window.request_redraw();

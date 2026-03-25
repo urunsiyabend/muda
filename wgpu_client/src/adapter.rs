@@ -227,6 +227,7 @@ fn to_core_command(cmd: EditorCommand) -> Option<CoreEditorCommand> {
             return None;
         }
         ToggleLineNumbers => CoreEditorCommand::ToggleLineNumbers,
+        Scroll(lines) => CoreEditorCommand::Scroll { lines },
     })
 }
 

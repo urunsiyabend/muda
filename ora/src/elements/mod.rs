@@ -13,7 +13,7 @@ pub mod tree_item;
 pub mod image;
 
 pub use button::{button, Button, ButtonVariant, WidgetSize};
-pub use caret::{CaretElement, BLINK_RATE, ACTIVITY_TIMEOUT, CARET_WIDTH};
+pub use caret::{CaretElement, BLINK_RATE, ACTIVITY_TIMEOUT, CARET_WIDTH, notify_caret_activity};
 pub use checkbox::{checkbox, Checkbox, CheckboxSize, toggle, Toggle};
 pub use context_menu::{ContextMenu, ContextMenuItem};
 pub use div::Div;

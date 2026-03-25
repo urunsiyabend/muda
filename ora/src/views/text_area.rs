@@ -86,7 +86,7 @@ impl TextAreaView {
             caret: model.caret.clone(),
             scroll_x: model.scroll_x,
             scroll_y: model.scroll_y,
-            char_width: 8.0, // Default monospace character width
+            char_width: crate::rendering::measured_char_width(),
         }
     }
 
@@ -97,7 +97,7 @@ impl TextAreaView {
             caret: CaretPresentation::default(),
             scroll_x: 0,
             scroll_y: 0,
-            char_width: 8.0,
+            char_width: crate::rendering::measured_char_width(),
         }
     }
 

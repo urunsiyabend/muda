@@ -143,6 +143,15 @@ impl App {
         match result {
             Some(DispatchResult::Executed) => {
                 self.needs_render = true;
+                // After any command, ensure the caret is visible by updating
+                // the viewport scroll position. Without this, typing or moving
+                // the cursor past the viewport boundary would never scroll.
+                let cursor_pos = self.workspace.active_cursor_position();
+                if let (Some(pos), Some(view)) =
+                    (cursor_pos, self.workspace.active_view_mut())
+                {
+                    view.ensure_caret_visible(pos.line, pos.column);
+                }
                 true
             }
             Some(DispatchResult::RequiresAppHandling) => false,

@@ -23,12 +23,29 @@
 //! }
 //! ```
 
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use crate::element::{Element, LayoutContext, LayoutId, PaintContext, PrepaintContext};
 use crate::style::{Color, Style, Length, Background};
 use crate::style::units::{Rect, Size};
 use crate::theme::ColorToken;
+
+/// Global blink epoch — shared across all CaretElement instances so the blink
+/// phase is consistent even though the element is recreated every frame.
+static BLINK_EPOCH: Mutex<Option<Instant>> = Mutex::new(None);
+
+/// Records user activity so the caret stays solid during typing.
+/// Call this from the event loop whenever a keyboard event is dispatched.
+static LAST_ACTIVITY: Mutex<Option<Instant>> = Mutex::new(None);
+
+/// Notify the caret system that the user just performed an action (typing).
+/// This keeps the caret solid for ACTIVITY_TIMEOUT after the last keystroke.
+pub fn notify_caret_activity() {
+    if let Ok(mut guard) = LAST_ACTIVITY.lock() {
+        *guard = Some(Instant::now());
+    }
+}
 
 /// Blink rate: 500ms per blink state (2 blinks/sec, WCAG-safe)
 pub const BLINK_RATE: Duration = Duration::from_millis(500);
@@ -236,6 +253,42 @@ impl Element for CaretElement {
 
     fn paint(&mut self, state: &mut CaretState, cx: &mut PaintContext) {
         if !self.blink_visible {
+            return;
+        }
+
+        // Compute blink visibility from global epoch so it survives element
+        // recreation across frames. The caret stays solid during the activity
+        // timeout, then alternates visible/hidden at BLINK_RATE.
+        let now = Instant::now();
+        let blink_visible = {
+            // Check if user was recently active — keep solid during activity
+            let recently_active = LAST_ACTIVITY
+                .lock()
+                .ok()
+                .and_then(|guard| *guard)
+                .map(|t| now.duration_since(t) < ACTIVITY_TIMEOUT)
+                .unwrap_or(false);
+
+            if recently_active {
+                // Reset the epoch so blink phase starts fresh after activity
+                if let Ok(mut epoch) = BLINK_EPOCH.lock() {
+                    *epoch = Some(now);
+                }
+                true
+            } else {
+                // Get or initialise the blink epoch
+                let epoch = {
+                    let mut guard = BLINK_EPOCH.lock().unwrap_or_else(|e| e.into_inner());
+                    *guard.get_or_insert(now)
+                };
+                let elapsed = now.duration_since(epoch);
+                let cycle = BLINK_RATE.as_millis() * 2; // full on+off cycle
+                let phase = elapsed.as_millis() % cycle;
+                phase < BLINK_RATE.as_millis()
+            }
+        };
+
+        if !blink_visible {
             return;
         }
 

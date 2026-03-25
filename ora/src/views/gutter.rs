@@ -82,7 +82,7 @@ impl GutterView {
         Self {
             gutter,
             visible_lines,
-            char_width: 8.0, // Default monospace char width
+            char_width: crate::rendering::measured_char_width(),
         }
     }
 
@@ -281,8 +281,11 @@ mod tests {
         let gutter = GutterModel::new(true, 100);
         let lines = vec![];
 
-        let view = GutterView::new(gutter, lines);
-        assert_eq!(view.calculate_width(), 44.0); // Default char_width = 8.0
+        // Use explicit char_width for test determinism (measured_char_width()
+        // returns a fallback in tests since no GPU is initialised).
+        let mut view = GutterView::new(gutter, lines);
+        view.set_char_width(8.0);
+        assert_eq!(view.calculate_width(), 44.0);
 
         let mut view2 = GutterView::new(GutterModel::new(true, 100), vec![]);
         view2.set_char_width(10.0);

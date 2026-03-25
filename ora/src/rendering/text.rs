@@ -72,6 +72,16 @@ impl TextSystem {
         }
     }
 
+    /// Measure the advance width of a single monospace character at the given font size.
+    ///
+    /// Shapes a 10-character reference string and divides the total width by 10
+    /// for better accuracy (avoids rounding from a single glyph).
+    pub fn measure_monospace_char_width(&mut self, font_size: f32, line_height: f32) -> f32 {
+        let reference = "0000000000"; // 10 identical chars
+        let (_buf, size) = self.measure_text(reference, font_size, line_height, None);
+        size.width / 10.0
+    }
+
     /// Measure text and return the Buffer (for reuse during paint) and measured size.
     ///
     /// CRITICAL: The returned Buffer MUST be used for rendering to ensure measurement

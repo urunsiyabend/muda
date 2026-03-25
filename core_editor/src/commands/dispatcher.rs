@@ -145,9 +145,9 @@ impl CommandDispatcher {
                 ctx.view.toggle_line_numbers();
                 DispatchResult::Executed
             }
-            EditorCommand::Scroll { lines: _ } => {
-                // Scroll is typically handled by the UI layer
-                DispatchResult::NoOp
+            EditorCommand::Scroll { lines } => {
+                self.handle_scroll(ctx, lines);
+                DispatchResult::Executed
             }
 
             // === Application-level (require App handling) ===
@@ -358,6 +358,44 @@ impl CommandDispatcher {
         let new_line = (pos.line + page_height).min(max_line);
         let new_col = pos.column.min(self.line_len(ctx, new_line));
         self.position_to_offset(ctx, TextPosition::new(new_line, new_col))
+    }
+
+    fn handle_scroll(&self, ctx: &mut CommandContext, lines: i32) {
+        let total_lines = ctx.document.len_lines();
+        let viewport_height = ctx.view.viewport.height;
+
+        let current_scroll = ctx.view.viewport.scroll_y as i64;
+        let new_scroll = (current_scroll + lines as i64)
+            .max(0)
+            .min(total_lines.saturating_sub(1) as i64) as usize;
+
+        ctx.view.viewport.scroll_y = new_scroll;
+
+        // Move the caret to stay within the visible viewport
+        let caret_offset = ctx.view.caret_offset();
+        let caret_pos = self.offset_to_position(ctx, caret_offset);
+
+        if caret_pos.line < new_scroll {
+            // Caret is above viewport, move it to the first visible line
+            let new_offset = self.position_to_offset(
+                ctx,
+                TextPosition::new(new_scroll, caret_pos.column.min(self.line_len(ctx, new_scroll))),
+            );
+            ctx.view.move_caret_to(new_offset, false);
+            ctx.view.clear_selection();
+        } else if caret_pos.line >= new_scroll + viewport_height {
+            // Caret is below viewport, move it to the last visible line
+            let last_visible = (new_scroll + viewport_height).saturating_sub(1).min(total_lines.saturating_sub(1));
+            let new_offset = self.position_to_offset(
+                ctx,
+                TextPosition::new(last_visible, caret_pos.column.min(self.line_len(ctx, last_visible))),
+            );
+            ctx.view.move_caret_to(new_offset, false);
+            ctx.view.clear_selection();
+        }
+
+        self.emit_viewport_changed(ctx);
+        self.emit_selection_changed(ctx);
     }
 
     fn handle_goto_line(&self, ctx: &mut CommandContext, line: usize) {
