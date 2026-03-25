@@ -126,13 +126,14 @@ impl EditorRootView {
 }
 
 impl View for EditorRootView {
-    fn render(&self, cx: &mut ViewContext) -> AnyElement {
-        // Use a generous viewport line count.
-        // The default window is 720px tall; subtract chrome (~72px for tab bar
-        // + status bar) and divide by LINE_HEIGHT (21px) -> ~31 lines.
-        // Using 40 provides a comfortable buffer so the view-model produces
-        // enough lines even if the window is resized larger.
-        let viewport_lines = 40;
+    fn render(&self, _cx: &mut ViewContext) -> AnyElement {
+        // Query the adapter for the current viewport line count.
+        // The event loop updates this on WindowEvent::Resized so the core
+        // editor's viewport stays in sync with the actual window height.
+        let viewport_lines = {
+            let adapter = self.adapter.borrow();
+            adapter.viewport_lines()
+        };
 
         // Build fresh RenderModel from the adapter
         let model = {
@@ -142,6 +143,6 @@ impl View for EditorRootView {
 
         // Construct the AppLayout from fresh data and render it
         let layout = self.build_layout(&model);
-        layout.render(cx)
+        layout.render(_cx)
     }
 }

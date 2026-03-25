@@ -34,6 +34,15 @@ pub trait EditorDataSource {
     /// Dispatch an editor command (from keyboard input or UI action).
     fn dispatch_command(&mut self, cmd: EditorCommand);
 
+    /// Resize the editor viewport (called on window resize).
+    ///
+    /// `width_chars` is the viewport width in characters.
+    /// `height_lines` is the viewport height in text lines.
+    fn resize_viewport(&mut self, width_chars: usize, height_lines: usize);
+
+    /// Returns the current viewport height in lines.
+    fn viewport_lines(&self) -> usize;
+
     /// Get the window title (for title bar updates).
     fn window_title(&self) -> String;
 }

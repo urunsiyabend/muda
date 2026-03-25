@@ -124,6 +124,18 @@ impl ApplicationHandler for OraApp {
                 if let Some(gpu_state) = &mut self.gpu_state {
                     gpu_state.resize(physical_size.width, physical_size.height);
                 }
+                // Update the editor viewport so core_editor knows the new
+                // visible line count and can scroll correctly.
+                if let Some(adapter) = &self.editor_adapter {
+                    const TAB_BAR_HEIGHT: f32 = 36.0;
+                    const STATUS_BAR_HEIGHT: f32 = 28.0;
+                    const LINE_HEIGHT: f32 = 21.0;
+                    let chrome = TAB_BAR_HEIGHT + STATUS_BAR_HEIGHT;
+                    let available = (physical_size.height as f32 - chrome).max(0.0);
+                    let lines = (available / LINE_HEIGHT).floor() as usize;
+                    let lines = lines.max(1);
+                    adapter.borrow_mut().resize_viewport(200, lines);
+                }
             }
             WindowEvent::CloseRequested => {
                 event_loop.exit();

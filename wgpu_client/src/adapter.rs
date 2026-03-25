@@ -249,6 +249,17 @@ impl EditorDataSource for CoreEditorAdapter {
         convert_render_model(core_model)
     }
 
+    fn resize_viewport(&mut self, width_chars: usize, height_lines: usize) {
+        self.app.check_scrolling(width_chars, height_lines);
+    }
+
+    fn viewport_lines(&self) -> usize {
+        self.app.workspace
+            .active_view()
+            .map(|v| v.viewport.height)
+            .unwrap_or(40)
+    }
+
     fn dispatch_command(&mut self, cmd: EditorCommand) {
         // Save is an app-level operation that doesn't go through the dispatcher.
         if matches!(cmd, EditorCommand::Save) {
