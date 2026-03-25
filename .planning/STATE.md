@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-01-28)
 ## Current Position
 
 Phase: 9 of 9 (Transitions & Integration) - In progress
-Plan: 2 of N in current phase
-Status: In progress — 09-01 (animation primitives) and 09-02 (EditorDataSource + mirror types) complete
-Last activity: 2026-03-25 - Completed 09-02-PLAN.md (EditorDataSource trait + all mirror presentation types)
+Plan: 1 of N in current phase (09-01 SUMMARY complete; 09-02 pre-exists on branch)
+Status: In progress — 09-01 (animation primitives) SUMMARY created; 09-02 (EditorDataSource + mirror types) also on branch
+Last activity: 2026-03-25 - Completed 09-01-PLAN.md (animation primitives: Easing, CubicBezier, Spring, Tween<T>, Tweenable)
 
 Progress: [█████████████████████████████████] Phase 9 in progress (~2 plans done)
 
@@ -213,6 +213,10 @@ Recent decisions affecting current work:
 - Flat rect buffer with Range<u32> range slicing per layer in render_frame() — single prepare() avoids bind_group invalidation (08.1-03)
 - First render pass LoadOp::Clear, subsequent passes LoadOp::Load — Vulkan requires Clear on uninitialized texture; Load preserves prior layer content for correct occlusion (08.1-03)
 - Single queue.submit() for entire multi-pass frame — Vulkan multiple submits cause hangs (08.1-03)
+- Easing enum default is EaseOut — matches wgpu_client convention, most common for UI transitions (09-01)
+- Duration/MotionPreference tokens not ported to ora::animation — TransitionConfig uses u32 ms directly (09-01)
+- Tweenable trait uses lerp(&self, &Self, f32) -> Self — owned return type matches Tween<T> requirements (09-01)
+- Spring zeta critically-damped branch uses epsilon check, not exact == 1.0 — avoids f32 edge case (09-01)
 - Mirror types in ora::editor_adapter have no From impls — conversions deferred to wgpu_client where both type namespaces are available (09-02)
 - EditorCommand defined alongside presentation types in editor_adapter::types — single module owns full adapter surface (09-02)
 - Adapter boundary: ora views use &dyn EditorDataSource, never &core_editor::app::App (09-02)
@@ -241,11 +245,11 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-25T11:26:32Z
-Stopped at: Completed 09-02-PLAN.md — EditorDataSource trait + all mirror types in ora::editor_adapter
+Last session: 2026-03-25T11:27:16Z
+Stopped at: Completed 09-01-PLAN.md — animation primitives (Easing, CubicBezier, Spring, Tween<T>, Tweenable) in ora::animation
 Resume file: None
-Next: 09-03 (migrate ora views to consume &dyn EditorDataSource instead of core_editor types directly)
+Next: Continue Phase 9 — 09-02 (EditorDataSource + mirror types) already on branch; proceed to next unexecuted plan
 
 ---
 *State initialized: 2026-01-28*
-*Last updated: 2026-03-25 after completing 09-02 (EditorDataSource trait + mirror presentation types)*
+*Last updated: 2026-03-25 after completing 09-01 (animation primitives port, Tween/Easing/CubicBezier/Spring)*
