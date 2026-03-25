@@ -276,7 +276,7 @@ impl Document {
             .as_ref()
             .and_then(|p| p.file_name())
             .and_then(|n| n.to_str())
-            .unwrap_or("[Yeni Dosya]");
+            .unwrap_or("[New File]");
 
         if self.metadata.dirty {
             format!("*{}", name)
@@ -440,7 +440,7 @@ mod tests {
         let doc = Document::new();
         assert!(!doc.is_dirty());
         assert!(doc.file_path().is_none());
-        assert_eq!(doc.title(), "[Yeni Dosya]");
+        assert_eq!(doc.title(), "[New File]");
     }
 
     #[test]

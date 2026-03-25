@@ -470,7 +470,7 @@ impl ViewModelBuilder {
         let title = document.file_path()
             .and_then(|p| p.file_name())
             .and_then(|n| n.to_str())
-            .unwrap_or("[Yeni Dosya]")
+            .unwrap_or("[New File]")
             .to_string();
 
         let language = format!("{:?}", document.highlighter().language());
