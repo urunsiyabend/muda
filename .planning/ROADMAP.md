@@ -21,7 +21,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 7: Editor Chrome & Text Editing** - TabBar, StatusBar, Sidebar, Gutter, Dialog, TextArea, Caret, Selection
 - [x] **Phase 8: Advanced UI & Widgets** - CommandPalette, FileTree, PanelManager, Button, Input, Checkbox, etc.
 - [x] **Phase 8.1: GPU Layered Rendering Pipeline** - Fix overlay z-ordering so overlays correctly occlude lower-layer text (INSERTED)
-- [ ] **Phase 9: Transitions & Integration** - CSS-like animations, wgpu_client migration, cleanup
+- [x] **Phase 9: Transitions & Integration** - CSS-like animations, wgpu_client migration, pixel-based scroll, scissor clipping
 
 ## Phase Details
 
@@ -214,15 +214,15 @@ Plans:
 **Plans**: 9 plans
 
 Plans:
-- [ ] 09-01-PLAN.md -- Port animation primitives (Tween, Easing, CubicBezier) to ora (Wave 1)
-- [ ] 09-02-PLAN.md -- Adapter trait + mirror presentation types in ora (Wave 1)
-- [ ] 09-03-PLAN.md -- Migrate views to mirror types + remove core_editor dep (Wave 2)
-- [ ] 09-04-PLAN.md -- TransitionRegistry + TransitionSpec infrastructure (Wave 2)
-- [ ] 09-05-PLAN.md -- CoreEditorAdapter + AppLayout wiring + input translation (Wave 3)
-- [ ] 09-06-PLAN.md -- Div transition builders + paint-time interpolation (Wave 3)
-- [ ] 09-07-PLAN.md -- Hover/active transitions across all interactive elements (Wave 4)
-- [ ] 09-08-PLAN.md -- Strip wgpu_client to thin shell + cleanup (Wave 5)
-- [ ] 09-09-PLAN.md -- Final verification checkpoint (Wave 6)
+- [x] 09-01-PLAN.md -- Port animation primitives (Tween, Easing, CubicBezier) to ora (Wave 1)
+- [x] 09-02-PLAN.md -- Adapter trait + mirror presentation types in ora (Wave 1)
+- [x] 09-03-PLAN.md -- Migrate views to mirror types + remove core_editor dep (Wave 2)
+- [x] 09-04-PLAN.md -- TransitionRegistry + TransitionSpec infrastructure (Wave 2)
+- [x] 09-05-PLAN.md -- CoreEditorAdapter + AppLayout wiring + input translation (Wave 3)
+- [x] 09-06-PLAN.md -- Div transition builders + paint-time interpolation (Wave 3)
+- [x] 09-07-PLAN.md -- Hover/active transitions across all interactive elements (Wave 4)
+- [x] 09-08-PLAN.md -- Strip wgpu_client to thin shell + cleanup (Wave 5)
+- [x] 09-09-PLAN.md -- Final verification + scroll architecture + scissor clipping (Wave 6)
 
 ## Progress
 
@@ -240,8 +240,8 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 8.1 -> 
 | 7. Editor Chrome & Text Editing | 5/5 | Complete | 2026-01-30 |
 | 8. Advanced UI & Widgets | 8/8 | Complete | 2026-03-02 |
 | 8.1. GPU Layered Rendering | 3/3 | Complete | 2026-03-02 |
-| 9. Transitions & Integration | 0/9 | Not started | - |
+| 9. Transitions & Integration | 9/9 | Complete | 2026-03-26 |
 
 ---
 *Roadmap created: 2026-01-28*
-*Last updated: 2026-03-25 -- Phase 9 planned (9 plans in 6 waves)*
+*Last updated: 2026-03-26 -- v1.0 COMPLETE (all 9 phases done)*
