@@ -1,60 +1,39 @@
 //! Muda Editor - GPU-accelerated desktop client.
-//!
-//! This binary provides a native desktop experience using:
-//! - wgpu for GPU rendering
-//! - winit for windowing and input
-//! - glyphon for text rendering
+//! Thin shell that creates a CoreEditorAdapter and launches ora.
 
 mod adapter;
-mod app;
-mod components;
-mod design_system;
-mod input;
-mod renderer;
-mod theme;
-mod ui;
-mod widgets;
 
 use std::env;
 use std::fs::File;
 use std::path::Path;
-
 use log::debug;
 use simplelog::{Config, LevelFilter, WriteLogger};
-use winit::event_loop::EventLoop;
 
-use app::WgpuApp;
+use adapter::CoreEditorAdapter;
 
-fn main() -> anyhow::Result<()> {
+fn main() {
     // Initialize logging
-    let log_file = File::create("editor.log")?;
-    WriteLogger::init(LevelFilter::Debug, Config::default(), log_file)?;
+    let log_file = File::create("editor.log").expect("Failed to create log file");
+    WriteLogger::init(LevelFilter::Debug, Config::default(), log_file)
+        .expect("Failed to initialize logger");
 
     debug!("Muda GPU client starting...");
 
-    // Parse command line arguments
+    // Parse args and create editor
     let args: Vec<String> = env::args().collect();
-    let app = if args.len() > 1 {
+    let editor_app = if args.len() > 1 {
         let path = Path::new(&args[1]);
-
         if path.is_dir() {
-            debug!("Opening directory: {}", &args[1]);
-            WgpuApp::open_directory(&args[1])?
+            CoreEditorAdapter::open_directory(&args[1])
+                .unwrap_or_else(|_| CoreEditorAdapter::new())
         } else {
-            debug!("Opening file: {}", &args[1]);
-            WgpuApp::open_file(&args[1]).unwrap_or_else(|e| {
-                debug!("Could not open file: {}, creating new document", e);
-                WgpuApp::new()
-            })
+            CoreEditorAdapter::open_file(&args[1])
+                .unwrap_or_else(|_| CoreEditorAdapter::new())
         }
     } else {
-        WgpuApp::new()
+        CoreEditorAdapter::new()
     };
 
-    // Create event loop and run
-    let event_loop = EventLoop::new()?;
-    event_loop.run_app(&mut { app })?;
-
-    debug!("Muda GPU client shutting down...");
-    Ok(())
+    // Launch ora with the editor adapter — never returns
+    ora::run_with_editor(editor_app);
 }
