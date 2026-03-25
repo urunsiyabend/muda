@@ -103,7 +103,7 @@ Plans:
   1. Mouse events route to correct element via hit testing against prepaint hitboxes
   2. Keyboard events translate to platform-agnostic actions via action registry
   3. Focus stack tracks focused element, keyboard events route to focused element
-  4. Events dispatch in two phases (capture root→target, bubble target→root) with stop_propagation support
+  4. Events dispatch in two phases (capture root->target, bubble target->root) with stop_propagation support
   5. Framework automatically tracks hover and active states, elements query is_hovered/is_active
 **Plans**: 5 plans
 
@@ -250,7 +250,13 @@ Plans:
   3. Shift+arrow key selection renders visible highlights without text disappearing
   4. All v2 keyboard commands (SwitchTab, CloseTab, OpenFile, SaveAs, New, Find, Replace) are recognized without panicking or being silently dropped
   5. EditorDataSource is split into focused sub-traits covering workspace, search, and file operations — no single trait accumulating all v2 methods
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [ ] 10-01-PLAN.md -- Event-driven redraw + caret blink timer (Wave 1)
+- [ ] 10-02-PLAN.md -- v2 command variants + EditorDataSource trait split (Wave 1)
+- [ ] 10-03-PLAN.md -- Selection rendering fix (Wave 2)
+- [ ] 10-04-PLAN.md -- Integration verification checkpoint (Wave 2)
 
 ### Phase 11: Buffer Registry + Multi-Tab
 **Goal**: Users can open multiple files in tabs and switch between them — each buffer is deduplicated and preserves its own scroll and cursor state
@@ -354,7 +360,7 @@ v2.0: 10 -> 11 -> 12 -> 13 (can follow 10) -> 14 (needs 11+12) -> 15 (needs 10+1
 
 | Phase | Plans Complete | Status | Started |
 |-------|----------------|--------|---------|
-| 10. Foundation Fixes | 0/TBD | Pending | — |
+| 10. Foundation Fixes | 0/4 | Planned | — |
 | 11. Buffer Registry + Multi-Tab | 0/TBD | Pending | — |
 | 12. File Operations | 0/TBD | Pending | — |
 | 13. Selection + Clipboard | 0/TBD | Pending | — |
