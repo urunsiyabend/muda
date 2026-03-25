@@ -10,6 +10,7 @@
 //! - Fixed 8 visible results (CONTEXT: 8-10)
 //! - Centered horizontally near top (VS Code-style)
 
+use crate::animation::transition::TransitionId;
 use crate::context::ViewContext;
 use crate::element::AnyElement;
 use crate::elements::{Div, TextElement};
@@ -17,6 +18,10 @@ use crate::events::FocusHandle;
 use crate::style::{px, pct, Color};
 use crate::theme::ColorToken;
 use crate::view::View;
+
+/// Base TransitionId namespace for command palette result rows.
+/// Row IDs = PALETTE_TRANSITION_BASE + row_index  (avoids collisions with other views).
+const PALETTE_TRANSITION_BASE: u64 = 30_000;
 
 // ---------------------------------------------------------------------------
 // Layout constants
@@ -300,7 +305,7 @@ impl CommandPaletteView {
     /// This is a read-only display — actual text input is handled by the app layer.
     fn render_input(&self, cx: &mut ViewContext) -> Div {
         // Borrow-safe: extract all theme colors before any mutable cx operations
-        let bg_color = cx.theme().color(ColorToken::BgElevated);
+        let bg_color = cx.theme().color(ColorToken::BgSecondary);
         let fg_color = cx.theme().color(ColorToken::FgPrimary);
         let prompt_color = cx.theme().color(ColorToken::FgMuted);
 
@@ -335,26 +340,38 @@ impl CommandPaletteView {
     /// Selected rows use `BgSecondary` background. Matched characters in the
     /// label are highlighted in `Accent` color, unmatched in `FgPrimary`.
     /// Shortcuts are right-aligned in `FgMuted`.
+    ///
+    /// `row_index` is the position within the visible list (0..VISIBLE_ROWS) and is used
+    /// to derive a stable `TransitionId` so hover/selection bg changes animate smoothly.
     fn render_result(
         &self,
         cmd: &CommandItem,
         fuzzy: &FuzzyMatch,
         is_selected: bool,
+        row_index: usize,
         cx: &mut ViewContext,
     ) -> Div {
         // Borrow-safe: extract all theme colors before any mutable cx operations
         let bg_selected = cx.theme().color(ColorToken::BgSecondary);
+        let bg_hover = cx.theme().color(ColorToken::BgElevated);
         let bg_transparent = Color::transparent();
         let muted_color = cx.theme().color(ColorToken::FgMuted);
 
         let row_bg = if is_selected { bg_selected } else { bg_transparent };
+
+        // Stable TransitionId per visible row slot (not per command, per slot position).
+        // Using row_index (0..VISIBLE_ROWS) keeps IDs stable even as filtered results change.
+        let tid = TransitionId(PALETTE_TRANSITION_BASE + row_index as u64);
 
         let mut row = Div::new()
             .flex_row()
             .align_center()
             .h(px(ROW_HEIGHT))
             .px(12.0)
-            .bg(row_bg);
+            .bg(row_bg)
+            .hover_bg(bg_hover)
+            .transition_id(tid)
+            .transition_bg(150);
 
         // Label with fuzzy-highlighted characters
         let label_div = self.render_highlighted_label(&cmd.label, &fuzzy.match_positions, cx);
@@ -418,28 +435,32 @@ impl View for CommandPaletteView {
         }
 
         // Borrow-safe: extract all theme colors before any mutable cx operations
-        let bg_elevated = cx.theme().color(ColorToken::BgElevated);
+        let _bg_elevated = cx.theme().color(ColorToken::BgElevated);
         let border_color = cx.theme().color(ColorToken::Border);
         let separator_color = cx.theme().color(ColorToken::Border);
-        let shadow_color = Color::rgba(0.0, 0.0, 0.0, 0.5);
+        let shadow_color = Color::rgba(0.0, 0.0, 0.0, 0.4);
+        let backdrop_color = Color::rgba(0.0, 0.0, 0.0, 0.4);
 
-        // Full-screen positioning container: flex_col + align_center
-        // A spacer div creates the top offset (PALETTE_TOP_OFFSET) before the palette.
+        // Full-screen positioning container with semi-transparent backdrop.
+        // The backdrop dims the content below so editor text is less visible
+        // behind the palette (single-pass renderer draws all rects then all text).
         let mut positioning = Div::new()
             .flex_col()
             .w(pct(100.0))
             .h(pct(100.0))
             .align_center()
+            .bg(backdrop_color)
             .child(Div::new().h(px(PALETTE_TOP_OFFSET)).w(pct(100.0)));
 
-        // Palette container with shadow
+        // Palette container with shadow — use BgSecondary for darker background
+        let palette_bg = cx.theme().color(ColorToken::BgSecondary);
         let mut palette = Div::new()
             .flex_col()
             .w(px(PALETTE_WIDTH))
-            .bg(bg_elevated)
+            .bg(palette_bg)
             .border(1.0, border_color)
             .border_radius(PALETTE_BORDER_RADIUS)
-            .shadow(0.0, 8.0, 32.0, 0.0, shadow_color);
+            .shadow(0.0, 8.0, 24.0, 0.0, shadow_color);
 
         // Input row
         palette = palette.child(self.render_input(cx));
@@ -457,7 +478,7 @@ impl View for CommandPaletteView {
         for (i, (cmd_idx, fuzzy)) in self.filtered.iter().take(VISIBLE_ROWS).enumerate() {
             let cmd = &self.commands[*cmd_idx];
             let is_selected = i == self.selected_index;
-            result_list = result_list.child(self.render_result(cmd, fuzzy, is_selected, cx));
+            result_list = result_list.child(self.render_result(cmd, fuzzy, is_selected, i, cx));
         }
 
         palette = palette.child(result_list);

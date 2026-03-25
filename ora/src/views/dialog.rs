@@ -9,6 +9,7 @@
 //! - Escape key does NOT dismiss (must use Cancel button)
 //! - Buttons are right-aligned in dialog footer
 
+use crate::animation::transition::TransitionId;
 use crate::context::ViewContext;
 use crate::element::AnyElement;
 use crate::elements::{button, Div, TextElement, stack};
@@ -17,6 +18,13 @@ use crate::style::{px, pct, Color};
 use crate::theme::ColorToken;
 use crate::editor_adapter::DialogPresentation;
 use crate::view::View;
+
+/// TransitionId for the dialog Save button.
+const DIALOG_SAVE_TRANSITION_ID: TransitionId = TransitionId(40_000);
+/// TransitionId for the dialog Don't Save button.
+const DIALOG_DONT_SAVE_TRANSITION_ID: TransitionId = TransitionId(40_001);
+/// TransitionId for the dialog Cancel button.
+const DIALOG_CANCEL_TRANSITION_ID: TransitionId = TransitionId(40_002);
 
 /// Dialog width in logical pixels (from wgpu_client constants).
 pub const DIALOG_WIDTH: f32 = 420.0;
@@ -257,23 +265,26 @@ impl DialogView {
             .gap(BUTTON_SPACING)
             .px(DIALOG_PADDING)
             .bg(theme.color(ColorToken::BgPrimary))
-            // Save button - Primary variant
+            // Save button - Primary variant with smooth hover/active transition
             .child(
                 button("Save (Y)")
                     .primary()
                     .focusable(self.save_focus.clone())
+                    .transition_id(DIALOG_SAVE_TRANSITION_ID)
             )
-            // Don't Save button - Secondary variant
+            // Don't Save button - Secondary variant with smooth hover/active transition
             .child(
                 button("Don't Save (N)")
                     .secondary()
                     .focusable(self.dont_save_focus.clone())
+                    .transition_id(DIALOG_DONT_SAVE_TRANSITION_ID)
             )
-            // Cancel button - Ghost variant
+            // Cancel button - Ghost variant with smooth hover/active transition
             .child(
                 button("Cancel (Esc)")
                     .ghost()
                     .focusable(self.cancel_focus.clone())
+                    .transition_id(DIALOG_CANCEL_TRANSITION_ID)
             )
     }
 
