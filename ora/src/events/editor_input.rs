@@ -73,6 +73,11 @@ pub fn translate_editor_command(event: &KeyboardEvent, modifiers: Modifiers) -> 
             // Insert 4 spaces (matching wgpu_client behaviour).
             Some(EditorCommand::InsertText("    ".to_string()))
         }
+        Key::Named(NamedKey::Space) => {
+            // Space comes through as a named key from winit, not as
+            // Key::Character(" "), so handle it explicitly.
+            Some(EditorCommand::InsertChar(' '))
+        }
 
         // --- Ctrl shortcuts ---
         Key::Character(c) if ctrl => match c.as_str() {
@@ -160,6 +165,13 @@ mod tests {
         let ev = make_event(Key::Character("a".to_string()));
         let cmd = translate_editor_command(&ev, Modifiers::none()).unwrap();
         assert!(matches!(cmd, EditorCommand::InsertChar('a')));
+    }
+
+    #[test]
+    fn test_space_inserts_space_char() {
+        let ev = make_event(Key::Named(NamedKey::Space));
+        let cmd = translate_editor_command(&ev, Modifiers::none()).unwrap();
+        assert!(matches!(cmd, EditorCommand::InsertChar(' ')));
     }
 
     #[test]
