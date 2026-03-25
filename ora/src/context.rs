@@ -1,3 +1,4 @@
+use crate::animation::transition::TransitionRegistry;
 use crate::effect::{EffectQueue, EntityId};
 use crate::entity::{Entity, EntityStorage, Model};
 use crate::entity::model::{ModelContext, PendingEffect};
@@ -12,6 +13,7 @@ use crate::theme::Theme;
 use crate::view::View;
 use crate::window::OraWindow;
 use std::any::TypeId;
+use std::cell::RefCell;
 use std::collections::HashSet;
 use std::future::Future;
 use std::sync::Arc;
@@ -37,6 +39,11 @@ pub struct AppContext {
     pub(crate) keymap: Keymap,
     pub(crate) action_registry: ActionRegistry,
     pub(crate) interaction_state: InteractionState,
+    /// Per-element transition state store.
+    ///
+    /// Uses `RefCell` for interior mutability: `PaintContext` holds a
+    /// `*const AppContext` but needs mutable registry access during paint.
+    pub(crate) transition_registry: RefCell<TransitionRegistry>,
 }
 
 impl AppContext {
@@ -55,6 +62,7 @@ impl AppContext {
             keymap: Keymap::new(),
             action_registry: ActionRegistry::new(),
             interaction_state: InteractionState::new(),
+            transition_registry: RefCell::new(TransitionRegistry::new()),
         }
     }
 
@@ -438,6 +446,14 @@ impl AppContext {
     /// Check if mouse is currently captured
     pub fn is_mouse_captured(&self) -> bool {
         self.interaction_state.is_mouse_captured()
+    }
+
+    /// Check if any transition animation is currently in-flight.
+    ///
+    /// The renderer can query this to request a continuous redraw while
+    /// transitions are playing.
+    pub fn has_active_transitions(&self) -> bool {
+        self.transition_registry.borrow().has_active_transitions()
     }
 }
 
