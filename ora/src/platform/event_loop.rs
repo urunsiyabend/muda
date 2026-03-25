@@ -2,6 +2,7 @@ use crate::app::App;
 use crate::context::{AppContext, WindowContext};
 use crate::editor_adapter::EditorDataSource;
 use crate::element::{LayoutContext, PaintContext, PrepaintContext};
+use crate::elements::{BLINK_RATE, ACTIVITY_TIMEOUT};
 use crate::entity::EntityStorage;
 use crate::events::editor_input::translate_editor_command;
 use crate::events::mouse::{hit_test, Hitbox, MouseDownEvent, MouseMoveEvent, MouseUpEvent};
@@ -13,9 +14,10 @@ use crate::platform::gpu::GpuState;
 use crate::views::SharedAdapter;
 use crate::window::OraWindow;
 use std::sync::Arc;
+use std::time::Instant;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
-use winit::event_loop::ActiveEventLoop;
+use winit::event_loop::{ActiveEventLoop, ControlFlow};
 use winit::window::{Window, WindowId};
 
 /// Application handler driving the winit event loop.
@@ -48,6 +50,11 @@ pub struct OraApp {
     /// Shared absolute pixel scroll offset, read by EditorRootView each frame.
     /// `None` when running without an editor adapter.
     shared_scroll_offset: Option<crate::app::SharedScrollOffset>,
+    /// Next scheduled caret blink wakeup. When `Some(instant)`, the event loop
+    /// sleeps until that instant and then requests a redraw for the blink toggle.
+    /// Reset to `Instant::now() + ACTIVITY_TIMEOUT + BLINK_RATE` on each keystroke.
+    /// `None` means no caret is active and the loop sleeps indefinitely.
+    next_blink_instant: Option<Instant>,
 }
 
 impl OraApp {
@@ -65,6 +72,7 @@ impl OraApp {
             editor_adapter: None,
             scroll_top_px: 0.0,
             shared_scroll_offset: None,
+            next_blink_instant: Some(Instant::now() + ACTIVITY_TIMEOUT + BLINK_RATE),
         }
     }
 
@@ -93,6 +101,7 @@ impl OraApp {
             editor_adapter: Some(adapter),
             scroll_top_px: 0.0,
             shared_scroll_offset: Some(scroll_offset),
+            next_blink_instant: Some(Instant::now() + ACTIVITY_TIMEOUT + BLINK_RATE),
         }
     }
 }
@@ -427,6 +436,7 @@ impl ApplicationHandler for OraApp {
                                     if let Some(cmd) = translate_editor_command(&keyboard_event, self.modifiers) {
                                         adapter.borrow_mut().dispatch_command(cmd);
                                         crate::elements::notify_caret_activity();
+                                        self.next_blink_instant = Some(Instant::now() + ACTIVITY_TIMEOUT + BLINK_RATE);
                                         // Sync pixel scroll offset: core_editor may have moved
                                         // viewport.scroll_y via ensure_caret_visible. Snap
                                         // scroll_top_px to the new line boundary, preserving
@@ -460,6 +470,7 @@ impl ApplicationHandler for OraApp {
                                 if let Some(cmd) = translate_editor_command(&keyboard_event, self.modifiers) {
                                     adapter.borrow_mut().dispatch_command(cmd);
                                     crate::elements::notify_caret_activity();
+                                    self.next_blink_instant = Some(Instant::now() + ACTIVITY_TIMEOUT + BLINK_RATE);
                                     // Sync pixel scroll offset: core_editor may have moved
                                     // viewport.scroll_y via ensure_caret_visible. Snap
                                     // scroll_top_px to the new line boundary, preserving
@@ -545,8 +556,6 @@ impl ApplicationHandler for OraApp {
                             Ok(_) => {
                                 // Clear dirty entities after rendering
                                 self.app_context.clear_dirty();
-                                // Request continuous redraw for now (don't break existing demos)
-                                gpu_state.window.request_redraw();
                             }
                             Err(wgpu::SurfaceError::Lost) => {
                                 // Reconfigure the surface if lost
@@ -564,7 +573,7 @@ impl ApplicationHandler for OraApp {
                         // No root view, just clear
                         match gpu_state.render_frame(&[]) {
                             Ok(_) => {
-                                gpu_state.window.request_redraw();
+                                // No root view — no redraw needed until next event
                             }
                             Err(wgpu::SurfaceError::Lost) => {
                                 gpu_state.resize(gpu_state.size.0, gpu_state.size.1);
