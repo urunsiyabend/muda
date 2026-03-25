@@ -5,6 +5,7 @@ pub mod keyboard;
 pub mod dispatch;
 pub mod actions;
 pub mod interaction;
+pub mod editor_input;
 
 pub use types::{Point, Modifiers, MouseButton};
 pub use mouse::{

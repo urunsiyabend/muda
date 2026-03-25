@@ -1,7 +1,9 @@
 use crate::app::App;
 use crate::context::{AppContext, WindowContext};
+use crate::editor_adapter::EditorDataSource;
 use crate::element::{LayoutContext, PaintContext, PrepaintContext};
 use crate::entity::EntityStorage;
+use crate::events::editor_input::translate_editor_command;
 use crate::events::mouse::{hit_test, Hitbox, MouseDownEvent, MouseMoveEvent, MouseUpEvent};
 use crate::events::types::{MouseButton, Modifiers, Point};
 use crate::events::dispatch::{dispatch_mouse_down, dispatch_mouse_move, dispatch_mouse_up, EventHandlers};
@@ -25,9 +27,14 @@ pub struct OraApp {
     cursor_position: Point,
     event_handlers: EventHandlers,
     modifiers: Modifiers,
+    /// Optional editor adapter. When present, keyboard events that are not
+    /// handled by Tab navigation or the action system are translated to
+    /// `EditorCommand` and dispatched through the adapter.
+    editor_adapter: Option<Box<dyn EditorDataSource>>,
 }
 
 impl OraApp {
+    /// Create a new OraApp from an app configuration.
     pub fn new(app: App) -> Self {
         Self {
             app_config: Some(app),
@@ -38,6 +45,25 @@ impl OraApp {
             cursor_position: Point::new(0.0, 0.0),
             event_handlers: EventHandlers::new(),
             modifiers: Modifiers::none(),
+            editor_adapter: None,
+        }
+    }
+
+    /// Create a new OraApp that includes an editor backend adapter.
+    ///
+    /// Keyboard events not consumed by Tab navigation or the action system will
+    /// be translated to `EditorCommand` and dispatched to the adapter.
+    pub fn new_with_editor(app: App, adapter: Box<dyn EditorDataSource>) -> Self {
+        Self {
+            app_config: Some(app),
+            gpu_state: None,
+            ora_window: OraWindow::new(),
+            app_context: AppContext::new(EntityStorage::new()),
+            hitboxes: Vec::new(),
+            cursor_position: Point::new(0.0, 0.0),
+            event_handlers: EventHandlers::new(),
+            modifiers: Modifiers::none(),
+            editor_adapter: Some(adapter),
         }
     }
 }
@@ -215,9 +241,9 @@ impl ApplicationHandler for OraApp {
                             }
                             // Tab handled, skip action matching
                         } else if let Key::Character(c) = &keyboard_event.keystroke.key {
-                            // DEMO HACK: Handle 'T' key for theme toggle
-                            // This is a temporary workaround for demos until action handlers get context access
-                            if c == "t" || c == "T" {
+                            // DEMO HACK: Handle 'T' key for theme toggle when no adapter is present.
+                            // When an adapter is present, 't' is a regular character input.
+                            if (c == "t" || c == "T") && self.editor_adapter.is_none() {
                                 use crate::theme::{Theme, ThemeMode};
                                 let current_mode = self.app_context.theme().mode();
                                 let new_theme = match current_mode {
@@ -233,30 +259,54 @@ impl ApplicationHandler for OraApp {
                                     gpu_state.window.request_redraw();
                                 }
                             } else {
-                                // Match keystroke against keymap
+                                // Try action system first
                                 let context = KeyContext::new(); // TODO: Build context from focus stack
-                                if let Some(action) = self.app_context.match_action(&keyboard_event.keystroke, &context) {
-                                    // Clone the action so we can dispatch it with mutable context
+                                let action_matched = if let Some(action) = self.app_context.match_action(&keyboard_event.keystroke, &context) {
                                     let action_clone = action.boxed_clone();
                                     self.app_context.dispatch_action(&*action_clone);
+                                    true
+                                } else {
+                                    false
+                                };
 
-                                    // Request redraw after action dispatch
+                                if action_matched {
                                     if let Some(gpu_state) = &self.gpu_state {
                                         gpu_state.window.request_redraw();
+                                    }
+                                } else if let Some(adapter) = &mut self.editor_adapter {
+                                    // No action matched: try editor command translation
+                                    if let Some(cmd) = translate_editor_command(&keyboard_event, self.modifiers) {
+                                        adapter.dispatch_command(cmd);
+                                        log::debug!("Editor command dispatched via adapter");
+                                        if let Some(gpu_state) = &self.gpu_state {
+                                            gpu_state.window.request_redraw();
+                                        }
                                     }
                                 }
                             }
                         } else {
-                            // Match keystroke against keymap
+                            // Named keys (non-Tab): try action system first
                             let context = KeyContext::new(); // TODO: Build context from focus stack
-                            if let Some(action) = self.app_context.match_action(&keyboard_event.keystroke, &context) {
-                                // Clone the action so we can dispatch it with mutable context
+                            let action_matched = if let Some(action) = self.app_context.match_action(&keyboard_event.keystroke, &context) {
                                 let action_clone = action.boxed_clone();
                                 self.app_context.dispatch_action(&*action_clone);
+                                true
+                            } else {
+                                false
+                            };
 
-                                // Request redraw after action dispatch
+                            if action_matched {
                                 if let Some(gpu_state) = &self.gpu_state {
                                     gpu_state.window.request_redraw();
+                                }
+                            } else if let Some(adapter) = &mut self.editor_adapter {
+                                // No action matched: try editor command translation
+                                if let Some(cmd) = translate_editor_command(&keyboard_event, self.modifiers) {
+                                    adapter.dispatch_command(cmd);
+                                    log::debug!("Editor command dispatched via adapter");
+                                    if let Some(gpu_state) = &self.gpu_state {
+                                        gpu_state.window.request_redraw();
+                                    }
                                 }
                             }
                         }
