@@ -152,10 +152,16 @@ impl View for EditorRootView {
             adapter.build_render_model(viewport_lines)
         };
 
-        // Inject the smooth-scroll sub-line pixel offset from the event
-        // loop's accumulator. This produces smooth visual scrolling between
-        // logical line boundaries without changing core_editor's scroll_y.
-        model.scroll_y_offset_px = self.scroll_offset.get();
+        // Compute the partial-line pixel offset from the absolute scroll position.
+        //
+        // scroll_offset carries the full pixel distance from the document top
+        // (scroll_top_px). The fractional part `scroll_top_px % LINE_HEIGHT`
+        // is the amount by which the topmost visible line is shifted upward.
+        // This is passed to TextAreaView and GutterView for sub-line rendering.
+        // The container's overflow_hidden() + GPU scissor clips partial lines.
+        const LINE_HEIGHT: f32 = 21.0;
+        let scroll_top_px = self.scroll_offset.get();
+        model.scroll_y_offset_px = scroll_top_px % LINE_HEIGHT;
 
         // Construct the AppLayout from fresh data and render it
         let layout = self.build_layout(&model);

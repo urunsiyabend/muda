@@ -49,6 +49,12 @@ pub trait EditorDataSource {
     /// without building a full RenderModel.
     fn scroll_y(&self) -> usize;
 
+    /// Returns the total number of lines in the current document.
+    ///
+    /// Used to compute the maximum scroll position for clamping:
+    /// `max_scroll_px = (total_lines - 1) * LINE_HEIGHT`
+    fn total_lines(&self) -> usize;
+
     /// Get the window title (for title bar updates).
     fn window_title(&self) -> String;
 }

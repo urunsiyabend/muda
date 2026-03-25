@@ -272,6 +272,13 @@ impl EditorDataSource for CoreEditorAdapter {
             .unwrap_or(0)
     }
 
+    fn total_lines(&self) -> usize {
+        self.app.workspace
+            .active_document()
+            .map(|d| d.len_lines())
+            .unwrap_or(1)
+    }
+
     fn dispatch_command(&mut self, cmd: EditorCommand) {
         // Save is an app-level operation that doesn't go through the dispatcher.
         if matches!(cmd, EditorCommand::Save) {

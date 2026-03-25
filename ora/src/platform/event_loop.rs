@@ -33,15 +33,19 @@ pub struct OraApp {
     /// `EditorCommand` and dispatched through the adapter.
     /// Shared with the `EditorRootView` via `Rc<RefCell<>>`.
     editor_adapter: Option<SharedAdapter>,
-    /// Pixel-level scroll accumulator for smooth mouse-wheel scrolling.
+    /// Absolute pixel scroll position (distance from document top in pixels).
     ///
-    /// Mouse wheel deltas are converted to pixel amounts and accumulated here.
-    /// When the accumulator exceeds one line height, a `Scroll(1)` or
-    /// `Scroll(-1)` command is sent to core_editor and the line height is
-    /// subtracted. The fractional remainder produces sub-line visual offset
-    /// for smooth rendering.
-    scroll_accumulator_px: f32,
-    /// Shared smooth-scroll pixel offset, read by EditorRootView.
+    /// This is the primary scroll state. It is incremented by mouse wheel
+    /// deltas and clamped to `[0, (total_lines - 1) * LINE_HEIGHT]`.
+    ///
+    /// `floor(scroll_top_px / LINE_HEIGHT)` gives the first visible line index,
+    /// which is kept in sync with `core_editor`'s `viewport.scroll_y` by
+    /// dispatching `Scroll(delta_lines)` commands.
+    ///
+    /// `scroll_top_px % LINE_HEIGHT` is the partial-line visual offset passed
+    /// to `TextAreaView` / `GutterView` for sub-line smooth rendering.
+    scroll_top_px: f32,
+    /// Shared absolute pixel scroll offset, read by EditorRootView each frame.
     /// `None` when running without an editor adapter.
     shared_scroll_offset: Option<crate::app::SharedScrollOffset>,
 }
@@ -59,7 +63,7 @@ impl OraApp {
             event_handlers: EventHandlers::new(),
             modifiers: Modifiers::none(),
             editor_adapter: None,
-            scroll_accumulator_px: 0.0,
+            scroll_top_px: 0.0,
             shared_scroll_offset: None,
         }
     }
@@ -70,8 +74,8 @@ impl OraApp {
     /// so both the view (for `build_render_model`) and the event loop
     /// (for `dispatch_command`) can access it.
     ///
-    /// `scroll_offset` is the shared smooth-scroll pixel offset, also read
-    /// by `EditorRootView` for sub-line visual scrolling.
+    /// `scroll_offset` is the shared absolute pixel scroll offset, also read
+    /// by `EditorRootView` for pixel-based scroll rendering.
     pub fn new_with_editor(
         app: App,
         adapter: SharedAdapter,
@@ -87,8 +91,27 @@ impl OraApp {
             event_handlers: EventHandlers::new(),
             modifiers: Modifiers::none(),
             editor_adapter: Some(adapter),
-            scroll_accumulator_px: 0.0,
+            scroll_top_px: 0.0,
             shared_scroll_offset: Some(scroll_offset),
+        }
+    }
+}
+
+impl OraApp {
+    /// Synchronize `scroll_top_px` after core_editor updates its `scroll_y`.
+    ///
+    /// When core_editor moves the viewport (e.g., `ensure_caret_visible` after
+    /// arrow-key navigation), the integral line changes but we want to keep the
+    /// fractional sub-line offset to avoid a jarring visual snap.
+    ///
+    /// We snap the integer part to `new_scroll_y * LINE_HEIGHT` but preserve
+    /// the fractional component `scroll_top_px % LINE_HEIGHT`.
+    fn sync_scroll_from_core(&mut self, new_scroll_y: usize) {
+        const LINE_HEIGHT: f32 = 21.0;
+        let fractional = self.scroll_top_px % LINE_HEIGHT;
+        self.scroll_top_px = new_scroll_y as f32 * LINE_HEIGHT + fractional;
+        if let Some(ref offset) = self.shared_scroll_offset {
+            offset.set(self.scroll_top_px);
         }
     }
 }
@@ -265,14 +288,18 @@ impl ApplicationHandler for OraApp {
                 }
             }
             WindowEvent::MouseWheel { delta, .. } => {
-                // Smooth pixel-level scrolling via accumulator.
+                // Pixel-based scrolling.
                 //
-                // Mouse wheel deltas are converted to pixel amounts and added
-                // to scroll_accumulator_px. When the accumulator exceeds one
-                // LINE_HEIGHT, a Scroll(1) or Scroll(-1) is dispatched to
-                // core_editor and the line height is subtracted. The remaining
-                // fractional pixels produce sub-line visual offset for smooth
-                // rendering (applied by TextAreaView / GutterView).
+                // scroll_top_px is the absolute pixel distance from the top of
+                // the document to the top of the visible viewport. It is
+                // clamped to [0, max_scroll_px] and shared with EditorRootView.
+                //
+                // EditorRootView computes:
+                //   first_line = floor(scroll_top_px / LINE_HEIGHT)
+                //   partial_offset = scroll_top_px % LINE_HEIGHT  (0..LINE_HEIGHT)
+                //
+                // core_editor's viewport.scroll_y is kept in sync with
+                // first_line so build_render_model returns the right lines.
                 const LINE_HEIGHT: f32 = 21.0;
                 // Pixels per notch for LineDelta (one "line" in OS terms).
                 const PIXELS_PER_LINE: f32 = 40.0;
@@ -281,7 +308,7 @@ impl ApplicationHandler for OraApp {
                     winit::event::MouseScrollDelta::LineDelta(_x, y) => {
                         // y > 0 = scroll up (content moves down in viewport),
                         // y < 0 = scroll down (content moves up).
-                        // Negate so positive accumulator = scroll down in doc.
+                        // Negate so positive scroll_top_px = further down doc.
                         -y * PIXELS_PER_LINE
                     }
                     winit::event::MouseScrollDelta::PixelDelta(pos) => {
@@ -290,43 +317,46 @@ impl ApplicationHandler for OraApp {
                     }
                 };
 
-                self.scroll_accumulator_px += delta_px;
-
-                // Dispatch whole-line scrolls while accumulator exceeds a line.
                 if let Some(adapter) = &self.editor_adapter {
                     use crate::editor_adapter::EditorCommand;
 
-                    let scroll_y_before = adapter.borrow().scroll_y();
+                    // Compute max scroll based on total document lines.
+                    let total_lines = adapter.borrow().total_lines().max(1);
+                    let max_scroll_px = (total_lines.saturating_sub(1)) as f32 * LINE_HEIGHT;
 
-                    while self.scroll_accumulator_px >= LINE_HEIGHT {
-                        adapter.borrow_mut().dispatch_command(EditorCommand::Scroll(1));
-                        self.scroll_accumulator_px -= LINE_HEIGHT;
-                    }
-                    while self.scroll_accumulator_px <= -LINE_HEIGHT {
-                        adapter.borrow_mut().dispatch_command(EditorCommand::Scroll(-1));
-                        self.scroll_accumulator_px += LINE_HEIGHT;
-                    }
+                    // Apply delta and clamp.
+                    let new_top = (self.scroll_top_px + delta_px).clamp(0.0, max_scroll_px);
+                    let new_first_line = (new_top / LINE_HEIGHT).floor() as usize;
 
-                    let scroll_y_after = adapter.borrow().scroll_y();
-
-                    // If core_editor didn't actually scroll (at document
-                    // boundary), reset the accumulator so sub-line offset
-                    // doesn't show content beyond the boundary.
-                    if scroll_y_before == scroll_y_after && scroll_y_before == 0
-                        && self.scroll_accumulator_px < 0.0
-                    {
-                        self.scroll_accumulator_px = 0.0;
+                    // Sync core_editor's scroll_y to match new_first_line.
+                    let current_scroll_y = adapter.borrow().scroll_y();
+                    let line_delta = new_first_line as i32 - current_scroll_y as i32;
+                    if line_delta != 0 {
+                        adapter.borrow_mut().dispatch_command(EditorCommand::Scroll(line_delta));
                     }
 
-                    // Publish the fractional offset for the view to consume.
+                    // After dispatch, core_editor may have clamped the scroll.
+                    // Re-read actual scroll_y and reconstruct scroll_top_px so
+                    // the two stay in sync.
+                    let actual_scroll_y = adapter.borrow().scroll_y();
+                    // Preserve fractional pixels from the new target when within bounds.
+                    if actual_scroll_y == new_first_line {
+                        self.scroll_top_px = new_top;
+                    } else {
+                        // core_editor clamped — snap to actual line boundary.
+                        self.scroll_top_px = actual_scroll_y as f32 * LINE_HEIGHT;
+                    }
+
+                    // Publish for EditorRootView.
                     if let Some(ref offset) = self.shared_scroll_offset {
-                        offset.set(self.scroll_accumulator_px);
+                        offset.set(self.scroll_top_px);
                     }
 
                     log::debug!(
-                        "Mouse wheel: delta_px={:.1}, accumulator={:.1}",
+                        "Mouse wheel: delta_px={:.1}, scroll_top_px={:.1}, first_line={}",
                         delta_px,
-                        self.scroll_accumulator_px,
+                        self.scroll_top_px,
+                        actual_scroll_y,
                     );
                 }
 
@@ -394,6 +424,12 @@ impl ApplicationHandler for OraApp {
                                     if let Some(cmd) = translate_editor_command(&keyboard_event, self.modifiers) {
                                         adapter.borrow_mut().dispatch_command(cmd);
                                         crate::elements::notify_caret_activity();
+                                        // Sync pixel scroll offset: core_editor may have moved
+                                        // viewport.scroll_y via ensure_caret_visible. Snap
+                                        // scroll_top_px to the new line boundary, preserving
+                                        // any fractional offset within the current line.
+                                        let new_scroll_y = adapter.borrow().scroll_y();
+                                        self.sync_scroll_from_core(new_scroll_y);
                                         log::debug!("Editor command dispatched via adapter");
                                         if let Some(gpu_state) = &self.gpu_state {
                                             gpu_state.window.request_redraw();
@@ -421,6 +457,12 @@ impl ApplicationHandler for OraApp {
                                 if let Some(cmd) = translate_editor_command(&keyboard_event, self.modifiers) {
                                     adapter.borrow_mut().dispatch_command(cmd);
                                     crate::elements::notify_caret_activity();
+                                    // Sync pixel scroll offset: core_editor may have moved
+                                    // viewport.scroll_y via ensure_caret_visible. Snap
+                                    // scroll_top_px to the new line boundary, preserving
+                                    // any fractional offset within the current line.
+                                    let new_scroll_y = adapter.borrow().scroll_y();
+                                    self.sync_scroll_from_core(new_scroll_y);
                                     log::debug!("Editor command dispatched via adapter");
                                     if let Some(gpu_state) = &self.gpu_state {
                                         gpu_state.window.request_redraw();
