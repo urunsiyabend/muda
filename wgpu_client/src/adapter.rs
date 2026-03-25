@@ -95,10 +95,25 @@ fn convert_styled_span(s: core_editor::view_model::StyledSpan) -> StyledSpan {
 }
 
 fn convert_line_presentation(l: core_editor::view_model::LinePresentation) -> LinePresentation {
+    let spans: Vec<StyledSpan> = l.spans.into_iter().map(convert_styled_span).collect();
+
+    // Extract selection ranges from Selection-styled spans before they
+    // reach the text layer. Column offsets are character-based (0-indexed).
+    let mut selection_ranges: Vec<(usize, usize)> = Vec::new();
+    let mut col: usize = 0;
+    for span in &spans {
+        let span_len = span.text.chars().count();
+        if span.style == TextStyle::Selection {
+            selection_ranges.push((col, col + span_len));
+        }
+        col += span_len;
+    }
+
     LinePresentation {
         line_number: l.line_number,
         is_current_line: l.is_current_line,
-        spans: l.spans.into_iter().map(convert_styled_span).collect(),
+        spans,
+        selection_ranges,
     }
 }
 

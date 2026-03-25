@@ -125,15 +125,25 @@ pub struct LinePresentation {
     pub is_current_line: bool,
     /// The styled spans that make up this line's content.
     pub spans: Vec<StyledSpan>,
+    /// Column ranges that are selected on this line.
+    /// Each tuple is (start_col, end_col) in character offsets (0-indexed).
+    /// Empty vec means no selection on this line.
+    pub selection_ranges: Vec<(usize, usize)>,
 }
 
 impl LinePresentation {
     pub fn new(line_number: usize, is_current_line: bool) -> Self {
-        Self { line_number, is_current_line, spans: Vec::new() }
+        Self { line_number, is_current_line, spans: Vec::new(), selection_ranges: Vec::new() }
     }
 
     pub fn with_spans(line_number: usize, is_current_line: bool, spans: Vec<StyledSpan>) -> Self {
-        Self { line_number, is_current_line, spans }
+        Self { line_number, is_current_line, spans, selection_ranges: Vec::new() }
+    }
+
+    /// Appends a selected column range to this line.
+    pub fn with_selection(mut self, start_col: usize, end_col: usize) -> Self {
+        self.selection_ranges.push((start_col, end_col));
+        self
     }
 }
 
