@@ -211,10 +211,18 @@ Plans:
   5. Keyboard events translate to EditorCommand and dispatch to core_editor App
   6. All hardcoded values eliminated from wgpu_client (no raw float literals for heights, widths, font sizes, padding)
   7. All duplicated styling logic removed from wgpu_client (single layout calculation path per component)
-**Plans**: TBD
+**Plans**: 9 plans
 
 Plans:
-- (Plans will be created during /gsd:plan-phase 9)
+- [ ] 09-01-PLAN.md -- Port animation primitives (Tween, Easing, CubicBezier) to ora (Wave 1)
+- [ ] 09-02-PLAN.md -- Adapter trait + mirror presentation types in ora (Wave 1)
+- [ ] 09-03-PLAN.md -- Migrate views to mirror types + remove core_editor dep (Wave 2)
+- [ ] 09-04-PLAN.md -- TransitionRegistry + TransitionSpec infrastructure (Wave 2)
+- [ ] 09-05-PLAN.md -- CoreEditorAdapter + AppLayout wiring + input translation (Wave 3)
+- [ ] 09-06-PLAN.md -- Div transition builders + paint-time interpolation (Wave 3)
+- [ ] 09-07-PLAN.md -- Hover/active transitions across all interactive elements (Wave 4)
+- [ ] 09-08-PLAN.md -- Strip wgpu_client to thin shell + cleanup (Wave 5)
+- [ ] 09-09-PLAN.md -- Final verification checkpoint (Wave 6)
 
 ## Progress
 
@@ -232,8 +240,8 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 8.1 -> 
 | 7. Editor Chrome & Text Editing | 5/5 | Complete | 2026-01-30 |
 | 8. Advanced UI & Widgets | 8/8 | Complete | 2026-03-02 |
 | 8.1. GPU Layered Rendering | 3/3 | Complete | 2026-03-02 |
-| 9. Transitions & Integration | 0/TBD | Not started | - |
+| 9. Transitions & Integration | 0/9 | Not started | - |
 
 ---
 *Roadmap created: 2026-01-28*
-*Last updated: 2026-03-02 -- Phase 8.1 complete (3/3 plans, layered rendering verified)*
+*Last updated: 2026-03-25 -- Phase 9 planned (9 plans in 6 waves)*
