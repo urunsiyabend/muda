@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-01-28)
 ## Current Position
 
 Phase: 9 of 9 (Transitions & Integration) - In progress
-Plan: 1 of N in current phase (09-01 SUMMARY complete; 09-02 pre-exists on branch)
-Status: In progress — 09-01 (animation primitives) SUMMARY created; 09-02 (EditorDataSource + mirror types) also on branch
-Last activity: 2026-03-25 - Completed 09-01-PLAN.md (animation primitives: Easing, CubicBezier, Spring, Tween<T>, Tweenable)
+Plan: 4 of N in current phase (09-01 animation primitives, 09-02 editor adapter, 09-03 import migration, 09-04 transition infrastructure done)
+Status: In progress — 09-04 (TransitionRegistry + AppContext integration) complete
+Last activity: 2026-03-25 - Completed 09-04-PLAN.md (TransitionId, TransitionSpec, TransitionState, TransitionRegistry, AppContext.transition_registry)
 
-Progress: [█████████████████████████████████] Phase 9 in progress (~2 plans done)
+Progress: [█████████████████████████████████] Phase 9 in progress (~4 plans done)
 
 ## Performance Metrics
 
@@ -220,6 +220,10 @@ Recent decisions affecting current work:
 - Mirror types in ora::editor_adapter have no From impls — conversions deferred to wgpu_client where both type namespaces are available (09-02)
 - EditorCommand defined alongside presentation types in editor_adapter::types — single module owns full adapter surface (09-02)
 - Adapter boundary: ora views use &dyn EditorDataSource, never &core_editor::app::App (09-02)
+- TransitionId explicitly assigned by callers (no auto-generation) — avoids stale-id bugs when elements recreated each frame (09-04)
+- TransitionRegistry in AppContext uses RefCell<T> — PaintContext holds *const AppContext but paint() must advance tweens; RefCell provides safe interior mutability (09-04)
+- advance_* creates new Tween per target change (not retarget) — preserves duration from current TransitionConfig, avoids zero-duration silent failure from retarget() on instant tweens (09-04)
+- advance_* calls start() then update() immediately — 0ms tweens complete on first frame, no spurious has_active_transitions() signals (09-04)
 
 ### Pending Todos
 
@@ -245,11 +249,11 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-25T11:27:16Z
-Stopped at: Completed 09-01-PLAN.md — animation primitives (Easing, CubicBezier, Spring, Tween<T>, Tweenable) in ora::animation
+Last session: 2026-03-25T11:36:21Z
+Stopped at: Completed 09-04-PLAN.md — transition infrastructure (TransitionId, TransitionSpec, TransitionState, TransitionRegistry, AppContext.transition_registry via RefCell)
 Resume file: None
-Next: Continue Phase 9 — 09-02 (EditorDataSource + mirror types) already on branch; proceed to next unexecuted plan
+Next: Continue Phase 9 — proceed to next unexecuted plan (09-05 or 09-06 Div paint-time interpolation)
 
 ---
 *State initialized: 2026-01-28*
-*Last updated: 2026-03-25 after completing 09-01 (animation primitives port, Tween/Easing/CubicBezier/Spring)*
+*Last updated: 2026-03-25 after completing 09-04 (transition infrastructure: TransitionRegistry, TransitionState, AppContext.transition_registry)*
