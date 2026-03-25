@@ -1,0 +1,16 @@
+[package]
+name = "wgpu_client"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "muda"
+path = "src/main.rs"
+
+[dependencies]
+core_editor = { path = "../core_editor" }
+ora = { path = "../ora" }
+
+# Utilities
+log = "0.4"
+simplelog = "0.12"

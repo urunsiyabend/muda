@@ -1,0 +1,298 @@
+//! Interactive Demo: Complete Event System
+//! Shows the complete event system working:
+//! 1. Mouse events: hover, active, click
+//! 2. Focus management: Tab/Shift+Tab navigation
+//! 3. Keyboard events: actions via keybindings
+//! 4. Interaction state: framework-tracked hover/active
+
+use ora::{
+    AnyElement, App, Color, Div, Model, Subscription, TextElement, View, ViewContext,
+    define_action, Keystroke, Key, NamedKey, Modifiers, FocusHandle, pct,
+};
+use std::cell::RefCell;
+use std::rc::Rc;
+
+// Define actions for this demo
+define_action!(IncrementAction);
+define_action!(DecrementAction);
+define_action!(ResetAction);
+
+#[derive(Clone)]
+struct CounterState {
+    count: i32,
+}
+
+// Shared counter for action handlers (workaround for action handler context limitation)
+// In Phase 5, the builder API will provide proper context access to action handlers
+struct SharedCounter {
+    count: Rc<RefCell<i32>>,
+    model: Model<CounterState>,
+}
+
+struct InteractiveView {
+    shared: SharedCounter,
+    _subscription: Subscription,
+    // Persistent focus handles - created once, not every render
+    button1_focus: FocusHandle,
+    button2_focus: FocusHandle,
+    button3_focus: FocusHandle,
+}
+
+impl View for InteractiveView {
+    fn render(&self, cx: &mut ViewContext) -> AnyElement {
+        let count = *self.shared.count.borrow();
+
+        // Use persistent focus handles stored in view (not created every render)
+        let button1_focus = self.button1_focus.clone();
+        let button2_focus = self.button2_focus.clone();
+        let button3_focus = self.button3_focus.clone();
+
+        Div::new()
+            .flex_col()
+            .w(pct(100.0))
+            .h(pct(100.0))
+            .bg(Color::rgb(0.08, 0.08, 0.10))
+            .p(24.0)
+            .gap(16.0)
+            .child(
+                TextElement::new("ora Interactive Demo")
+                    .size(28.0)
+                    .color(Color::rgb(0.9, 0.9, 1.0))
+            )
+            .child(
+                Div::new()
+                    .flex_col()
+                    .gap(12.0)
+                    .child(
+                        TextElement::new(&format!("Count: {}", count))
+                            .size(48.0)
+                            .color(Color::rgb(0.4, 0.8, 1.0))
+                    )
+                    .child(
+                        TextElement::new("Full event system infrastructure:")
+                            .size(14.0)
+                            .color(Color::rgb(0.5, 0.5, 0.6))
+                    )
+                    .child(
+                        TextElement::new("✓ Mouse hover/active tracking")
+                            .size(14.0)
+                            .color(Color::rgb(0.3, 0.9, 0.5))
+                    )
+                    .child(
+                        TextElement::new("✓ Focus management with Tab navigation")
+                            .size(14.0)
+                            .color(Color::rgb(0.3, 0.9, 0.5))
+                    )
+                    .child(
+                        TextElement::new("✓ Two-phase event dispatch (capture/bubble)")
+                            .size(14.0)
+                            .color(Color::rgb(0.3, 0.9, 0.5))
+                    )
+                    .child(
+                        TextElement::new("✓ Action system with keybindings")
+                            .size(14.0)
+                            .color(Color::rgb(0.3, 0.9, 0.5))
+                    )
+            )
+            .child(
+                Div::new()
+                    .flex_col()
+                    .gap(8.0)
+                    .child(
+                        TextElement::new("Keyboard Controls:")
+                            .size(16.0)
+                            .color(Color::rgb(0.7, 0.7, 0.8))
+                    )
+                    .child(
+                        TextElement::new("  ↑  Arrow Up - Increment counter")
+                            .size(14.0)
+                            .color(Color::rgb(0.5, 0.5, 0.6))
+                    )
+                    .child(
+                        TextElement::new("  ↓  Arrow Down - Decrement counter")
+                            .size(14.0)
+                            .color(Color::rgb(0.5, 0.5, 0.6))
+                    )
+                    .child(
+                        TextElement::new("  Ctrl+R - Reset counter to 0")
+                            .size(14.0)
+                            .color(Color::rgb(0.5, 0.5, 0.6))
+                    )
+                    .child(
+                        TextElement::new("  Tab - Focus next")
+                            .size(14.0)
+                            .color(Color::rgb(0.5, 0.5, 0.6))
+                    )
+                    .child(
+                        TextElement::new("  Shift+Tab - Focus previous")
+                            .size(14.0)
+                            .color(Color::rgb(0.5, 0.5, 0.6))
+                    )
+            )
+            .child(
+                Div::new()
+                    .flex_row()
+                    .gap(12.0)
+                    .child(
+                        Div::new()
+                            .focusable(button1_focus)
+                            .p(12.0)
+                            .bg(Color::rgb(0.2, 0.3, 0.5))
+                            .hover_bg(Color::rgb(0.3, 0.4, 0.6))
+                            .active_bg(Color::rgb(0.15, 0.25, 0.45))
+                            .focus_ring(Color::rgb(0.4, 0.8, 1.0))
+                            .border_radius(8.0)
+                            .child(
+                                TextElement::new("Button 1")
+                                    .size(14.0)
+                                    .color(Color::white())
+                            )
+                    )
+                    .child(
+                        Div::new()
+                            .focusable(button2_focus)
+                            .p(12.0)
+                            .bg(Color::rgb(0.2, 0.5, 0.3))
+                            .hover_bg(Color::rgb(0.3, 0.6, 0.4))
+                            .active_bg(Color::rgb(0.15, 0.45, 0.25))
+                            .focus_ring(Color::rgb(0.4, 1.0, 0.6))
+                            .border_radius(8.0)
+                            .child(
+                                TextElement::new("Button 2")
+                                    .size(14.0)
+                                    .color(Color::white())
+                            )
+                    )
+                    .child(
+                        Div::new()
+                            .focusable(button3_focus)
+                            .p(12.0)
+                            .bg(Color::rgb(0.5, 0.3, 0.2))
+                            .hover_bg(Color::rgb(0.6, 0.4, 0.3))
+                            .active_bg(Color::rgb(0.45, 0.25, 0.15))
+                            .focus_ring(Color::rgb(1.0, 0.6, 0.4))
+                            .border_radius(8.0)
+                            .child(
+                                TextElement::new("Button 3")
+                                    .size(14.0)
+                                    .color(Color::white())
+                            )
+                    )
+            )
+            .child(
+                TextElement::new("Check logs (RUST_LOG=trace) to see event flow!")
+                    .size(12.0)
+                    .color(Color::rgb(0.4, 0.4, 0.5))
+            )
+            .into()
+    }
+}
+
+fn main() {
+    env_logger::init();
+
+    App::new()
+        .title("ora - Interactive Demo")
+        .size(700, 600)
+        .on_open(|cx| {
+            // Create reactive model and shared counter
+            let model = cx.new_model(CounterState { count: 0 });
+            let counter = Rc::new(RefCell::new(0));
+            log::info!("Created counter model with count=0");
+
+            // Set up observation
+            let sub = cx.observe(&model, |_cx| {
+                log::info!("Observer fired: counter changed!");
+            });
+
+            // Register action handlers that modify shared counter
+            // Note: This is a workaround - Phase 5 builder API will provide proper
+            // context access to action handlers for direct model mutation
+            let counter_for_inc = counter.clone();
+            cx.on_action::<IncrementAction>(move |_action| {
+                let new_count = {
+                    let mut c = counter_for_inc.borrow_mut();
+                    *c += 1;
+                    *c
+                };
+                log::info!("IncrementAction triggered! Count: {}", new_count);
+                // Note: Can't call model.update() here due to no AppContext access
+                // The view will read from shared counter on next render
+            });
+
+            let counter_for_dec = counter.clone();
+            cx.on_action::<DecrementAction>(move |_action| {
+                let new_count = {
+                    let mut c = counter_for_dec.borrow_mut();
+                    *c -= 1;
+                    *c
+                };
+                log::info!("DecrementAction triggered! Count: {}", new_count);
+            });
+
+            let counter_for_reset = counter.clone();
+            cx.on_action::<ResetAction>(move |_action| {
+                {
+                    let mut c = counter_for_reset.borrow_mut();
+                    *c = 0;
+                }
+                log::info!("ResetAction triggered! Count reset to 0");
+            });
+
+            // Bind keys to actions
+            // Arrow Up -> Increment
+            cx.bind_key(
+                Keystroke {
+                    key: Key::Named(NamedKey::ArrowUp),
+                    modifiers: Modifiers::none(),
+                },
+                Box::new(IncrementAction),
+            );
+
+            // Arrow Down -> Decrement
+            cx.bind_key(
+                Keystroke {
+                    key: Key::Named(NamedKey::ArrowDown),
+                    modifiers: Modifiers::none(),
+                },
+                Box::new(DecrementAction),
+            );
+
+            // Ctrl+R -> Reset
+            cx.bind_key(
+                Keystroke {
+                    key: Key::Character("r".to_string()),
+                    modifiers: Modifiers {
+                        ctrl: true,
+                        alt: false,
+                        shift: false,
+                        meta: false,
+                    },
+                },
+                Box::new(ResetAction),
+            );
+
+            log::info!("Keybindings registered: Arrow Up/Down, Ctrl+R");
+
+            // Create persistent focus handles (once, not every render)
+            let button1_focus = cx.focus_handle();
+            let button2_focus = cx.focus_handle();
+            let button3_focus = cx.focus_handle();
+            log::info!("Created 3 persistent focus handles for buttons");
+
+            // Create view with shared counter and persistent focus handles
+            let view = InteractiveView {
+                shared: SharedCounter {
+                    count: counter.clone(),
+                    model: model.clone(),
+                },
+                _subscription: sub,
+                button1_focus,
+                button2_focus,
+                button3_focus,
+            };
+            cx.set_root_view(view);
+            log::info!("Root view set - interactive demo ready!");
+        })
+        .run();
+}
