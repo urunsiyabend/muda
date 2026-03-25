@@ -11,6 +11,8 @@ pub mod views;
 pub(crate) mod window;
 mod context;
 
+pub mod animation;
+pub mod editor_adapter;
 pub mod style;
 pub mod layout;
 pub mod rendering;
