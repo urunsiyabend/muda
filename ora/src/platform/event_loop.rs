@@ -320,9 +320,13 @@ impl ApplicationHandler for OraApp {
                 if let Some(adapter) = &self.editor_adapter {
                     use crate::editor_adapter::EditorCommand;
 
-                    // Compute max scroll based on total document lines.
+                    // Compute max scroll so the last line sits at the bottom
+                    // of the viewport, not the top. Without this the user can
+                    // scroll past the end of the document into empty space.
                     let total_lines = adapter.borrow().total_lines().max(1);
-                    let max_scroll_px = (total_lines.saturating_sub(1)) as f32 * LINE_HEIGHT;
+                    let viewport_lines = adapter.borrow().viewport_lines().max(1);
+                    let scrollable_lines = total_lines.saturating_sub(viewport_lines);
+                    let max_scroll_px = scrollable_lines as f32 * LINE_HEIGHT;
 
                     // Apply delta and clamp.
                     let new_top = (self.scroll_top_px + delta_px).clamp(0.0, max_scroll_px);
