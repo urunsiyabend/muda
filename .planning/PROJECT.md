@@ -90,17 +90,37 @@ A single, authoritative UI toolkit that eliminates duplicated styling, enforces 
 - **Performance**: Must maintain or improve current frame rendering performance (existing scissor clipping, single-pass batching optimizations)
 - **Migration**: wgpu_client components must be migrated incrementally — editor must remain functional throughout
 
+## Current Milestone: v2.0 Functional Editor
+
+**Goal:** Transform muda from a visual shell into a functional code editor with file operations, sidebar navigation, multi-tab editing, find/replace, text selection, clipboard, and Zed-level rendering performance.
+
+**Target features:**
+- File open/save (Ctrl+O dialog or sidebar click, Ctrl+S)
+- Sidebar file browser (open directory, navigate, click to open)
+- Multi-tab editing (open multiple files, switch between tabs)
+- Find/Replace (Ctrl+F search, Ctrl+H replace)
+- Text selection (mouse drag, shift+arrow, Ctrl+A) + clipboard (Ctrl+C/V/X)
+- Performance optimization (dirty tracking, layout caching, Zed-inspired rendering)
+
+**Known bugs to fix:**
+- Shift+arrow selection causes text to disappear (visual bug in selection rendering)
+
+**Product mindset:** No explicit plugin/extension API in v2, but code architecture must be cleanly extensible for v3 (LSP, git integration, terminal, etc.)
+
 ## Key Decisions
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| GPUI-style views (trait-based, render() returns element tree) | Matches Zed's proven model for editor UIs; declarative, composable, testable | — Pending |
-| Entity/Model reactive state | Decouples state ownership from views; enables multiple views of same state | — Pending |
-| Ora owns winit event loop | Simplifies app lifecycle; framework controls render timing and event dispatch | — Pending |
-| Ora wraps glyphon internally | Views shouldn't manage text atlases; Text::new() API is cleaner | — Pending |
-| Flexbox via taffy | Industry-standard layout model; no need to invent custom constraints | — Pending |
-| GPU-only (no TUI backend) | Keeps ora focused; ratatui_client has different rendering semantics entirely | — Pending |
-| CSS-like transitions only (no keyframes) | Sufficient for editor UI; hover fades, slide transitions cover all current needs | — Pending |
+| GPUI-style views (trait-based, render() returns element tree) | Matches Zed's proven model for editor UIs; declarative, composable, testable | ✓ Good |
+| Entity/Model reactive state | Decouples state ownership from views; enables multiple views of same state | ✓ Good |
+| Ora owns winit event loop | Simplifies app lifecycle; framework controls render timing and event dispatch | ✓ Good |
+| Ora wraps glyphon internally | Views shouldn't manage text atlases; Text::new() API is cleaner | ✓ Good |
+| Simple stack/flex layout (NOT taffy) | User chose simple layout for v1; sufficient for editor UI | ✓ Good |
+| GPU-only (no TUI backend) | Keeps ora focused; ratatui_client has different rendering semantics entirely | ✓ Good |
+| CSS-like transitions only (no keyframes) | Sufficient for editor UI; hover fades, slide transitions cover all current needs | ✓ Good |
+| Pixel-based scroll with scissor clipping | Zed/VS Code approach; smooth sub-line scrolling, ora owns scroll state | ✓ Good |
+| EditorDataSource adapter boundary | ora views never import core_editor; wgpu_client implements the bridge | ✓ Good |
+| wgpu_client thin shell pattern | Only main.rs + adapter.rs; all UI lives in ora | ✓ Good |
 
 ---
-*Last updated: 2026-01-28 after initialization*
+*Last updated: 2026-03-26 after v1.0 completion, v2.0 milestone started*

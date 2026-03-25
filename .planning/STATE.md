@@ -2,19 +2,19 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-01-28)
+See: .planning/PROJECT.md (updated 2026-03-26)
 
-**Core value:** A single, authoritative UI toolkit that eliminates duplicated styling, enforces consistent design tokens, and provides a scalable GPUI-like component model for the entire GPU client.
-**Current focus:** Phase 9: Transitions & Integration — COMPLETE (09-01 through 09-08 done).
+**Core value:** A functional, performant code editor built on ora's GPU-accelerated UI framework.
+**Current focus:** v2.0 Functional Editor — Defining requirements.
 
 ## Current Position
 
-Phase: 9 of 9 (Transitions & Integration) - COMPLETE
-Plan: 8 of 8 in current phase (09-01 animation primitives, 09-02 editor adapter, 09-03 import migration, 09-04 transition infrastructure, 09-05 editor adapter integration, 09-06 Div transition API, 09-07 hover/active transitions, 09-08 thin shell cleanup done)
-Status: Phase 9 COMPLETE — 09-08 (wgpu_client thin shell: delete all migrated modules, ora is sole source of truth) complete
-Last activity: 2026-03-25 - Completed 09-08-PLAN.md (wgpu_client stripped to main.rs+adapter.rs, INT-01/INT-04/INT-05 satisfied)
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements for v2.0 Functional Editor
+Last activity: 2026-03-26 — Milestone v2.0 started after v1.0 completion
 
-Progress: [█████████████████████████████████████] Phase 9 COMPLETE (all 9 phases done)
+Progress: [░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] v2.0 not started
 
 ## Performance Metrics
 
