@@ -147,56 +147,102 @@ impl TextAreaView {
         }
     }
 
-    /// Renders the current line background highlight.
-    fn render_current_line_bg(&self, cx: &mut ViewContext) -> AnyElement {
+    /// Renders a column of current-line background highlights (one per visible line).
+    ///
+    /// Produces a flex-col of line-height divs, where the current line has
+    /// CurrentLineBg and all others are transparent. This layer sits below
+    /// both selection_bg and text in the Stack z-order.
+    fn render_current_line_bg_layer(&self, cx: &mut ViewContext) -> AnyElement {
         let theme = cx.theme();
+        let current_line_color = theme.color(ColorToken::CurrentLineBg);
 
-        // Find current line index
-        let current_line_index = self.visible_lines.iter().position(|l| l.is_current_line);
+        let rows: Vec<AnyElement> = self
+            .visible_lines
+            .iter()
+            .map(|line| {
+                let mut row = Div::new()
+                    .w(pct(100.0))
+                    .h(px(LINE_HEIGHT))
+                    .shrink(0.0);
+                if line.is_current_line {
+                    row = row.bg(current_line_color);
+                }
+                row.into()
+            })
+            .collect();
 
-        if let Some(index) = current_line_index {
-            let _y_offset = index as f32 * LINE_HEIGHT;
-
-            Div::new()
-                .w(pct(100.0))
-                .h(px(LINE_HEIGHT))
-                .bg(theme.color(ColorToken::CurrentLineBg))
-                .m(0.0) // Position at y_offset would need absolute positioning
-                .into()
-        } else {
-            // No current line, render empty placeholder
-            Div::new().w(px(0.0)).h(px(0.0)).into()
-        }
+        Div::new()
+            .flex_col()
+            .w(pct(100.0))
+            .mt(-self.scroll_y_offset_px)
+            .children(rows)
+            .into()
     }
 
-    /// Renders selection background rectangles.
+    /// Renders selection background rectangles from selection_ranges.
     ///
-    /// Selection spans are identified by TextStyle::Selection.
-    /// Each selection gets a solid background (per CONTEXT decision).
-    fn render_selection_rects(&self, cx: &mut ViewContext) -> Vec<AnyElement> {
+    /// Produces a flex-col of line-height rows. Each row uses a flex-row of
+    /// [spacer, selection-rect] to position the highlight at the correct column.
+    /// Lines with no selection get an empty transparent row.
+    fn render_selection_bg_layer(&self, cx: &mut ViewContext) -> AnyElement {
         let theme = cx.theme();
         let selection_color = theme.color(ColorToken::Selection);
-        let mut rects = Vec::new();
 
-        for (line_index, line) in self.visible_lines.iter().enumerate() {
-            for span in &line.spans {
-                let span_width = span.text.chars().count() as f32 * self.char_width;
-
-                if span.style == TextStyle::Selection {
-                    let _y_offset = line_index as f32 * LINE_HEIGHT;
-
-                    // Selection rectangle (would use absolute positioning in full impl)
-                    let rect = Div::new()
-                        .w(px(span_width))
+        let rows: Vec<AnyElement> = self
+            .visible_lines
+            .iter()
+            .map(|line| {
+                if line.selection_ranges.is_empty() {
+                    // No selection on this line — transparent placeholder row.
+                    return Div::new()
+                        .w(pct(100.0))
                         .h(px(LINE_HEIGHT))
-                        .bg(selection_color);
-
-                    rects.push(rect.into());
+                        .shrink(0.0)
+                        .into();
                 }
-            }
-        }
 
-        rects
+                // Build one rect per selection range on this line.
+                // Ranges are non-overlapping, emitted in column order by the adapter.
+                let mut children: Vec<AnyElement> = Vec::new();
+                let mut prev_end: usize = 0;
+
+                for &(start_col, end_col) in &line.selection_ranges {
+                    // Spacer before this selection range.
+                    if start_col > prev_end {
+                        let spacer_w = (start_col - prev_end) as f32 * self.char_width;
+                        children.push(
+                            Div::new().w(px(spacer_w)).h(px(LINE_HEIGHT)).shrink(0.0).into(),
+                        );
+                    }
+                    // Selection highlight rect.
+                    let sel_w = (end_col - start_col) as f32 * self.char_width;
+                    children.push(
+                        Div::new()
+                            .w(px(sel_w))
+                            .h(px(LINE_HEIGHT))
+                            .shrink(0.0)
+                            .bg(selection_color)
+                            .into(),
+                    );
+                    prev_end = end_col;
+                }
+
+                Div::new()
+                    .flex_row()
+                    .w(pct(100.0))
+                    .h(px(LINE_HEIGHT))
+                    .shrink(0.0)
+                    .children(children)
+                    .into()
+            })
+            .collect();
+
+        Div::new()
+            .flex_col()
+            .w(pct(100.0))
+            .mt(-self.scroll_y_offset_px)
+            .children(rows)
+            .into()
     }
 
     /// Renders all text lines with syntax highlighting.
@@ -209,14 +255,19 @@ impl TextAreaView {
     }
 
     /// Renders a single line with syntax-highlighted spans.
+    ///
+    /// All spans (including TextStyle::Selection) are rendered as text —
+    /// selection visibility comes from the selection_bg Stack layer below,
+    /// not from filtering here. The line div has no background (transparent),
+    /// so lower Stack layers show through.
     fn render_line(&self, line: &LinePresentation, cx: &mut ViewContext) -> AnyElement {
         let theme = cx.theme();
 
-        // Build span elements
+        // Render ALL spans — including Selection-styled ones — as colored text.
+        // The selection background is handled by render_selection_bg_layer below text.
         let span_elements: Vec<AnyElement> = line
             .spans
             .iter()
-            .filter(|span| span.style != TextStyle::Selection) // Selection is background-only
             .map(|span| {
                 let color = self.map_style_to_color(span.style, theme);
                 TextElement::new(&span.text)
@@ -226,20 +277,15 @@ impl TextAreaView {
             })
             .collect();
 
-        // Build line container with current line highlight if applicable
-        let mut line_div = Div::new()
+        // Line container: transparent background so selection/current-line layers
+        // from lower Stack layers show through.
+        Div::new()
             .flex_row()
             .w(pct(100.0))
             .h(px(LINE_HEIGHT))
-            .shrink(0.0) // Never compress below LINE_HEIGHT
-            .children(span_elements);
-
-        // Apply current line background highlight
-        if line.is_current_line {
-            line_div = line_div.bg(theme.color(ColorToken::CurrentLineBg));
-        }
-
-        line_div.into()
+            .shrink(0.0)
+            .children(span_elements)
+            .into()
     }
 
     /// Renders the caret element.
@@ -260,6 +306,8 @@ impl View for TextAreaView {
     fn render(&self, cx: &mut ViewContext) -> AnyElement {
         let text_lines = self.render_text_lines(cx);
         let caret = self.render_caret(cx);
+        let current_line_bg = self.render_current_line_bg_layer(cx);
+        let selection_bg = self.render_selection_bg_layer(cx);
 
         let theme = cx.theme();
 
@@ -269,8 +317,35 @@ impl View for TextAreaView {
         // top and bottom lines at the GPU level via wgpu scissor rectangles.
         let scroll_shift = -self.scroll_y_offset_px;
 
-        // Inner wrapper that shifts content upward by the sub-line offset.
-        // The outer container clips via overflow_hidden.
+        // Layer 1 (bottom): Opaque base background — fills the entire text area.
+        // This is the ONLY layer with BgPrimary; all layers above are transparent.
+        let base_bg_layer: AnyElement = Div::new()
+            .w(pct(100.0))
+            .h(pct(100.0))
+            .bg(theme.color(ColorToken::BgPrimary))
+            .into();
+
+        // Layer 2: Current-line highlight — one colored row per visible line.
+        // Transparent rows for non-current lines let base_bg show through.
+        let current_line_layer: AnyElement = Div::new()
+            .w(pct(100.0))
+            .h(pct(100.0))
+            .pl(1.0)
+            .overflow_hidden()
+            .child(current_line_bg)
+            .into();
+
+        // Layer 3: Selection highlight rects — sits above current-line, below text.
+        let selection_layer: AnyElement = Div::new()
+            .w(pct(100.0))
+            .h(pct(100.0))
+            .pl(1.0)
+            .overflow_hidden()
+            .child(selection_bg)
+            .into();
+
+        // Layer 4: Text content — transparent background so selection/current-line
+        // layers below show through the gaps between glyphs.
         let inner_text: AnyElement = Div::new()
             .flex_col()
             .w(pct(100.0))
@@ -278,12 +353,10 @@ impl View for TextAreaView {
             .children(text_lines)
             .into();
 
-        // Text content layer: flex column of line divs (clips inner content)
         let text_layer: AnyElement = Div::new()
             .flex_col()
             .w(pct(100.0))
             .h(pct(100.0))
-            .bg(theme.color(ColorToken::BgPrimary))
             .pl(1.0)
             .overflow_hidden()
             .child(inner_text)
@@ -296,17 +369,21 @@ impl View for TextAreaView {
             .child(caret)
             .into();
 
-        // Caret layer: overlaid on top of text via Stack
+        // Layer 5 (top): Caret — overlaid on top of everything.
         let caret_layer: AnyElement = Div::new()
             .w(pct(100.0))
             .h(pct(100.0))
             .child(inner_caret)
             .into();
 
-        // Use Stack to layer text (bottom) and caret (top)
+        // Stack z-order (bottom → top):
+        //   base_bg → current_line → selection → text → caret
         stack()
             .w(pct(100.0))
             .h(pct(100.0))
+            .child(base_bg_layer)
+            .child(current_line_layer)
+            .child(selection_layer)
             .child(text_layer)
             .child(caret_layer)
             .into()

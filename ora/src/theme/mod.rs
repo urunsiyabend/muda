@@ -145,7 +145,8 @@ impl Theme {
             (ThemeMode::Dark, ColorToken::SyntaxMacro) => purple_300(),
 
             // Dark mode mappings - Editor-specific tokens
-            (ThemeMode::Dark, ColorToken::Selection) => blue_900(),
+            // Zed-level selection contrast: ~#264F80 (was blue_900 #0D3870, too dim)
+            (ThemeMode::Dark, ColorToken::Selection) => Color::rgb(0.15, 0.31, 0.50),
             (ThemeMode::Dark, ColorToken::CurrentLineBg) => gray_800(),
 
             // Light mode mappings - UI tokens
