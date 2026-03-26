@@ -11,13 +11,16 @@
 //! ├── Views (HashMap<ViewId, EditorView>)
 //! ├── Histories (HashMap<DocumentId, CommandHistory>)
 //! ├── ActiveViewId
+//! ├── path_to_doc (HashMap<PathBuf, DocumentId>)  -- Buffer Registry
+//! ├── tab_order (Vec<ViewId>)                      -- insertion-order tab strip
+//! ├── mru_stack (Vec<ViewId>)                      -- activation history
 //! └── EventBus
 //! ```
 //!
 //! Multiple views can reference the same document (split-view support).
 
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::commands::CommandHistory;
 use crate::domain::protection::{DiscardAcknowledgment, ProtectedResult, ProtectionError, UnsavedDocument};
@@ -44,6 +47,21 @@ pub struct Workspace {
 
     /// Central event bus for domain events.
     event_bus: EventBus,
+
+    /// Buffer Registry: maps canonical file paths to document IDs.
+    ///
+    /// Prevents duplicate Document creation when the same file is opened twice.
+    path_to_doc: HashMap<PathBuf, DocumentId>,
+
+    /// Visual tab strip order (insertion order).
+    ///
+    /// Every ViewId present in `views` exists exactly once here.
+    tab_order: Vec<ViewId>,
+
+    /// Activation history stack; front = most recently activated view.
+    ///
+    /// Used to select the new active view when the current one is closed.
+    mru_stack: Vec<ViewId>,
 }
 
 impl Workspace {
@@ -55,6 +73,9 @@ impl Workspace {
             histories: HashMap::new(),
             active_view_id: None,
             event_bus: EventBus::new(),
+            path_to_doc: HashMap::new(),
+            tab_order: Vec::new(),
+            mru_stack: Vec::new(),
         }
     }
 
@@ -88,16 +109,26 @@ impl Workspace {
 
     /// Opens a document from a file path.
     ///
-    /// Returns the document ID on success, or an IO error on failure.
-    pub fn open_document(&mut self, path: &Path) -> std::io::Result<DocumentId> {
+    /// Returns `(doc_id, was_existing)`. If the canonical path is already open,
+    /// returns the existing DocumentId with `was_existing = true` — no new
+    /// Document is created. If the path is new, creates the document and
+    /// registers it in the Buffer Registry.
+    pub fn open_document(&mut self, path: &Path) -> std::io::Result<(DocumentId, bool)> {
+        let canonical = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+
+        if let Some(&existing_id) = self.path_to_doc.get(&canonical) {
+            return Ok((existing_id, true));
+        }
+
         let document = Document::open(path)?;
         let doc_id = document.id();
 
         self.event_bus.publish(document.event_opened());
         self.documents.insert(doc_id, document);
         self.histories.insert(doc_id, CommandHistory::new());
+        self.path_to_doc.insert(canonical, doc_id);
 
-        Ok(doc_id)
+        Ok((doc_id, false))
     }
 
     /// Closes a document and all views associated with it (force close).
@@ -114,6 +145,9 @@ impl Workspace {
             // Remove the history
             self.histories.remove(&doc_id);
 
+            // Remove from Buffer Registry by value (canonical path may differ from stored path)
+            self.path_to_doc.retain(|_, &mut id| id != doc_id);
+
             // Close all views referencing this document
             let views_to_close: Vec<ViewId> = self
                 .views
@@ -129,7 +163,7 @@ impl Workspace {
             // Clear active view if it was pointing to a closed view
             if let Some(active_id) = self.active_view_id {
                 if !self.views.contains_key(&active_id) {
-                    self.active_view_id = self.views.keys().next().copied();
+                    self.active_view_id = self.mru_stack.first().copied();
                 }
             }
 
@@ -171,6 +205,8 @@ impl Workspace {
     /// Creates a new view for a document.
     ///
     /// The new view becomes the active view.
+    /// Inserted into `tab_order` after the current active tab (or at end if none).
+    /// Pushed to the front of `mru_stack`.
     /// Returns the view ID.
     pub fn create_view(&mut self, doc_id: DocumentId) -> ViewId {
         let view = EditorView::new(doc_id);
@@ -178,6 +214,18 @@ impl Workspace {
 
         self.event_bus.publish(view.event_created());
         self.views.insert(view_id, view);
+
+        // Insert into tab_order after the current active tab position
+        let insert_pos = self
+            .active_view_id
+            .and_then(|active_id| self.tab_order.iter().position(|&id| id == active_id))
+            .map(|pos| pos + 1)
+            .unwrap_or(self.tab_order.len());
+        self.tab_order.insert(insert_pos, view_id);
+
+        // Push to front of MRU stack
+        self.mru_stack.insert(0, view_id);
+
         self.active_view_id = Some(view_id);
 
         view_id
@@ -191,9 +239,13 @@ impl Workspace {
         if let Some(view) = self.views.remove(&view_id) {
             self.event_bus.publish(view.event_closed());
 
-            // If this was the active view, select another
+            // Remove from tab_order and mru_stack
+            self.tab_order.retain(|&id| id != view_id);
+            self.mru_stack.retain(|&id| id != view_id);
+
+            // If this was the active view, select the MRU fallback
             if self.active_view_id == Some(view_id) {
-                self.active_view_id = self.views.keys().next().copied();
+                self.active_view_id = self.mru_stack.first().copied();
             }
 
             true
@@ -204,10 +256,14 @@ impl Workspace {
 
     /// Sets the active view.
     ///
+    /// Promotes the view to the front of the MRU stack.
     /// Returns `true` if the view exists and was activated.
     pub fn set_active_view(&mut self, view_id: ViewId) -> bool {
         if self.views.contains_key(&view_id) {
             self.active_view_id = Some(view_id);
+            // Promote to front of MRU stack
+            self.mru_stack.retain(|&id| id != view_id);
+            self.mru_stack.insert(0, view_id);
             true
         } else {
             false
@@ -237,6 +293,16 @@ impl Workspace {
     /// Returns the active view ID, if any.
     pub fn active_view_id(&self) -> Option<ViewId> {
         self.active_view_id
+    }
+
+    /// Returns the tab strip order as a slice of ViewIds.
+    pub fn tab_order(&self) -> &[ViewId] {
+        &self.tab_order
+    }
+
+    /// Returns the MRU activation stack as a slice of ViewIds.
+    pub fn mru_stack(&self) -> &[ViewId] {
+        &self.mru_stack
     }
 
     // =========================================================================
@@ -585,7 +651,7 @@ mod tests {
         workspace.set_active_view(view2_id);
         workspace.close_view(view2_id);
 
-        // Should fall back to view1
+        // Should fall back to view1 via MRU stack
         assert_eq!(workspace.active_view_id(), Some(view1_id));
     }
 
@@ -745,5 +811,104 @@ mod tests {
         } else {
             panic!("Expected UnsavedChanges error");
         }
+    }
+
+    // =========================================================================
+    // Buffer Registry, Tab Order, and MRU Stack Tests
+    // =========================================================================
+
+    #[test]
+    fn test_open_document_deduplication() {
+        let dir = std::env::temp_dir();
+        let file_path = dir.join("test_open_document_dedup_11_01.txt");
+        std::fs::write(&file_path, "hello dedup").unwrap();
+
+        let mut workspace = Workspace::new();
+
+        let (doc_id_1, was_existing_1) = workspace.open_document(&file_path).unwrap();
+        assert!(!was_existing_1, "first open should not be existing");
+
+        let (doc_id_2, was_existing_2) = workspace.open_document(&file_path).unwrap();
+        assert!(was_existing_2, "second open of same path should be existing");
+        assert_eq!(doc_id_1, doc_id_2, "both opens should return same DocumentId");
+
+        // Only one document should exist in workspace
+        assert_eq!(workspace.document_count(), 1);
+
+        std::fs::remove_file(&file_path).ok();
+    }
+
+    #[test]
+    fn test_tab_order_maintained() {
+        let mut workspace = Workspace::new();
+        let doc_id = workspace.create_document();
+
+        let view1_id = workspace.create_view(doc_id);
+        // view1 is active; view2 inserts after it
+        let view2_id = workspace.create_view(doc_id);
+        // view2 is active; view3 inserts after it
+        let view3_id = workspace.create_view(doc_id);
+
+        let order = workspace.tab_order();
+        assert_eq!(order.len(), 3);
+        // Insertion order: view1 at 0, view2 after view1, view3 after view2
+        assert!(order.contains(&view1_id));
+        assert!(order.contains(&view2_id));
+        assert!(order.contains(&view3_id));
+
+        // Each is at the expected position
+        let pos1 = order.iter().position(|&id| id == view1_id).unwrap();
+        let pos2 = order.iter().position(|&id| id == view2_id).unwrap();
+        let pos3 = order.iter().position(|&id| id == view3_id).unwrap();
+        assert!(pos1 < pos2, "view1 should come before view2");
+        assert!(pos2 < pos3, "view2 should come before view3");
+    }
+
+    #[test]
+    fn test_mru_stack_on_switch() {
+        let mut workspace = Workspace::new();
+        let doc_id = workspace.create_document();
+
+        let view1_id = workspace.create_view(doc_id);
+        let view2_id = workspace.create_view(doc_id);
+        let view3_id = workspace.create_view(doc_id);
+
+        // Activate view1
+        workspace.set_active_view(view1_id);
+        assert_eq!(workspace.mru_stack()[0], view1_id);
+
+        // Activate view3
+        workspace.set_active_view(view3_id);
+        assert_eq!(workspace.mru_stack()[0], view3_id);
+
+        // Activate view2
+        workspace.set_active_view(view2_id);
+        assert_eq!(workspace.mru_stack()[0], view2_id);
+
+        // MRU front matches last activated
+        assert_eq!(workspace.active_view_id(), Some(view2_id));
+    }
+
+    #[test]
+    fn test_close_activates_mru() {
+        let mut workspace = Workspace::new();
+        let doc_id = workspace.create_document();
+
+        let view_a = workspace.create_view(doc_id);
+        let view_b = workspace.create_view(doc_id);
+        let view_c = workspace.create_view(doc_id);
+
+        // Activation sequence: A -> B -> C
+        workspace.set_active_view(view_a);
+        workspace.set_active_view(view_b);
+        workspace.set_active_view(view_c);
+
+        assert_eq!(workspace.active_view_id(), Some(view_c));
+
+        // Close C — should fall back to B (MRU)
+        workspace.close_view(view_c);
+
+        assert_eq!(workspace.active_view_id(), Some(view_b),
+            "After closing active view C, B (MRU) should become active");
     }
 }
