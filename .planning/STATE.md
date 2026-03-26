@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-03-26)
 ## Current Position
 
 Phase: 11 — Buffer Registry + Multi-Tab (in progress)
-Plan: 02 of 3 (Tab command handlers: SwitchTab, CloseTab, Ctrl+Shift+Tab)
-Status: In progress — Plan 02 complete
-Last activity: 2026-03-26 — Completed 11-02-PLAN.md (Tab switching + close command handlers)
+Plan: 03 of 4 (Tab bar click handlers + visual polish)
+Status: In progress — Plan 03 complete
+Last activity: 2026-03-26 — Completed 11-03-PLAN.md (Interactive tab bar: click handlers, dot indicator, accent border)
 
-Progress: [█████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] v2.0 Phase 10 complete + Phase 11 Plans 01-02 done (6/~17 plans)
+Progress: [██████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] v2.0 Phase 10 complete + Phase 11 Plans 01-03 done (7/~17 plans)
 
 ## Performance Metrics
 
@@ -52,15 +52,17 @@ None.
 
 - Windows resize flickering: Brief black/white flicker during window resize on Windows is expected wgpu/winit swap chain reconfiguration behavior, not an ora bug
 - `can_switch_active()` in workspace.rs must NOT be called during normal tab switching — CONFIRMED PATTERN (11-02): switch_tab uses set_active_view directly
+- Hitbox registration order determines priority: hit_test iterates in REVERSE order — register children (close button) AFTER parents (tab body) so children win. CONFIRMED PATTERN (11-03)
+- Callbacks shared across multiple handlers must use Rc<dyn Fn()> not Box (11-03: close button + middle-click both need on_close)
 - `open_document()` creates duplicate Document instances for same path — RESOLVED (11-01) Buffer Registry (path_to_doc) prevents duplicates
 - `Document::title()` returned "Yeni Dosya" (Turkish): RESOLVED (10-04) — changed to "[New File]"
 
 ## Session Continuity
 
 Last session: 2026-03-26
-Stopped at: Completed 11-02-PLAN.md (Tab command handlers: SwitchTab, CloseTab, Ctrl+Shift+Tab)
+Stopped at: Completed 11-03-PLAN.md (Tab bar click handlers, dot indicator, accent border)
 Resume file: None
-Next: Phase 11 Plan 03 — Tab bar click handling in UI layer
+Next: Phase 11 Plan 04 — Human verification checkpoint for tab bar interactivity
 
 ---
 *State initialized: 2026-01-28*
