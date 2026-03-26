@@ -167,10 +167,12 @@ impl Element for TreeItem {
         let hitbox_id = cx.register_hitbox(bounds, true);
         state.hitbox_id = Some(hitbox_id);
 
-        // Wire on_click callback to mouse event dispatch
+        // Wire on_click callback to mouse event dispatch (double-click for files)
         if let Some(on_click) = self.on_click.take() {
-            cx.on_mouse_down(hitbox_id, move |_event, _ctx| {
-                on_click();
+            cx.on_mouse_down(hitbox_id, move |event, _ctx| {
+                if event.click_count >= 2 {
+                    on_click();
+                }
             });
         }
 

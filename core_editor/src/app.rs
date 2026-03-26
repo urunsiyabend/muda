@@ -98,12 +98,12 @@ impl App {
         })
     }
 
-    /// Creates an App by opening a directory (shows sidebar).
+    /// Creates an App by opening a directory (shows sidebar, no empty document).
     pub fn open_directory(path: &str) -> std::io::Result<Self> {
         let path_buf = PathBuf::from(path);
         let canonical_path = std::fs::canonicalize(&path_buf)?;
 
-        let workspace = Workspace::with_new_document();
+        let workspace = Workspace::new();
         let sidebar = Sidebar::new(Some(canonical_path));
 
         Ok(Self {

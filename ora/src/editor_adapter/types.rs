@@ -516,8 +516,10 @@ pub enum EditorCommand {
     SwitchTabPrev,
 
     // --- Sidebar ---
-    /// Open a file from the sidebar by path.
+    /// Open a file from the sidebar by path (double-click).
     OpenSidebarFile(String),
+    /// Toggle/navigate into a directory in the sidebar.
+    ToggleSidebarDir(String),
 
     // --- Search ---
     /// Find in file (Ctrl+F)

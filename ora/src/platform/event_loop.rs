@@ -55,6 +55,10 @@ pub struct OraApp {
     /// Reset to `Instant::now() + ACTIVITY_TIMEOUT + BLINK_RATE` on each keystroke.
     /// `None` means no caret is active and the loop sleeps indefinitely.
     next_blink_instant: Option<Instant>,
+    /// Double-click tracking: timestamp and position of last mouse press.
+    last_click_time: Option<Instant>,
+    last_click_pos: Point,
+    click_count: u32,
 }
 
 impl OraApp {
@@ -73,6 +77,9 @@ impl OraApp {
             scroll_top_px: 0.0,
             shared_scroll_offset: None,
             next_blink_instant: Some(Instant::now() + ACTIVITY_TIMEOUT + BLINK_RATE),
+            last_click_time: None,
+            last_click_pos: Point::new(0.0, 0.0),
+            click_count: 0,
         }
     }
 
@@ -102,6 +109,9 @@ impl OraApp {
             scroll_top_px: 0.0,
             shared_scroll_offset: Some(scroll_offset),
             next_blink_instant: Some(Instant::now() + ACTIVITY_TIMEOUT + BLINK_RATE),
+            last_click_time: None,
+            last_click_pos: Point::new(0.0, 0.0),
+            click_count: 0,
         }
     }
 }
@@ -265,10 +275,33 @@ impl ApplicationHandler for OraApp {
                             self.app_context.interaction_state.set_active(hit_id);
                             log::info!("Active state: Mouse button {:?} pressed on HitboxId({:?})", mouse_button, hit_id.0);
 
+                            // Track click count for double-click detection
+                            let now = Instant::now();
+                            let double_click_threshold = std::time::Duration::from_millis(400);
+                            let distance_threshold = 5.0_f32;
+                            let dx = self.cursor_position.x - self.last_click_pos.x;
+                            let dy = self.cursor_position.y - self.last_click_pos.y;
+                            let distance = (dx * dx + dy * dy).sqrt();
+
+                            if let Some(last_time) = self.last_click_time {
+                                if now.duration_since(last_time) < double_click_threshold
+                                    && distance < distance_threshold
+                                {
+                                    self.click_count += 1;
+                                } else {
+                                    self.click_count = 1;
+                                }
+                            } else {
+                                self.click_count = 1;
+                            }
+                            self.last_click_time = Some(now);
+                            self.last_click_pos = self.cursor_position;
+
                             let event = MouseDownEvent {
                                 position: self.cursor_position,
                                 button: mouse_button,
                                 modifiers: self.modifiers,
+                                click_count: self.click_count,
                             };
                             dispatch_mouse_down(&mut self.event_handlers, &event, hit_id);
                         }

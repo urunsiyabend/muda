@@ -254,7 +254,8 @@ fn to_core_command(cmd: EditorCommand) -> Option<CoreEditorCommand> {
         // v2 commands — handled before to_core_command is called,
         // but listed here for exhaustiveness.
         SaveAs | OpenFile | New | CloseTab | SwitchTab(_) | SwitchTabPrev
-        | Find | Replace | ReplaceAll | GoToLine | OpenSidebarFile(_) => return None,
+        | Find | Replace | ReplaceAll | GoToLine | OpenSidebarFile(_)
+        | ToggleSidebarDir(_) => return None,
     })
 }
 
@@ -294,6 +295,7 @@ impl BufferDataSource for CoreEditorAdapter {
         self.app.workspace
             .active_view()
             .map(|v| v.viewport.height)
+            .filter(|&h| h > 0)
             .unwrap_or(40)
     }
 
@@ -343,9 +345,16 @@ impl CommandDispatcher for CoreEditorAdapter {
                 return;
             }
             EditorCommand::OpenSidebarFile(path) => {
-                // Click on file in sidebar: open in editor.
+                // Double-click on file in sidebar: open in editor.
                 let path = std::path::PathBuf::from(path);
                 let _ = self.app.request_open_file(path);
+                return;
+            }
+            EditorCommand::ToggleSidebarDir(path) => {
+                // Click on directory in sidebar: navigate into it.
+                let path = std::path::PathBuf::from(path);
+                self.app.sidebar.set_base_directory(path);
+                self.app.needs_render = true;
                 return;
             }
             _ => {}

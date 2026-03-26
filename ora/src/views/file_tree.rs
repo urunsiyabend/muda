@@ -157,11 +157,21 @@ impl View for FileTreeView {
                 item
             };
 
-            // Wire click handler: files dispatch OpenSidebarFile, directories toggle expand
-            if !node.is_dir {
-                if let Some(ref dispatch) = self.dispatch {
-                    let dispatch = dispatch.clone();
-                    let path = node.path.clone();
+            // Wire click handlers via dispatch
+            if let Some(ref dispatch) = self.dispatch {
+                let dispatch = dispatch.clone();
+                let path = node.path.clone();
+                if node.is_dir {
+                    // Single click on directory: toggle/navigate
+                    item = item.on_toggle({
+                        let dispatch = dispatch.clone();
+                        let path = path.clone();
+                        move || {
+                            dispatch(EditorCommand::ToggleSidebarDir(path.clone()));
+                        }
+                    });
+                } else {
+                    // Double click on file: open (click_count check is in TreeItem)
                     item = item.on_click(move || {
                         dispatch(EditorCommand::OpenSidebarFile(path.clone()));
                     });
