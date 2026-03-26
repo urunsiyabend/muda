@@ -7,8 +7,11 @@
 //!
 //! Consumes `SidebarPresentation` from core_editor for visibility and entries.
 
+use std::rc::Rc;
+
 use crate::animation::transition::TransitionId;
 use crate::context::ViewContext;
+use crate::editor_adapter::EditorCommand;
 use crate::element::AnyElement;
 use crate::elements::{Div, TextElement};
 use crate::events::focus::FocusHandle;
@@ -85,6 +88,8 @@ pub struct SidebarView {
     toggle_focus: Option<FocusHandle>,
     /// File tree view for hierarchical file navigation.
     file_tree: FileTreeView,
+    /// Command dispatch callback for sidebar actions.
+    dispatch: Option<Rc<dyn Fn(EditorCommand)>>,
 }
 
 impl SidebarView {
@@ -96,6 +101,7 @@ impl SidebarView {
             width: SIDEBAR_DEFAULT_WIDTH,
             toggle_focus: None,
             file_tree: FileTreeView::new(tree),
+            dispatch: None,
         }
     }
 
@@ -107,7 +113,14 @@ impl SidebarView {
             width: SIDEBAR_DEFAULT_WIDTH,
             toggle_focus: Some(toggle_focus),
             file_tree: FileTreeView::new(tree),
+            dispatch: None,
         }
+    }
+
+    /// Attach a command dispatch callback for sidebar file actions.
+    pub fn with_dispatch(mut self, dispatch: Rc<dyn Fn(EditorCommand)>) -> Self {
+        self.dispatch = Some(dispatch);
+        self
     }
 
     /// Updates the file tree presentation data.
@@ -208,12 +221,16 @@ impl SidebarView {
                     .color(theme.color(ColorToken::FgMuted)));
         }
 
-        // Render FileTree
+        // Render FileTree — pass dispatch callback if available
+        let mut tree = FileTreeView::new(self.file_tree.presentation.clone());
+        if let Some(ref dispatch) = self.dispatch {
+            tree = tree.with_dispatch(dispatch.clone());
+        }
         Div::new()
             .flex_col()
             .grow(1.0)
             .bg(theme.color(ColorToken::BgSecondary))
-            .child(self.file_tree.render(cx))
+            .child(tree.render(cx))
     }
 
     /// Renders the collapsed icon rail state.

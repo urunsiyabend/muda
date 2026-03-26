@@ -15,7 +15,10 @@
 //! - Chevron uses ASCII "v" / ">" (no icon system dependency)
 //! - BgSecondary background for the whole panel
 
+use std::rc::Rc;
+
 use crate::context::ViewContext;
+use crate::editor_adapter::EditorCommand;
 use crate::element::AnyElement;
 use crate::elements::Div;
 use crate::elements::tree_item::tree_item;
@@ -67,13 +70,21 @@ pub fn icon_color_for_extension(ext: &str) -> Color {
 /// a `TreeItem` row with proper indentation, chevrons, and colored icons.
 pub struct FileTreeView {
     /// The presentation data (tree structure + selection state).
-    presentation: FileTreePresentation,
+    pub presentation: FileTreePresentation,
+    /// Command dispatch callback for file open actions.
+    dispatch: Option<Rc<dyn Fn(EditorCommand)>>,
 }
 
 impl FileTreeView {
     /// Creates a new `FileTreeView` from the given presentation data.
     pub fn new(presentation: FileTreePresentation) -> Self {
-        Self { presentation }
+        Self { presentation, dispatch: None }
+    }
+
+    /// Attach a command dispatch callback for handling file clicks.
+    pub fn with_dispatch(mut self, dispatch: Rc<dyn Fn(EditorCommand)>) -> Self {
+        self.dispatch = Some(dispatch);
+        self
     }
 
     /// Updates the presentation data (called when tree state changes).
@@ -135,16 +146,27 @@ impl View for FileTreeView {
                 icon_color_for_extension(&node.extension)
             };
 
-            let item = tree_item(&node.name)
+            let mut item = tree_item(&node.name)
                 .depth(*depth)
                 .selected(is_selected)
                 .icon_color(icon_color);
 
-            let item = if node.is_dir {
+            item = if node.is_dir {
                 item.directory(node.is_expanded)
             } else {
                 item
             };
+
+            // Wire click handler: files dispatch OpenSidebarFile, directories toggle expand
+            if !node.is_dir {
+                if let Some(ref dispatch) = self.dispatch {
+                    let dispatch = dispatch.clone();
+                    let path = node.path.clone();
+                    item = item.on_click(move || {
+                        dispatch(EditorCommand::OpenSidebarFile(path.clone()));
+                    });
+                }
+            }
 
             container = container.child(item);
         }

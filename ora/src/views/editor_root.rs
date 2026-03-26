@@ -81,7 +81,7 @@ impl EditorRootView {
                         .and_then(|s| s.to_str())
                         .unwrap_or("")
                         .to_string();
-                    FileTreeNode::file(&entry.name, ext)
+                    FileTreeNode::file_with_path(&entry.name, &entry.path, ext)
                 }
             })
             .collect();
@@ -96,16 +96,17 @@ impl EditorRootView {
 
     /// Build the AppLayout from a fresh RenderModel.
     fn build_layout(&self, model: &RenderModel) -> AppLayout {
-        let file_tree = Self::build_file_tree(&model.sidebar);
-        let sidebar = SidebarView::new(model.sidebar.clone(), file_tree);
-
-        // Build dispatch closure for tab click handlers.
-        // Clone the Rc<RefCell<...>> adapter so the closure captures a reference.
-        let adapter_for_tabs = self.adapter.clone();
-        let tab_dispatch: Rc<dyn Fn(EditorCommand)> = Rc::new(move |cmd: EditorCommand| {
-            adapter_for_tabs.borrow_mut().dispatch_command(cmd);
+        // Build shared dispatch closure for click handlers (tabs, sidebar, etc.).
+        let adapter_for_dispatch = self.adapter.clone();
+        let dispatch: Rc<dyn Fn(EditorCommand)> = Rc::new(move |cmd: EditorCommand| {
+            adapter_for_dispatch.borrow_mut().dispatch_command(cmd);
         });
-        let tab_bar = TabBarView::new(model.tab_bar.clone()).with_dispatch(tab_dispatch);
+
+        let file_tree = Self::build_file_tree(&model.sidebar);
+        let sidebar = SidebarView::new(model.sidebar.clone(), file_tree)
+            .with_dispatch(dispatch.clone());
+
+        let tab_bar = TabBarView::new(model.tab_bar.clone()).with_dispatch(dispatch.clone());
         let gutter = GutterView::new_with_scroll_offset(
             model.gutter.clone(),
             model.visible_lines.clone(),

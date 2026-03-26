@@ -271,6 +271,8 @@ impl DialogPresentation {
 pub struct FileEntryPresentation {
     /// The display name of the file/directory.
     pub name: String,
+    /// Full path to the file/directory.
+    pub path: String,
     /// Whether this is a directory.
     pub is_dir: bool,
     /// Whether this entry is currently selected.
@@ -278,9 +280,10 @@ pub struct FileEntryPresentation {
 }
 
 impl FileEntryPresentation {
-    pub fn new(name: String, is_dir: bool, is_selected: bool) -> Self {
+    pub fn new(name: String, path: String, is_dir: bool, is_selected: bool) -> Self {
         Self {
             name,
+            path,
             is_dir,
             is_selected,
         }
@@ -326,6 +329,8 @@ impl TabPresentation {
 pub struct FileTreeNode {
     /// Display name (file or directory name).
     pub name: String,
+    /// Full path to the file/directory.
+    pub path: String,
     /// File extension (e.g., "rs", "js") for icon coloring. Empty for directories.
     pub extension: String,
     /// Whether this is a directory.
@@ -339,8 +344,10 @@ pub struct FileTreeNode {
 impl FileTreeNode {
     /// Create a file node with the given name and extension.
     pub fn file(name: impl Into<String>, extension: impl Into<String>) -> Self {
+        let n = name.into();
         Self {
-            name: name.into(),
+            path: n.clone(),
+            name: n,
             extension: extension.into(),
             is_dir: false,
             is_expanded: false,
@@ -350,8 +357,10 @@ impl FileTreeNode {
 
     /// Create a directory node with the given name, expanded state, and children.
     pub fn dir(name: impl Into<String>, expanded: bool, children: Vec<FileTreeNode>) -> Self {
+        let n = name.into();
         Self {
-            name: name.into(),
+            path: n.clone(),
+            name: n,
             extension: String::new(),
             is_dir: true,
             is_expanded: expanded,

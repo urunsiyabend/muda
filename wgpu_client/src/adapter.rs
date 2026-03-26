@@ -177,6 +177,7 @@ fn convert_sidebar_presentation(s: core_editor::view_model::SidebarPresentation)
         directory_name: s.directory_name,
         entries: s.entries.into_iter().map(|e| FileEntryPresentation {
             name: e.name,
+            path: e.path,
             is_dir: e.is_dir,
             is_selected: e.is_selected,
         }).collect(),
@@ -253,7 +254,7 @@ fn to_core_command(cmd: EditorCommand) -> Option<CoreEditorCommand> {
         // v2 commands — handled before to_core_command is called,
         // but listed here for exhaustiveness.
         SaveAs | OpenFile | New | CloseTab | SwitchTab(_) | SwitchTabPrev
-        | Find | Replace | ReplaceAll | GoToLine => return None,
+        | Find | Replace | ReplaceAll | GoToLine | OpenSidebarFile(_) => return None,
     })
 }
 
@@ -339,6 +340,12 @@ impl CommandDispatcher for CoreEditorAdapter {
             EditorCommand::CloseTab => {
                 // Ctrl+W: close active tab with dirty-buffer protection.
                 self.app.close_active_tab();
+                return;
+            }
+            EditorCommand::OpenSidebarFile(path) => {
+                // Click on file in sidebar: open in editor.
+                let path = std::path::PathBuf::from(path);
+                let _ = self.app.request_open_file(path);
                 return;
             }
             _ => {}

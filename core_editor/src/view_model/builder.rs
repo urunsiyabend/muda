@@ -206,6 +206,7 @@ impl ViewModelBuilder {
                 let actual_index = sidebar.scroll_offset + i;
                 FileEntryPresentation::new(
                     entry.name.clone(),
+                    entry.path.to_string_lossy().to_string(),
                     entry.is_dir,
                     actual_index == sidebar.selected_index,
                 )
