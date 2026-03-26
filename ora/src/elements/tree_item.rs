@@ -17,6 +17,7 @@ pub struct TreeItem {
     is_dir: bool,
     is_expanded: bool,
     is_selected: bool,
+    is_generated: bool,
     icon_color: Option<Color>,
     on_click: Option<Box<dyn Fn() + 'static>>,
     on_toggle: Option<Box<dyn Fn() + 'static>>,
@@ -34,6 +35,7 @@ pub fn tree_item(label: impl Into<String>) -> TreeItem {
         is_dir: false,
         is_expanded: false,
         is_selected: false,
+        is_generated: false,
         icon_color: None,
         on_click: None,
         on_toggle: None,
@@ -60,6 +62,12 @@ impl TreeItem {
     /// Highlight this node as selected
     pub fn selected(mut self, selected: bool) -> Self {
         self.is_selected = selected;
+        self
+    }
+
+    /// Mark as a generated/build directory (muted styling)
+    pub fn generated(mut self, generated: bool) -> Self {
+        self.is_generated = generated;
         self
     }
 
@@ -168,10 +176,12 @@ impl Element for TreeItem {
         state.hitbox_id = Some(hitbox_id);
 
         if self.is_dir {
-            // Directories: single click anywhere on the row toggles expand
+            // Directories: single click toggles expand (ignore double-click's second press)
             if let Some(on_toggle) = self.on_toggle.take() {
-                cx.on_mouse_down(hitbox_id, move |_event, _ctx| {
-                    on_toggle();
+                cx.on_mouse_down(hitbox_id, move |event, _ctx| {
+                    if event.click_count == 1 {
+                        on_toggle();
+                    }
                 });
             }
         } else {
@@ -208,6 +218,11 @@ impl Element for TreeItem {
             let mut c = cx.theme().color(ColorToken::Accent);
             c.a = 0.15; // low-alpha accent for selection
             c
+        } else if self.is_generated {
+            // Generated/build dirs get a subtle background tint
+            let mut c = cx.theme().color(ColorToken::FgMuted);
+            c.a = 0.06;
+            c
         } else if is_hovered {
             cx.theme().color(ColorToken::BgElevated)
         } else {
@@ -215,7 +230,11 @@ impl Element for TreeItem {
         };
 
         let chevron_color = cx.theme().color(ColorToken::FgMuted);
-        let label_color = cx.theme().color(ColorToken::FgPrimary);
+        let label_color = if self.is_generated {
+            cx.theme().color(ColorToken::FgMuted)
+        } else {
+            cx.theme().color(ColorToken::FgPrimary)
+        };
         let border_color = cx.theme().color(ColorToken::Border);
 
         let icon_color = if let Some(c) = self.icon_color {

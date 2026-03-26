@@ -176,6 +176,7 @@ fn convert_file_tree_node(n: core_editor::view_model::FileTreeNode) -> ora::edit
         extension: n.extension,
         is_dir: n.is_dir,
         is_expanded: n.is_expanded,
+        is_generated: n.is_generated,
         children: n.children.into_iter().map(convert_file_tree_node).collect(),
     }
 }

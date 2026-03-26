@@ -339,6 +339,8 @@ pub struct FileTreeNode {
     pub is_dir: bool,
     /// Whether this directory is expanded (only meaningful for directories).
     pub is_expanded: bool,
+    /// Whether this is a generated/build directory (target, node_modules, etc.).
+    pub is_generated: bool,
     /// Nested children (only for directories).
     pub children: Vec<FileTreeNode>,
 }
@@ -353,6 +355,7 @@ impl FileTreeNode {
             extension: extension.into(),
             is_dir: false,
             is_expanded: false,
+            is_generated: false,
             children: vec![],
         }
     }
@@ -366,6 +369,7 @@ impl FileTreeNode {
             extension: String::new(),
             is_dir: true,
             is_expanded: expanded,
+            is_generated: false,
             children,
         }
     }

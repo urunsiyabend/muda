@@ -149,7 +149,8 @@ impl View for FileTreeView {
             let mut item = tree_item(&node.name)
                 .depth(*depth)
                 .selected(is_selected)
-                .icon_color(icon_color);
+                .icon_color(icon_color)
+                .generated(node.is_generated);
 
             item = if node.is_dir {
                 item.directory(node.is_expanded)

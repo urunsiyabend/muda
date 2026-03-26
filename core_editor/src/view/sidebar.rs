@@ -113,11 +113,8 @@ impl Sidebar {
                 let path = entry.path();
                 let name = entry.file_name().to_string_lossy().to_string();
 
-                // Skip hidden files and common noise directories
+                // Skip hidden files (dotfiles)
                 if name.starts_with('.') {
-                    return None;
-                }
-                if matches!(name.as_str(), "target" | "node_modules" | "__pycache__") {
                     return None;
                 }
 
@@ -172,8 +169,14 @@ impl Sidebar {
                     } else {
                         Vec::new()
                     };
+                    let is_generated = matches!(
+                        entry.name.as_str(),
+                        "target" | "node_modules" | "__pycache__" | "dist" | "build"
+                        | ".next" | "out" | "coverage" | ".turbo"
+                    );
                     let mut node = crate::view_model::FileTreeNode::dir(&entry.name, is_expanded, children);
                     node.path = entry.path.to_string_lossy().to_string();
+                    node.is_generated = is_generated;
                     node
                 } else {
                     let ext = entry.path.extension()
