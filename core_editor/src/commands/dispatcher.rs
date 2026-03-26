@@ -50,6 +50,8 @@ pub enum DispatchResult {
 pub struct CommandDispatcher {
     /// System clipboard for copy/cut/paste.
     clipboard: Option<Clipboard>,
+    /// Tracks whether the last clipboard write was a full-line copy.
+    clipboard_is_line_copy: bool,
 }
 
 impl CommandDispatcher {
@@ -57,6 +59,7 @@ impl CommandDispatcher {
     pub fn new() -> Self {
         Self {
             clipboard: Clipboard::new().ok(),
+            clipboard_is_line_copy: false,
         }
     }
 
@@ -656,10 +659,21 @@ impl CommandDispatcher {
 
     fn handle_copy(&mut self, ctx: &CommandContext) {
         if let Some((start, end)) = ctx.view.selection_range() {
+            // Selection active: copy selected text
             let text = ctx.document.slice(TextRange::new(start, end));
             if let Some(ref mut cb) = self.clipboard {
                 let _ = cb.set_text(text);
             }
+            self.clipboard_is_line_copy = false;
+        } else {
+            // No selection: copy entire current line including newline
+            let pos = self.offset_to_position(ctx, ctx.view.caret_offset());
+            let line_text = ctx.document.line(pos.line);
+            let full_line = format!("{}\n", line_text);
+            if let Some(ref mut cb) = self.clipboard {
+                let _ = cb.set_text(full_line);
+            }
+            self.clipboard_is_line_copy = true;
         }
     }
 
@@ -674,6 +688,7 @@ impl CommandDispatcher {
             if let Some(ref mut cb) = self.clipboard {
                 let _ = cb.set_text(text.clone());
             }
+            self.clipboard_is_line_copy = false;
 
             let op = EditOperation::delete(start, text);
             ctx.history.execute(op, ctx.document.buffer_mut());
@@ -687,19 +702,159 @@ impl CommandDispatcher {
             let affected = TextRange::new(start, end);
             self.emit_document_changed(ctx, Some(affected));
             self.emit_selection_changed(ctx);
+        } else {
+            // No selection: cut entire current line
+            let pos = self.offset_to_position(ctx, ctx.view.caret_offset());
+            let line_start = self.position_to_offset(ctx, TextPosition::new(pos.line, 0));
+
+            // Calculate line end including newline
+            let line_text = ctx.document.line(pos.line);
+            let line_char_len = line_text.chars().count();
+            let is_last_line = pos.line + 1 >= ctx.document.len_lines();
+            let line_end = if is_last_line {
+                // Last line: no trailing newline to consume
+                line_start + line_char_len
+            } else {
+                // Include the newline character
+                line_start + line_char_len + 1
+            };
+
+            let full_line = if is_last_line {
+                format!("{}\n", line_text)
+            } else {
+                ctx.document.slice(TextRange::new(line_start, line_end))
+            };
+
+            if let Some(ref mut cb) = self.clipboard {
+                let _ = cb.set_text(full_line.clone());
+            }
+            self.clipboard_is_line_copy = true;
+
+            let deleted_len = line_end - line_start;
+            if deleted_len > 0 {
+                let deleted_text = ctx.document.slice(TextRange::new(line_start, line_end));
+                let op = EditOperation::delete(line_start, deleted_text);
+                ctx.history.execute(op, ctx.document.buffer_mut());
+
+                // If we deleted the last line and there's a preceding newline, clean it up
+                if is_last_line && line_start > 0 {
+                    // Remove the trailing newline of the previous line
+                    if let Some(ch) = ctx.document.buffer().char_at(line_start - 1) {
+                        if ch == '\n' {
+                            let nl_op = EditOperation::delete(line_start - 1, "\n".to_string());
+                            ctx.history.execute(nl_op, ctx.document.buffer_mut());
+                            ctx.view.move_caret_to(line_start - 1, false);
+                            ctx.document.update_syntax_incremental(line_start - 1, deleted_len + 1, 0);
+                            let affected = TextRange::new(line_start - 1, line_end);
+                            ctx.view.clear_selection();
+                            self.emit_document_changed(ctx, Some(affected));
+                            self.emit_selection_changed(ctx);
+                            return;
+                        }
+                    }
+                }
+
+                ctx.view.move_caret_to(line_start, false);
+                ctx.view.clear_selection();
+
+                ctx.document.update_syntax_incremental(line_start, deleted_len, 0);
+
+                let affected = TextRange::new(line_start, line_end);
+                self.emit_document_changed(ctx, Some(affected));
+                self.emit_selection_changed(ctx);
+            }
         }
     }
 
     fn handle_paste(&mut self, ctx: &mut CommandContext) {
-        if let Some(ref mut cb) = self.clipboard {
-            if let Ok(text) = cb.get_text() {
-                // Delete selection first if any
+        // Extract clipboard text before any &mut self calls (borrow conflict avoidance)
+        let clipboard_text = self.clipboard.as_mut().and_then(|cb| cb.get_text().ok());
+        let is_line_copy = self.clipboard_is_line_copy;
+
+        if let Some(text) = clipboard_text {
+            if is_line_copy && !ctx.view.has_selection() {
+                // Line paste: insert above current line
+                let pos = self.offset_to_position(ctx, ctx.view.caret_offset());
+                let line_start = self.position_to_offset(ctx, TextPosition::new(pos.line, 0));
+
+                // Auto-indent the pasted line(s) to match the current line's indentation
+                let pasted = self.auto_indent_paste(&text, ctx);
+
+                let text_len = pasted.chars().count();
+                let op = EditOperation::insert_string(line_start, pasted);
+                ctx.history.execute(op, ctx.document.buffer_mut());
+
+                // Position caret at the start of the inserted text
+                ctx.view.move_caret_to(line_start, false);
+                ctx.view.clear_selection();
+
+                ctx.document.update_syntax_incremental(line_start, 0, text_len);
+
+                let affected = TextRange::new(line_start, line_start + text_len);
+                self.emit_document_changed(ctx, Some(affected));
+                self.emit_selection_changed(ctx);
+            } else {
+                // Normal paste: delete selection first if any
                 if ctx.view.has_selection() {
                     self.handle_delete_selection(ctx);
                 }
-                self.handle_insert_text(ctx, &text);
+                // Auto-indent multi-line paste
+                let pasted = self.auto_indent_paste(&text, ctx);
+                self.handle_insert_text(ctx, &pasted);
             }
         }
+    }
+
+    /// Auto-indents pasted text to match the indentation of the current line.
+    ///
+    /// For single-line paste: no adjustment.
+    /// For multi-line paste: adjusts indentation of all lines relative to the
+    /// first non-empty line, matching the current line's indentation.
+    fn auto_indent_paste(&self, text: &str, ctx: &CommandContext) -> String {
+        let lines: Vec<&str> = text.split('\n').collect();
+
+        // Single-line paste: no adjustment needed
+        if lines.len() <= 1 {
+            return text.to_string();
+        }
+
+        // Find the indentation of the current line (where paste target is)
+        let pos = self.offset_to_position(ctx, ctx.view.caret_offset());
+        let current_line = ctx.document.line(pos.line);
+        let target_indent: String = current_line
+            .chars()
+            .take_while(|c| *c == ' ' || *c == '\t')
+            .collect();
+
+        // Find the indentation of the first non-empty paste line
+        let first_nonempty = lines.iter().find(|l| !l.trim().is_empty());
+        let source_indent: String = match first_nonempty {
+            Some(line) => line.chars().take_while(|c| *c == ' ' || *c == '\t').collect(),
+            None => return text.to_string(),
+        };
+
+        // Re-indent: replace source indent with target indent on each line
+        let mut result = Vec::with_capacity(lines.len());
+        for (i, line) in lines.iter().enumerate() {
+            if line.trim().is_empty() {
+                // Preserve empty lines
+                result.push(line.to_string());
+            } else if line.starts_with(&source_indent) {
+                // Replace source indentation prefix with target
+                let remainder = &line[source_indent.len()..];
+                result.push(format!("{}{}", target_indent, remainder));
+            } else {
+                // Line has less indent than source — keep as-is
+                result.push(line.to_string());
+            }
+
+            // Avoid trailing newline duplication
+            if i < lines.len() - 1 {
+                // Will be joined with \n
+            }
+        }
+
+        result.join("\n")
     }
 
     // =========================================================================
@@ -759,6 +914,18 @@ fn char_class(ch: char) -> CharClass {
         CharClass::Whitespace
     } else {
         CharClass::Punctuation
+    }
+}
+
+#[cfg(test)]
+impl CommandDispatcher {
+    /// Sets the clipboard text and line-copy flag for testing.
+    /// Bypasses system clipboard for deterministic test behavior.
+    fn set_clipboard_for_test(&mut self, text: &str, is_line: bool) {
+        if let Some(ref mut cb) = self.clipboard {
+            let _ = cb.set_text(text.to_string());
+        }
+        self.clipboard_is_line_copy = is_line;
     }
 }
 
@@ -882,6 +1049,259 @@ mod tests {
         // Redo
         dispatcher.dispatch(EditorCommand::Redo, &mut ctx);
         assert_eq!(ctx.document.content(), "HelloX World");
+    }
+
+    fn create_multiline_context() -> (Document, EditorView, CommandHistory, EventBus) {
+        let doc = Document::from_str("line one\nline two\nline three", None);
+        let view = EditorView::new(doc.id());
+        let history = CommandHistory::new();
+        let event_bus = EventBus::new();
+        (doc, view, history, event_bus)
+    }
+
+    #[test]
+    fn test_copy_no_selection_copies_full_line() {
+        let (mut doc, mut view, mut history, mut event_bus) = create_multiline_context();
+        let mut dispatcher = CommandDispatcher::new();
+
+        let mut ctx = CommandContext {
+            view: &mut view,
+            document: &mut doc,
+            history: &mut history,
+            event_bus: &mut event_bus,
+        };
+
+        // Place caret on line 1 (middle of "line two")
+        // "line one\n" = 9 chars, so offset 13 is inside "line two"
+        ctx.view.move_caret_to(13, false);
+        dispatcher.dispatch(EditorCommand::Copy, &mut ctx);
+
+        // clipboard_is_line_copy should be true
+        assert!(dispatcher.clipboard_is_line_copy);
+        // Document unchanged
+        assert_eq!(ctx.document.content(), "line one\nline two\nline three");
+    }
+
+    #[test]
+    fn test_copy_with_selection_copies_selection_only() {
+        let (mut doc, mut view, mut history, mut event_bus) = create_multiline_context();
+        let mut dispatcher = CommandDispatcher::new();
+
+        let mut ctx = CommandContext {
+            view: &mut view,
+            document: &mut doc,
+            history: &mut history,
+            event_bus: &mut event_bus,
+        };
+
+        // Select "line" from "line one"
+        ctx.view.begin_selection();
+        ctx.view.move_caret_to(4, true);
+        dispatcher.dispatch(EditorCommand::Copy, &mut ctx);
+
+        // clipboard_is_line_copy should be false
+        assert!(!dispatcher.clipboard_is_line_copy);
+        // Document unchanged
+        assert_eq!(ctx.document.content(), "line one\nline two\nline three");
+    }
+
+    #[test]
+    fn test_cut_no_selection_removes_entire_line() {
+        let (mut doc, mut view, mut history, mut event_bus) = create_multiline_context();
+        let mut dispatcher = CommandDispatcher::new();
+
+        let mut ctx = CommandContext {
+            view: &mut view,
+            document: &mut doc,
+            history: &mut history,
+            event_bus: &mut event_bus,
+        };
+
+        // Place caret on line 1 ("line two")
+        ctx.view.move_caret_to(13, false);
+        dispatcher.dispatch(EditorCommand::Cut, &mut ctx);
+
+        assert!(dispatcher.clipboard_is_line_copy);
+        // Line "line two\n" should be removed
+        assert_eq!(ctx.document.content(), "line one\nline three");
+    }
+
+    #[test]
+    fn test_cut_no_selection_last_line() {
+        let (mut doc, mut view, mut history, mut event_bus) = create_multiline_context();
+        let mut dispatcher = CommandDispatcher::new();
+
+        let mut ctx = CommandContext {
+            view: &mut view,
+            document: &mut doc,
+            history: &mut history,
+            event_bus: &mut event_bus,
+        };
+
+        // Place caret on last line ("line three"), offset = 9 + 9 = 18
+        ctx.view.move_caret_to(20, false);
+        dispatcher.dispatch(EditorCommand::Cut, &mut ctx);
+
+        assert!(dispatcher.clipboard_is_line_copy);
+        // Last line removed, along with the preceding newline
+        assert_eq!(ctx.document.content(), "line one\nline two");
+    }
+
+    #[test]
+    fn test_cut_with_selection_cuts_selection() {
+        let (mut doc, mut view, mut history, mut event_bus) = create_multiline_context();
+        let mut dispatcher = CommandDispatcher::new();
+
+        let mut ctx = CommandContext {
+            view: &mut view,
+            document: &mut doc,
+            history: &mut history,
+            event_bus: &mut event_bus,
+        };
+
+        // Select "one" from "line one"
+        ctx.view.begin_selection();
+        ctx.view.move_caret_to(4, true);
+        // Now select just chars 0..4 ("line")
+        dispatcher.dispatch(EditorCommand::Cut, &mut ctx);
+
+        assert!(!dispatcher.clipboard_is_line_copy);
+        assert_eq!(ctx.document.content(), " one\nline two\nline three");
+    }
+
+    #[test]
+    fn test_paste_line_copy_inserts_above_current_line() {
+        let (mut doc, mut view, mut history, mut event_bus) = create_multiline_context();
+        let mut dispatcher = CommandDispatcher::new();
+
+        // Set clipboard directly to avoid system clipboard race conditions
+        dispatcher.set_clipboard_for_test("line one\n", true);
+
+        let mut ctx = CommandContext {
+            view: &mut view,
+            document: &mut doc,
+            history: &mut history,
+            event_bus: &mut event_bus,
+        };
+
+        // Move caret to line 2 ("line three")
+        ctx.view.move_caret_to(20, false);
+        dispatcher.dispatch(EditorCommand::Paste, &mut ctx);
+
+        // "line one\n" should be inserted above "line three"
+        assert_eq!(
+            ctx.document.content(),
+            "line one\nline two\nline one\nline three"
+        );
+    }
+
+    #[test]
+    fn test_paste_with_selection_replaces_selection() {
+        let (mut doc, mut view, mut history, mut event_bus) = create_multiline_context();
+        let mut dispatcher = CommandDispatcher::new();
+
+        // Set clipboard directly to avoid system clipboard race conditions
+        dispatcher.set_clipboard_for_test("line one", false);
+
+        let mut ctx = CommandContext {
+            view: &mut view,
+            document: &mut doc,
+            history: &mut history,
+            event_bus: &mut event_bus,
+        };
+
+        // Select "line two"
+        ctx.view.move_caret_to(9, false); // start of "line two"
+        ctx.view.begin_selection();
+        ctx.view.move_caret_to(17, true); // end of "line two"
+
+        dispatcher.dispatch(EditorCommand::Paste, &mut ctx);
+        assert_eq!(
+            ctx.document.content(),
+            "line one\nline one\nline three"
+        );
+    }
+
+    #[test]
+    fn test_auto_indent_multi_line_paste() {
+        // Create a document with indented lines
+        let doc = Document::from_str("    fn main() {\n        let x = 1;\n    }", None);
+        let view = EditorView::new(doc.id());
+        let history = CommandHistory::new();
+        let event_bus = EventBus::new();
+        let (mut doc, mut view, mut history, mut event_bus) = (doc, view, history, event_bus);
+        let dispatcher = CommandDispatcher::new();
+
+        let ctx = CommandContext {
+            view: &mut view,
+            document: &mut doc,
+            history: &mut history,
+            event_bus: &mut event_bus,
+        };
+
+        // Test auto_indent_paste with a multi-line text pasted at line with 8-space indent
+        // Caret at offset 16 = start of "        let x = 1;"
+        ctx.view.move_caret_to(16, false);
+
+        let paste_text = "if true {\n    println!(\"hello\");\n}";
+        let result = dispatcher.auto_indent_paste(paste_text, &ctx);
+
+        // The first non-empty line of paste_text has 0-space indent.
+        // Current line has 8-space indent. So all lines get +8 spaces.
+        assert_eq!(
+            result,
+            "        if true {\n            println!(\"hello\");\n        }"
+        );
+    }
+
+    #[test]
+    fn test_auto_indent_single_line_paste_no_change() {
+        let (mut doc, mut view, mut history, mut event_bus) = create_multiline_context();
+        let dispatcher = CommandDispatcher::new();
+
+        let ctx = CommandContext {
+            view: &mut view,
+            document: &mut doc,
+            history: &mut history,
+            event_bus: &mut event_bus,
+        };
+
+        let paste_text = "hello world";
+        let result = dispatcher.auto_indent_paste(paste_text, &ctx);
+        assert_eq!(result, "hello world");
+    }
+
+    #[test]
+    fn test_clipboard_is_line_copy_flag_tracks_correctly() {
+        let (mut doc, mut view, mut history, mut event_bus) = create_multiline_context();
+        let mut dispatcher = CommandDispatcher::new();
+
+        let mut ctx = CommandContext {
+            view: &mut view,
+            document: &mut doc,
+            history: &mut history,
+            event_bus: &mut event_bus,
+        };
+
+        // Initially false
+        assert!(!dispatcher.clipboard_is_line_copy);
+
+        // Copy with no selection -> true
+        ctx.view.move_caret_to(3, false);
+        dispatcher.dispatch(EditorCommand::Copy, &mut ctx);
+        assert!(dispatcher.clipboard_is_line_copy);
+
+        // Copy with selection -> false
+        ctx.view.begin_selection();
+        ctx.view.move_caret_to(8, true);
+        dispatcher.dispatch(EditorCommand::Copy, &mut ctx);
+        assert!(!dispatcher.clipboard_is_line_copy);
+
+        // Cut with no selection -> true
+        ctx.view.clear_selection();
+        ctx.view.move_caret_to(3, false);
+        dispatcher.dispatch(EditorCommand::Cut, &mut ctx);
+        assert!(dispatcher.clipboard_is_line_copy);
     }
 
     #[test]
