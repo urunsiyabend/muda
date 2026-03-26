@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-03-26)
 ## Current Position
 
 Phase: 11 — Buffer Registry + Multi-Tab (in progress)
-Plan: 01 of 3 (Buffer Registry, tab_order, mru_stack)
-Status: In progress — Plan 01 complete
-Last activity: 2026-03-26 — Completed 11-01-PLAN.md (Buffer Registry + tab ordering data structures)
+Plan: 02 of 3 (Tab command handlers: SwitchTab, CloseTab, Ctrl+Shift+Tab)
+Status: In progress — Plan 02 complete
+Last activity: 2026-03-26 — Completed 11-02-PLAN.md (Tab switching + close command handlers)
 
-Progress: [████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] v2.0 Phase 10 complete + Phase 11 Plan 01 done (5/~17 plans)
+Progress: [█████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] v2.0 Phase 10 complete + Phase 11 Plans 01-02 done (6/~17 plans)
 
 ## Performance Metrics
 
@@ -51,17 +51,17 @@ None.
 ### Known Issues
 
 - Windows resize flickering: Brief black/white flicker during window resize on Windows is expected wgpu/winit swap chain reconfiguration behavior, not an ora bug
-- `can_switch_active()` in workspace.rs must NOT be called during normal tab switching — only on close/quit (Phase 11)
+- `can_switch_active()` in workspace.rs must NOT be called during normal tab switching — CONFIRMED PATTERN (11-02): switch_tab uses set_active_view directly
 - `open_document()` creates duplicate Document instances for same path — RESOLVED (11-01) Buffer Registry (path_to_doc) prevents duplicates
 - `Document::title()` returned "Yeni Dosya" (Turkish): RESOLVED (10-04) — changed to "[New File]"
 
 ## Session Continuity
 
 Last session: 2026-03-26
-Stopped at: Completed 11-01-PLAN.md (Buffer Registry + tab_order + mru_stack)
+Stopped at: Completed 11-02-PLAN.md (Tab command handlers: SwitchTab, CloseTab, Ctrl+Shift+Tab)
 Resume file: None
-Next: Phase 11 Plan 02 — Tab close command using mru_stack fallback
+Next: Phase 11 Plan 03 — Tab bar click handling in UI layer
 
 ---
 *State initialized: 2026-01-28*
-*Last updated: 2026-03-26 after 10-04 completion (Phase 10 complete)*
+*Last updated: 2026-03-26 after 11-02 completion (Tab switching commands end-to-end)*
