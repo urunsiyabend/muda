@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-03-26)
 
 **Core value:** A functional, performant code editor built on ora's GPU-accelerated UI framework.
-**Current focus:** v2.0 Functional Editor — Phase 12 complete, next: Phase 13 (Selection + Clipboard).
+**Current focus:** v2.0 Functional Editor — Phase 13 in progress (Selection + Clipboard).
 
 ## Current Position
 
-Phase: 12 — File Operations (complete, including gap closure)
-Plan: 04 of 4 (complete)
-Status: Phase 12 complete — all 4 plans done (including gap closure 12-04)
-Last activity: 2026-03-26 — Completed 12-04-PLAN.md (dialog input suppression, 3s timed status messages)
+Phase: 13 — Selection + Clipboard (in progress)
+Plan: 01 of 4 (complete)
+Status: In progress — Plan 01 complete (click-to-cursor positioning)
+Last activity: 2026-03-26 — Completed 13-01-PLAN.md (ClickAt/DragTo command pipeline, pixel-to-doc conversion)
 
-Progress: [████████████░░░░░░░░░░░░░░░░░░░░░░░░] v2.0 Phase 12 complete (12/~18 plans)
+Progress: [█████████████░░░░░░░░░░░░░░░░░░░░░░░] v2.0 Phase 13 plan 1 complete (13/~18 plans)
 
 ## Performance Metrics
 
@@ -70,13 +70,17 @@ Plan 02: Ctrl+O native dialog, background file reading, UTF-8 validation, BOM st
 Plan 03: Ctrl+S silent save / Save As dialog (rfd save_file), handle_file_saved callback, last-dir persisted to state.json, open+save dialogs pre-populate directory
 Plan 04 (gap closure): Dialog input suppression for CursorMoved/MouseInput/MouseWheel/KeyboardInput; 3-second timed status messages with Instant expiry; about_to_wait earliest-wake scheduling
 
+## Phase 13 Summary
+
+Plan 01: ClickAt/DragTo command pipeline, pixel_to_doc conversion with mid-character snap, word/line selection on double/triple-click, drag-to-select, 7 new tests
+
 ## Session Continuity
 
-Last session: 2026-03-26T18:48:12Z
-Stopped at: Completed 12-04-PLAN.md (Phase 12 gap closure complete)
+Last session: 2026-03-26T19:36:00Z
+Stopped at: Completed 13-01-PLAN.md (click-to-cursor positioning)
 Resume file: None
-Next: Phase 13 — Selection + Clipboard
+Next: Phase 13 Plan 02 — Drag Selection + Shift-Click
 
 ---
 *State initialized: 2026-01-28*
-*Last updated: 2026-03-26 after Phase 12 completion*
+*Last updated: 2026-03-26 after Phase 13 Plan 01 completion*
