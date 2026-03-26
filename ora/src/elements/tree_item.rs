@@ -167,35 +167,20 @@ impl Element for TreeItem {
         let hitbox_id = cx.register_hitbox(bounds, true);
         state.hitbox_id = Some(hitbox_id);
 
-        // Wire on_click callback to mouse event dispatch (double-click for files)
-        if let Some(on_click) = self.on_click.take() {
-            cx.on_mouse_down(hitbox_id, move |event, _ctx| {
-                if event.click_count >= 2 {
-                    on_click();
-                }
-            });
-        }
-
-        // Separate hitbox for chevron area (directory toggle)
         if self.is_dir {
-            let left_padding = self.depth as f32 * INDENT_WIDTH;
-            let chevron_bounds = Rect {
-                origin: Point {
-                    x: bounds.origin.x + left_padding,
-                    y: bounds.origin.y,
-                },
-                size: Size {
-                    width: CHEVRON_WIDTH,
-                    height: TREE_ITEM_HEIGHT,
-                },
-            };
-            let chevron_hitbox_id = cx.register_hitbox(chevron_bounds, true);
-            state.chevron_hitbox_id = Some(chevron_hitbox_id);
-
-            // Wire on_toggle callback to chevron hitbox
+            // Directories: single click anywhere on the row toggles expand
             if let Some(on_toggle) = self.on_toggle.take() {
-                cx.on_mouse_down(chevron_hitbox_id, move |_event, _ctx| {
+                cx.on_mouse_down(hitbox_id, move |_event, _ctx| {
                     on_toggle();
+                });
+            }
+        } else {
+            // Files: double-click to open
+            if let Some(on_click) = self.on_click.take() {
+                cx.on_mouse_down(hitbox_id, move |event, _ctx| {
+                    if event.click_count >= 2 {
+                        on_click();
+                    }
                 });
             }
         }
