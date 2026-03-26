@@ -1,6 +1,6 @@
 use crate::app::App;
 use crate::context::{AppContext, WindowContext};
-use crate::editor_adapter::EditorDataSource;
+use crate::editor_adapter::{EditorDataSource, PendingFileOp};
 use crate::element::{LayoutContext, PaintContext, PrepaintContext};
 use crate::elements::{BLINK_RATE, ACTIVITY_TIMEOUT};
 use crate::entity::EntityStorage;
@@ -13,6 +13,7 @@ use crate::events::actions::KeyContext;
 use crate::platform::gpu::GpuState;
 use crate::views::SharedAdapter;
 use crate::window::OraWindow;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
 use winit::application::ApplicationHandler;
@@ -122,6 +123,89 @@ impl OraApp {
         if let Some(ref offset) = self.shared_scroll_offset {
             offset.set(self.scroll_top_px);
         }
+    }
+
+    /// Polls the adapter for a pending file operation and dispatches it.
+    ///
+    /// Called after every `dispatch_command` invocation. If the adapter has
+    /// queued a file op (e.g. from Ctrl+O), this method spawns the appropriate
+    /// async dialog future on the local executor.
+    fn poll_pending_file_ops(&mut self) {
+        let adapter = match &self.editor_adapter {
+            Some(a) => a,
+            None => return,
+        };
+        let op = adapter.borrow_mut().take_pending_file_op();
+        let op = match op {
+            Some(op) => op,
+            None => return,
+        };
+        match op {
+            PendingFileOp::Open => self.spawn_open_dialog(),
+            PendingFileOp::SaveAs => { /* Plan 03 */ }
+            PendingFileOp::Save => { /* Plan 03 */ }
+        }
+    }
+
+    /// Spawns an async future that opens the native file picker and loads files.
+    ///
+    /// The future runs on the `LocalExecutor` (single-threaded, !Send safe).
+    /// It opens `rfd::AsyncFileDialog`, reads each selected file on a background
+    /// thread, validates UTF-8, strips BOM, and delivers results to the adapter
+    /// via `handle_file_loaded` / `handle_file_error`.
+    fn spawn_open_dialog(&mut self) {
+        let adapter = Rc::clone(self.editor_adapter.as_ref().unwrap());
+        adapter.borrow_mut().set_dialog_open(true);
+        let window = self.gpu_state.as_ref().unwrap().window.clone();
+
+        self.app_context.spawn(async move {
+            let handles = rfd::AsyncFileDialog::new().pick_files().await;
+
+            if let Some(handles) = handles {
+                for handle in handles {
+                    let path = handle.path().to_path_buf();
+                    let (tx, rx) = std::sync::mpsc::channel::<(std::path::PathBuf, std::io::Result<Vec<u8>>)>();
+                    let path_clone = path.clone();
+                    std::thread::spawn(move || {
+                        let result = std::fs::read(&path_clone);
+                        let _ = tx.send((path_clone, result));
+                    });
+                    loop {
+                        if let Ok((recv_path, result)) = rx.try_recv() {
+                            match result {
+                                Ok(bytes) => match String::from_utf8(bytes) {
+                                    Ok(mut text) => {
+                                        // Strip UTF-8 BOM if present.
+                                        if text.starts_with('\u{FEFF}') {
+                                            text = text['\u{FEFF}'.len_utf8()..].to_string();
+                                        }
+                                        adapter.borrow_mut().handle_file_loaded(recv_path, text);
+                                    }
+                                    Err(_) => {
+                                        adapter.borrow_mut().handle_file_error(
+                                            "Cannot open: file is not valid UTF-8".to_string(),
+                                        );
+                                    }
+                                },
+                                Err(e) => {
+                                    adapter.borrow_mut().handle_file_error(
+                                        format!("Cannot open file: {}", e),
+                                    );
+                                }
+                            }
+                            window.request_redraw();
+                            break;
+                        }
+                        futures_lite::future::yield_now().await;
+                    }
+                }
+            }
+
+            adapter.borrow_mut().set_dialog_open(false);
+            window.request_redraw();
+        })
+        // Detach the task — we don't need to await its completion.
+        .detach();
     }
 }
 
@@ -471,6 +555,7 @@ impl ApplicationHandler for OraApp {
                                         if let Some(gpu_state) = &self.gpu_state {
                                             gpu_state.window.request_redraw();
                                         }
+                                        self.poll_pending_file_ops();
                                     }
                                 }
                             }
@@ -505,6 +590,7 @@ impl ApplicationHandler for OraApp {
                                     if let Some(gpu_state) = &self.gpu_state {
                                         gpu_state.window.request_redraw();
                                     }
+                                    self.poll_pending_file_ops();
                                 }
                             }
                         }
