@@ -307,7 +307,13 @@ Plans:
   5. Ctrl+C copies the selected text to the OS clipboard; the selection remains visible after copy
   6. Ctrl+X cuts the selected text to the OS clipboard; the selection is deleted from the buffer
   7. Ctrl+V pastes clipboard text at the cursor position, replacing any active selection
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [ ] 13-01-PLAN.md -- ClickAt/DragTo commands + pixel-to-doc mapping + text area mouse handler (Wave 1)
+- [ ] 13-02-PLAN.md -- Mouse drag selection + word/line snap drag + scroll-while-drag (Wave 2)
+- [ ] 13-03-PLAN.md -- Full-line copy/cut, paste-above, auto-indent paste (Wave 2)
+- [ ] 13-04-PLAN.md -- Selection focus dimming + gutter click + verification checkpoint (Wave 3)
 
 ### Phase 14: File Browser
 **Goal**: Users can navigate the project directory tree in the sidebar and open files by clicking — the tree reflects real filesystem state
@@ -375,7 +381,7 @@ v2.0: 10 -> 11 -> 12 -> 13 (can follow 10) -> 14 (needs 11+12) -> 15 (needs 10+1
 | 10. Foundation Fixes | 4/4 | Complete | 2026-03-26 |
 | 11. Buffer Registry + Multi-Tab | 4/4 | Complete | 2026-03-26 |
 | 12. File Operations | 4/4 | Complete | 2026-03-26 |
-| 13. Selection + Clipboard | 0/TBD | Pending | — |
+| 13. Selection + Clipboard | 0/4 | Planned | — |
 | 14. File Browser | 0/TBD | Pending | — |
 | 15. Find / Replace | 0/TBD | Pending | — |
 | 16. Performance Refinement | 0/TBD | Pending | — |
