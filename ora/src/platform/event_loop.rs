@@ -347,6 +347,11 @@ impl ApplicationHandler for OraApp {
                 };
             }
             WindowEvent::CursorMoved { position, .. } => {
+                if let Some(adapter) = &self.editor_adapter {
+                    if adapter.borrow().is_dialog_open() {
+                        return;
+                    }
+                }
                 let point = Point::new(position.x as f32, position.y as f32);
                 self.cursor_position = point;
 
@@ -386,6 +391,11 @@ impl ApplicationHandler for OraApp {
                 }
             }
             WindowEvent::MouseInput { state, button, .. } => {
+                if let Some(adapter) = &self.editor_adapter {
+                    if adapter.borrow().is_dialog_open() {
+                        return;
+                    }
+                }
                 let mouse_button = match button {
                     winit::event::MouseButton::Left => MouseButton::Left,
                     winit::event::MouseButton::Right => MouseButton::Right,
@@ -454,6 +464,11 @@ impl ApplicationHandler for OraApp {
                 }
             }
             WindowEvent::MouseWheel { delta, .. } => {
+                if let Some(adapter) = &self.editor_adapter {
+                    if adapter.borrow().is_dialog_open() {
+                        return;
+                    }
+                }
                 // Pixel-based scrolling.
                 //
                 // scroll_top_px is the absolute pixel distance from the top of
@@ -535,6 +550,11 @@ impl ApplicationHandler for OraApp {
                 }
             }
             WindowEvent::KeyboardInput { event: key_event, .. } => {
+                if let Some(adapter) = &self.editor_adapter {
+                    if adapter.borrow().is_dialog_open() {
+                        return;
+                    }
+                }
                 // Translate winit key event to ora keyboard event
                 if let Some(keyboard_event) = translate_key_event(&key_event, self.modifiers) {
                     // Handle Tab navigation first (before action matching)
