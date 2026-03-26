@@ -551,6 +551,37 @@ impl Workspace {
         }
     }
 
+    /// Opens a document from pre-read content and a file path.
+    ///
+    /// Returns `(doc_id, was_existing)`. If the canonical path is already open,
+    /// returns the existing DocumentId with `was_existing = true` — no new
+    /// Document is created (Buffer Registry dedup). If the path is new, creates
+    /// the document from the provided content and registers it.
+    ///
+    /// NOTE: Does NOT create a view — the caller (adapter) is responsible for
+    /// creating a view and activating it.
+    pub fn open_document_with_content(
+        &mut self,
+        path: PathBuf,
+        content: String,
+    ) -> (DocumentId, bool) {
+        let canonical = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
+
+        if let Some(&existing_id) = self.path_to_doc.get(&canonical) {
+            return (existing_id, true);
+        }
+
+        let document = Document::from_str(&content, Some(canonical.clone()));
+        let doc_id = document.id();
+
+        self.event_bus.publish(document.event_opened());
+        self.documents.insert(doc_id, document);
+        self.histories.insert(doc_id, CommandHistory::new());
+        self.path_to_doc.insert(canonical, doc_id);
+
+        (doc_id, false)
+    }
+
     /// Checks if switching to a different active document is safe.
     ///
     /// Returns `Ok(())` if the active document is saved, or an error

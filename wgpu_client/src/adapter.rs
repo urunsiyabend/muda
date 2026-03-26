@@ -99,6 +99,44 @@ impl CoreEditorAdapter {
     pub fn take_pending_file_op(&mut self) -> Option<PendingFileOp> {
         self.pending_file_op.take()
     }
+
+    /// Called by the async file-open future when a file has been successfully read.
+    ///
+    /// Uses the Buffer Registry to deduplicate: if the file is already open, switches
+    /// to the existing tab instead of creating a duplicate. If new, creates a document
+    /// from the pre-read content, creates a view, and activates it.
+    pub fn handle_file_loaded(&mut self, path: std::path::PathBuf, content: String) {
+        let (doc_id, was_existing) = self.app.workspace.open_document_with_content(path, content);
+
+        if was_existing {
+            // File already open — find its view and activate it.
+            let view_id = self.app.workspace
+                .views()
+                .find(|(_, v)| v.document_id() == doc_id)
+                .map(|(id, _)| *id);
+            if let Some(view_id) = view_id {
+                self.app.workspace.set_active_view(view_id);
+            }
+        } else {
+            // New document — create a view and activate it.
+            self.app.workspace.create_view(doc_id);
+            // Apply stored viewport size to the new view.
+            let (w, h) = self.last_viewport;
+            self.app.check_scrolling(w, h);
+        }
+
+        self.dialog_open = false;
+        self.app.needs_render = true;
+    }
+
+    /// Called by the async file-open future when a file could not be loaded.
+    ///
+    /// Sets a status bar message with the error description.
+    pub fn handle_file_error(&mut self, message: String) {
+        self.pending_status_message = Some(message);
+        self.dialog_open = false;
+        self.app.needs_render = true;
+    }
 }
 
 impl Default for CoreEditorAdapter {
