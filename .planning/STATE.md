@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-03-26)
 
 ## Current Position
 
-Phase: 12 — File Operations (in progress)
-Plan: 02 of 3 (complete)
-Status: In progress — Plan 02 done
-Last activity: 2026-03-26 — Completed 12-02-PLAN.md (Ctrl+O native file dialog, async I/O, UTF-8 validation, BOM strip, Buffer Registry dedup)
+Phase: 12 — File Operations (complete)
+Plan: 03 of 3 (complete)
+Status: Phase 12 complete — all 3 plans done
+Last activity: 2026-03-26 — Completed 12-03-PLAN.md (Ctrl+S silent save, Ctrl+Shift+S Save As dialog, last-dir persistence)
 
-Progress: [██████████░░░░░░░░░░░░░░░░░░░░░░░░░░] v2.0 Phase 12 in progress (10/~17 plans)
+Progress: [████████████░░░░░░░░░░░░░░░░░░░░░░░░] v2.0 Phase 12 complete (11/~17 plans)
 
 ## Performance Metrics
 
@@ -45,6 +45,7 @@ None.
 
 - Async file I/O return path: RESOLVED (12-02) — Full flow: dispatch_command queues PendingFileOp → poll_pending_file_ops() → LocalExecutor future → background thread reads file → adapter callback delivers result; rfd AsyncFileDialog + futures-lite yield_now pattern
 - FileOpDataSource sub-trait: RESOLVED (12-02) — file-op callbacks isolated in FileOpDataSource sub-trait; EditorDataSource super-trait updated; PendingFileOp relocated to ora
+- Save / Save As dialog flow: RESOLVED (12-03) — PendingFileOp::Save routes through event loop for has-path decision; spawn_save_as_dialog uses rfd::AsyncFileDialog::save_file; handle_file_saved updates path, clears dirty, registers buffer registry; last_dir persisted to state.json
 - EditorDataSource trait pressure: RESOLVED (10-02) — split into BufferDataSource + CommandDispatcher + WindowDataSource with blanket super-trait
 - Selection rendering: RESOLVED (10-03) — selection_ranges in LinePresentation, 5-layer Stack, span filter removed
 - Idle GPU fixed (10-01): unconditional request_redraw at event_loop.rs removed; ControlFlow state machine now drives frame cadence
@@ -56,13 +57,19 @@ None.
 - Dialog butonları (Save/Don't Save/Cancel) tıklanamıyor — hitbox/event wiring eksik
 - Dispatch system fires handlers in both capture+bubble phases — all handlers must check `ctx.phase() == Bubble`
 
+## Phase 12 Summary
+
+Plan 01: rfd 0.15 + dirs 5 deps, untitled naming, PendingFileOp queue, dialog_open guard, Ctrl+N, Ctrl+S queues SaveAs
+Plan 02: Ctrl+O native dialog, background file reading, UTF-8 validation, BOM strip, Buffer Registry dedup, FileOpDataSource sub-trait, poll_pending_file_ops
+Plan 03: Ctrl+S silent save / Save As dialog (rfd save_file), handle_file_saved callback, last-dir persisted to state.json, open+save dialogs pre-populate directory
+
 ## Session Continuity
 
-Last session: 2026-03-26T18:21:00Z
-Stopped at: Completed 12-02-PLAN.md
+Last session: 2026-03-26T18:02:00Z
+Stopped at: Completed 12-03-PLAN.md (Phase 12 complete)
 Resume file: None
-Next: Phase 12 Plan 03 — Save As / Save dialog integration
+Next: Phase 13 (sidebar navigation) or Phase 14 (selection editing)
 
 ---
 *State initialized: 2026-01-28*
-*Last updated: 2026-03-26 after Phase 11 completion*
+*Last updated: 2026-03-26 after Phase 12 completion*
