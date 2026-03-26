@@ -59,6 +59,21 @@ pub trait BufferDataSource {
     /// Used to compute the maximum scroll position for clamping:
     /// `max_scroll_px = (total_lines - 1) * LINE_HEIGHT`
     fn total_lines(&self) -> usize;
+
+    /// Returns the sidebar width in pixels (0 if hidden).
+    ///
+    /// Used by the event loop for mouse click hit-testing to determine
+    /// whether a click falls inside the text area.
+    fn sidebar_width_px(&self) -> f32;
+
+    /// Returns the gutter width in characters.
+    ///
+    /// Used by the event loop for mouse click coordinate conversion
+    /// (pixel position to document line/col).
+    fn gutter_width_chars(&self) -> usize;
+
+    /// Returns the horizontal scroll offset in characters.
+    fn scroll_x(&self) -> usize;
 }
 
 /// Command dispatch to the editor backend.

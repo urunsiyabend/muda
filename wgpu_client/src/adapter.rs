@@ -553,6 +553,31 @@ impl BufferDataSource for CoreEditorAdapter {
             .map(|d| d.len_lines())
             .unwrap_or(1)
     }
+
+    fn sidebar_width_px(&self) -> f32 {
+        if self.app.sidebar.visible {
+            // Must match SIDEBAR_DEFAULT_WIDTH from ora::views::sidebar.
+            480.0
+        } else {
+            0.0
+        }
+    }
+
+    fn gutter_width_chars(&self) -> usize {
+        let total_lines = self.app.workspace
+            .active_document()
+            .map(|d| d.len_lines())
+            .unwrap_or(1);
+        let digits = total_lines.to_string().len();
+        digits + 2 // digits + space + separator
+    }
+
+    fn scroll_x(&self) -> usize {
+        self.app.workspace
+            .active_view()
+            .map(|v| v.viewport.scroll_x)
+            .unwrap_or(0)
+    }
 }
 
 impl CommandDispatcher for CoreEditorAdapter {

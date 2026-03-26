@@ -60,6 +60,9 @@ pub struct OraApp {
     last_click_time: Option<Instant>,
     last_click_pos: Point,
     click_count: u32,
+    /// True while the user is dragging in the text area (mouse pressed + moved).
+    /// Used to dispatch DragTo commands on CursorMoved events.
+    text_area_drag: bool,
 }
 
 impl OraApp {
@@ -81,6 +84,7 @@ impl OraApp {
             last_click_time: None,
             last_click_pos: Point::new(0.0, 0.0),
             click_count: 0,
+            text_area_drag: false,
         }
     }
 
@@ -106,6 +110,7 @@ impl OraApp {
             last_click_time: None,
             last_click_pos: Point::new(0.0, 0.0),
             click_count: 0,
+            text_area_drag: false,
         }
     }
 }
@@ -123,6 +128,55 @@ impl OraApp {
         if let Some(ref offset) = self.shared_scroll_offset {
             offset.set(self.scroll_top_px);
         }
+    }
+
+    /// Convert a pixel position to document (line, col) coordinates.
+    ///
+    /// Returns `Some((line, col))` if the click is inside the text area,
+    /// `None` if outside (e.g., clicking on sidebar, gutter, tab bar, status bar).
+    fn pixel_to_doc(&self, px: Point) -> Option<(usize, usize)> {
+        let adapter = self.editor_adapter.as_ref()?;
+        let adapter_ref = adapter.borrow();
+
+        const LINE_HEIGHT: f32 = 21.0;
+        const TAB_BAR_H: f32 = 36.0;
+        const STATUS_BAR_H: f32 = 28.0;
+
+        let char_w = crate::rendering::measured_char_width();
+        let sidebar_px = adapter_ref.sidebar_width_px();
+        let gutter_chars = adapter_ref.gutter_width_chars();
+        let gutter_px = gutter_chars as f32 * char_w;
+        let text_area_x = sidebar_px + gutter_px;
+        let text_area_y = TAB_BAR_H;
+
+        // Check bounds: click must be inside text area region.
+        if px.x < text_area_x || px.y < text_area_y {
+            return None;
+        }
+
+        // Get window height from GPU state for status bar exclusion.
+        let window_h = self.gpu_state.as_ref()
+            .map(|g| g.size.1 as f32)
+            .unwrap_or(600.0);
+        if px.y > window_h - STATUS_BAR_H {
+            return None;
+        }
+
+        let scroll_y = adapter_ref.scroll_y();
+        let scroll_x = adapter_ref.scroll_x();
+        let scroll_y_offset_px = self.scroll_top_px - (scroll_y as f32 * LINE_HEIGHT);
+
+        let local_y = (px.y - text_area_y) + scroll_y_offset_px;
+        let local_x = px.x - text_area_x;
+
+        let line_in_viewport = (local_y / LINE_HEIGHT).floor().max(0.0) as usize;
+        let line_idx = scroll_y + line_in_viewport;
+
+        // Mid-character snap: +0.5 means past midpoint snaps right.
+        let col_raw = ((local_x / char_w) + 0.5).floor().max(0.0) as usize;
+        let col_idx = scroll_x + col_raw;
+
+        Some((line_idx, col_idx))
     }
 
     /// Polls the adapter for a pending file operation and dispatches it.
@@ -385,6 +439,22 @@ impl ApplicationHandler for OraApp {
                     dispatch_mouse_move(&mut self.event_handlers, &event, id);
                 }
 
+                // Text area drag: if dragging, dispatch DragTo to extend selection.
+                if self.text_area_drag {
+                    if let Some((line, col)) = self.pixel_to_doc(point) {
+                        if let Some(adapter) = &self.editor_adapter {
+                            use crate::editor_adapter::EditorCommand;
+                            adapter.borrow_mut().dispatch_command(
+                                EditorCommand::DragTo { line, col },
+                            );
+                            crate::elements::notify_caret_activity();
+                            self.next_blink_instant = Some(Instant::now() + ACTIVITY_TIMEOUT + BLINK_RATE);
+                            let new_scroll_y = adapter.borrow().scroll_y();
+                            self.sync_scroll_from_core(new_scroll_y);
+                        }
+                    }
+                }
+
                 // Request redraw to update hover state visuals
                 if let Some(gpu_state) = &self.gpu_state {
                     gpu_state.window.request_redraw();
@@ -441,11 +511,37 @@ impl ApplicationHandler for OraApp {
                                 click_count: self.click_count,
                             };
                             dispatch_mouse_down(&mut self.event_handlers, &event, hit_id);
+
+                            // Text area click-to-cursor: if left click lands in
+                            // the text area, dispatch ClickAt to the adapter.
+                            if mouse_button == MouseButton::Left {
+                                if let Some((line, col)) = self.pixel_to_doc(self.cursor_position) {
+                                    if let Some(adapter) = &self.editor_adapter {
+                                        use crate::editor_adapter::EditorCommand;
+                                        adapter.borrow_mut().dispatch_command(
+                                            EditorCommand::ClickAt {
+                                                line,
+                                                col,
+                                                extend_selection: self.modifiers.shift,
+                                                click_count: self.click_count,
+                                            },
+                                        );
+                                        crate::elements::notify_caret_activity();
+                                        self.next_blink_instant = Some(Instant::now() + ACTIVITY_TIMEOUT + BLINK_RATE);
+                                        let new_scroll_y = adapter.borrow().scroll_y();
+                                        self.sync_scroll_from_core(new_scroll_y);
+                                        self.text_area_drag = true;
+                                    }
+                                } else {
+                                    self.text_area_drag = false;
+                                }
+                            }
                         }
                         winit::event::ElementState::Released => {
                             // Clear active state and release capture if present
                             self.app_context.interaction_state.clear_active();
                             self.app_context.interaction_state.release_mouse_capture();
+                            self.text_area_drag = false;
                             log::info!("Active state: Mouse button {:?} released", mouse_button);
 
                             let event = MouseUpEvent {
