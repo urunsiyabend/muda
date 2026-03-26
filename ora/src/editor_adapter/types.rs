@@ -488,10 +488,12 @@ pub enum EditorCommand {
     New,
 
     // --- Tab management ---
-    /// Switch to a specific tab (0 = cycle next, index-based for Ctrl+1..9)
+    /// Switch to a specific tab (0 = cycle next, view_id = switch directly)
     SwitchTab(u64),
     /// Close the current tab (Ctrl+W)
     CloseTab,
+    /// Cycle to the previous tab in visual order (Ctrl+Shift+Tab)
+    SwitchTabPrev,
 
     // --- Search ---
     /// Find in file (Ctrl+F)
