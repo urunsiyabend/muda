@@ -62,6 +62,12 @@ pub struct Workspace {
     ///
     /// Used to select the new active view when the current one is closed.
     mru_stack: Vec<ViewId>,
+
+    /// Monotonically increasing counter for naming untitled documents.
+    ///
+    /// Incremented each time `create_untitled_document` is called.
+    /// Never resets within a session. Used to produce "Untitled", "Untitled (2)", etc.
+    untitled_counter: u32,
 }
 
 impl Workspace {
@@ -76,6 +82,7 @@ impl Workspace {
             path_to_doc: HashMap::new(),
             tab_order: Vec::new(),
             mru_stack: Vec::new(),
+            untitled_counter: 0,
         }
     }
 
@@ -98,6 +105,31 @@ impl Workspace {
     /// Also creates a command history for the document.
     pub fn create_document(&mut self) -> DocumentId {
         let document = Document::new();
+        let doc_id = document.id();
+
+        self.event_bus.publish(document.event_opened());
+        self.documents.insert(doc_id, document);
+        self.histories.insert(doc_id, CommandHistory::new());
+
+        doc_id
+    }
+
+    /// Creates a new untitled document and returns its ID.
+    ///
+    /// Assigns a display name following the convention:
+    /// - First: "Untitled"
+    /// - Subsequent: "Untitled (2)", "Untitled (3)", etc.
+    ///
+    /// The counter is monotonically increasing within the session and never resets.
+    pub fn create_untitled_document(&mut self) -> DocumentId {
+        self.untitled_counter += 1;
+        let name = if self.untitled_counter == 1 {
+            "Untitled".to_string()
+        } else {
+            format!("Untitled ({})", self.untitled_counter)
+        };
+
+        let document = Document::new_with_name(name);
         let doc_id = document.id();
 
         self.event_bus.publish(document.event_opened());

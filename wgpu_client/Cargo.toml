@@ -11,6 +11,10 @@ path = "src/main.rs"
 core_editor = { path = "../core_editor" }
 ora = { path = "../ora" }
 
+# File dialogs and platform directories
+rfd = { version = "0.15", default-features = false, features = ["xdg-portal"] }
+dirs = "5"
+
 # Utilities
 log = "0.4"
 simplelog = "0.12"
