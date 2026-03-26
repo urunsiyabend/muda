@@ -142,9 +142,55 @@ impl OraApp {
         };
         match op {
             PendingFileOp::Open => self.spawn_open_dialog(),
-            PendingFileOp::SaveAs => { /* Plan 03 */ }
-            PendingFileOp::Save => { /* Plan 03 */ }
+            PendingFileOp::SaveAs => self.spawn_save_as_dialog(),
+            PendingFileOp::Save => {
+                // If the active document has a path, save silently.
+                // Otherwise fall through to the Save As dialog.
+                let has_path = self.editor_adapter
+                    .as_ref()
+                    .map(|a| a.borrow().active_doc_has_path())
+                    .unwrap_or(false);
+                if has_path {
+                    if let Some(adapter) = &self.editor_adapter {
+                        let _ = adapter.borrow_mut().save_active_doc();
+                    }
+                    if let Some(gpu_state) = &self.gpu_state {
+                        gpu_state.window.request_redraw();
+                    }
+                } else {
+                    self.spawn_save_as_dialog();
+                }
+            }
         }
+    }
+
+    /// Spawns an async future that opens the native save dialog.
+    ///
+    /// The future runs on the `LocalExecutor`. It opens `rfd::AsyncFileDialog::save_file`,
+    /// and on confirmation calls `handle_file_saved` with the chosen path so the
+    /// adapter writes the file to disk, updates the document's file path, clears
+    /// the dirty flag, and registers the path in the buffer registry.
+    fn spawn_save_as_dialog(&mut self) {
+        let adapter = Rc::clone(self.editor_adapter.as_ref().unwrap());
+        adapter.borrow_mut().set_dialog_open(true);
+        let window = self.gpu_state.as_ref().unwrap().window.clone();
+        let last_dir = adapter.borrow().last_opened_directory();
+
+        self.app_context.spawn(async move {
+            let handle = rfd::AsyncFileDialog::new()
+                .set_directory(&last_dir)
+                .set_file_name("")
+                .save_file()
+                .await;
+
+            if let Some(handle) = handle {
+                let path = handle.path().to_path_buf();
+                adapter.borrow_mut().handle_file_saved(path);
+            }
+            adapter.borrow_mut().set_dialog_open(false);
+            window.request_redraw();
+        })
+        .detach();
     }
 
     /// Spawns an async future that opens the native file picker and loads files.
@@ -157,9 +203,13 @@ impl OraApp {
         let adapter = Rc::clone(self.editor_adapter.as_ref().unwrap());
         adapter.borrow_mut().set_dialog_open(true);
         let window = self.gpu_state.as_ref().unwrap().window.clone();
+        let last_dir = adapter.borrow().last_opened_directory();
 
         self.app_context.spawn(async move {
-            let handles = rfd::AsyncFileDialog::new().pick_files().await;
+            let handles = rfd::AsyncFileDialog::new()
+                .set_directory(&last_dir)
+                .pick_files()
+                .await;
 
             if let Some(handles) = handles {
                 for handle in handles {

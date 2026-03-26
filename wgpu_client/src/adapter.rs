@@ -21,6 +21,63 @@ use ora::editor_adapter::{
 // CoreEditorAdapter struct
 // =============================================================================
 
+/// Returns the platform configuration state file path.
+///
+/// On Windows: `%APPDATA%\muda\state.json`
+/// On macOS/Linux: `$XDG_CONFIG_HOME/muda/state.json` or `~/.config/muda/state.json`
+fn config_state_path() -> std::path::PathBuf {
+    dirs::config_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("muda")
+        .join("state.json")
+}
+
+/// Loads the last-used directory from persistent state.
+///
+/// Returns the stored path if it exists on disk, otherwise falls back to
+/// the user's home directory.
+fn load_last_dir() -> std::path::PathBuf {
+    let state_path = config_state_path();
+    if let Ok(text) = std::fs::read_to_string(&state_path) {
+        // Minimal JSON parse: find "last_dir": "..." without pulling in serde.
+        if let Some(start) = text.find("\"last_dir\"") {
+            let after_key = &text[start + 10..];
+            if let Some(colon) = after_key.find(':') {
+                let after_colon = after_key[colon + 1..].trim();
+                if after_colon.starts_with('"') {
+                    let inner = &after_colon[1..];
+                    if let Some(end) = inner.find('"') {
+                        let raw = &inner[..end];
+                        // Unescape backslashes and quotes stored as \\ and \"
+                        let unescaped = raw.replace("\\\\", "\x00").replace("\\\"", "\"").replace("\x00", "\\");
+                        let p = std::path::PathBuf::from(&unescaped);
+                        if p.exists() {
+                            return p;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    dirs::home_dir().unwrap_or_default()
+}
+
+/// Writes the last-used directory to persistent state.
+///
+/// Creates parent directories as needed. Write errors are silently ignored
+/// (not worth crashing the editor over a preference write failure).
+fn save_last_dir(dir: &std::path::Path) {
+    let state_path = config_state_path();
+    if let Some(parent) = state_path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    // Manually escape the path string for JSON.
+    let raw = dir.to_string_lossy();
+    let escaped = raw.replace('\\', "\\\\").replace('"', "\\\"");
+    let json = format!("{{\"last_dir\": \"{}\"}}", escaped);
+    let _ = std::fs::write(&state_path, json);
+}
+
 /// Adapter that wraps `core_editor::app::App` and implements `EditorDataSource`.
 ///
 /// This is wgpu_client's only connection point to core_editor. All ora views
@@ -43,6 +100,11 @@ pub struct CoreEditorAdapter {
     /// to `false` when the dialog completes. Commands that would open a dialog
     /// check this before setting `pending_file_op`.
     pub dialog_open: bool,
+    /// Last directory visited in a file dialog, persisted across sessions.
+    ///
+    /// Loaded from the platform config directory at startup and updated whenever
+    /// a file is opened or saved. Pre-populates future open/save dialogs.
+    last_dir: std::path::PathBuf,
 }
 
 impl CoreEditorAdapter {
@@ -54,6 +116,7 @@ impl CoreEditorAdapter {
             last_viewport: (200, 40),
             pending_file_op: None,
             dialog_open: false,
+            last_dir: load_last_dir(),
         }
     }
 
@@ -65,6 +128,7 @@ impl CoreEditorAdapter {
             last_viewport: (200, 40),
             pending_file_op: None,
             dialog_open: false,
+            last_dir: load_last_dir(),
         })
     }
 
@@ -76,6 +140,7 @@ impl CoreEditorAdapter {
             last_viewport: (200, 40),
             pending_file_op: None,
             dialog_open: false,
+            last_dir: load_last_dir(),
         })
     }
 
@@ -87,6 +152,12 @@ impl FileOpDataSource for CoreEditorAdapter {
     }
 
     fn handle_file_loaded(&mut self, path: std::path::PathBuf, content: String) {
+        // Update last_dir to this file's parent directory.
+        if let Some(parent) = path.parent() {
+            self.last_dir = parent.to_path_buf();
+            save_last_dir(parent);
+        }
+
         let (doc_id, was_existing) = self.app.workspace.open_document_with_content(path, content);
 
         if was_existing {
@@ -122,6 +193,53 @@ impl FileOpDataSource for CoreEditorAdapter {
 
     fn set_dialog_open(&mut self, open: bool) {
         self.dialog_open = open;
+    }
+
+    fn handle_file_saved(&mut self, path: std::path::PathBuf) {
+        // Write the file to disk via save_as (sets file_path, clears dirty).
+        match self.app.save_as(path.to_str().unwrap_or_default()) {
+            Ok(()) => {
+                self.pending_status_message = Some("File saved".to_string());
+                // Register the new path in the buffer registry.
+                self.app.workspace.register_path_for_active_doc(&path);
+                // Update last_dir.
+                if let Some(parent) = path.parent() {
+                    self.last_dir = parent.to_path_buf();
+                    save_last_dir(parent);
+                }
+            }
+            Err(e) => {
+                self.pending_status_message = Some(format!("Save failed: {}", e));
+            }
+        }
+        self.app.needs_render = true;
+    }
+
+    fn active_doc_has_path(&self) -> bool {
+        self.app.workspace
+            .active_document()
+            .and_then(|d| d.file_path())
+            .is_some()
+    }
+
+    fn save_active_doc(&mut self) -> Result<bool, String> {
+        match self.app.save() {
+            Ok(true) => {
+                self.app.needs_render = true;
+                Ok(true)
+            }
+            Ok(false) => Ok(false),
+            Err(e) => {
+                let msg = format!("Save failed: {}", e);
+                self.pending_status_message = Some(msg.clone());
+                self.app.needs_render = true;
+                Err(msg)
+            }
+        }
+    }
+
+    fn last_opened_directory(&self) -> std::path::PathBuf {
+        self.last_dir.clone()
     }
 }
 
@@ -406,17 +524,11 @@ impl BufferDataSource for CoreEditorAdapter {
 
 impl CommandDispatcher for CoreEditorAdapter {
     fn dispatch_command(&mut self, cmd: EditorCommand) {
-        // Save is an app-level operation that doesn't go through the dispatcher.
+        // Save is handled by the event loop via PendingFileOp::Save so it can
+        // decide between silent save (named file) and Save As dialog (untitled).
         if matches!(cmd, EditorCommand::Save) {
-            match self.app.save() {
-                Ok(true) => {}  // saved successfully
-                Ok(false) => {
-                    // No file path — untitled buffer. Queue Save As dialog.
-                    if !self.dialog_open {
-                        self.pending_file_op = Some(PendingFileOp::SaveAs);
-                    }
-                }
-                Err(_) => {}
+            if !self.dialog_open {
+                self.pending_file_op = Some(PendingFileOp::Save);
             }
             return;
         }

@@ -105,6 +105,31 @@ pub trait FileOpDataSource {
     /// Called by the event loop before spawning a dialog task and cleared
     /// when the dialog completes.
     fn set_dialog_open(&mut self, open: bool);
+
+    /// Called when the user has chosen a path in the Save As dialog and the
+    /// file has been written to disk.
+    ///
+    /// The adapter must update the document's file path, clear dirty state,
+    /// register the path in the buffer registry, and trigger a re-render.
+    fn handle_file_saved(&mut self, path: PathBuf);
+
+    /// Returns `true` if the active document already has a file path.
+    ///
+    /// Used by the event loop to decide whether Ctrl+S should save silently
+    /// or open the Save As dialog.
+    fn active_doc_has_path(&self) -> bool;
+
+    /// Saves the active document to its current file path synchronously.
+    ///
+    /// Returns `Ok(true)` if the file was saved, `Ok(false)` if the document
+    /// has no path (caller should open Save As), or `Err` on I/O failure.
+    /// On error the adapter sets `pending_status_message` automatically.
+    fn save_active_doc(&mut self) -> Result<bool, String>;
+
+    /// Returns the last directory the user navigated to in a file dialog.
+    ///
+    /// Used to pre-populate the directory in subsequent open/save dialogs.
+    fn last_opened_directory(&self) -> PathBuf;
 }
 
 // =============================================================================

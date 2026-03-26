@@ -582,6 +582,21 @@ impl Workspace {
         (doc_id, false)
     }
 
+    /// Registers the given path in the Buffer Registry for the active document.
+    ///
+    /// Called after Save As so that the buffer registry reflects the document's
+    /// new canonical path. Canonicalizes the path before inserting. If the
+    /// active document's old path was previously registered it is NOT removed
+    /// here — the document's `save_as` already updates `metadata.uri`.
+    pub fn register_path_for_active_doc(&mut self, path: &Path) {
+        let doc_id = match self.active_view().map(|v| v.document_id()) {
+            Some(id) => id,
+            None => return,
+        };
+        let canonical = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+        self.path_to_doc.insert(canonical, doc_id);
+    }
+
     /// Checks if switching to a different active document is safe.
     ///
     /// Returns `Ok(())` if the active document is saved, or an error
