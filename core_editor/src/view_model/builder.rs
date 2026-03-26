@@ -213,11 +213,14 @@ impl ViewModelBuilder {
             })
             .collect();
 
+        let tree = sidebar.build_tree();
+
         SidebarPresentation {
             visible: true,
             focused: focus == FocusState::Sidebar,
             directory_name,
             entries,
+            tree,
             width: sidebar.width(),
         }
     }

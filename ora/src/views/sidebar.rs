@@ -313,6 +313,7 @@ mod tests {
             focused: false,
             directory_name: "my_project".to_string(),
             entries: vec![],
+            tree: vec![],
             width: 480,
         };
 

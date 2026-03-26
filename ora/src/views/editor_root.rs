@@ -59,38 +59,15 @@ impl EditorRootView {
         }
     }
 
-    /// Build a FileTreePresentation from the sidebar's flat entry list.
-    ///
-    /// core_editor provides a flat list of file/directory entries via
-    /// SidebarPresentation. We convert these into FileTreeNode roots so
-    /// the FileTreeView in SidebarView can render a proper file explorer.
+    /// Build a FileTreePresentation from the sidebar's recursive tree.
     fn build_file_tree(sidebar: &SidebarPresentation) -> FileTreePresentation {
-        if !sidebar.visible || sidebar.entries.is_empty() {
+        if !sidebar.visible || sidebar.tree.is_empty() {
             return FileTreePresentation::default();
         }
 
-        let roots: Vec<FileTreeNode> = sidebar
-            .entries
-            .iter()
-            .map(|entry| {
-                if entry.is_dir {
-                    FileTreeNode::dir(&entry.name, false, vec![])
-                } else {
-                    let ext = std::path::Path::new(&entry.name)
-                        .extension()
-                        .and_then(|s| s.to_str())
-                        .unwrap_or("")
-                        .to_string();
-                    FileTreeNode::file_with_path(&entry.name, &entry.path, ext)
-                }
-            })
-            .collect();
-
-        let selected_index = sidebar.entries.iter().position(|e| e.is_selected);
-
         FileTreePresentation {
-            roots,
-            selected_index,
+            roots: sidebar.tree.clone(),
+            selected_index: sidebar.entries.iter().position(|e| e.is_selected),
         }
     }
 

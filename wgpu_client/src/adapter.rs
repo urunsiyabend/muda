@@ -169,7 +169,17 @@ fn convert_tab_bar_presentation(t: core_editor::view_model::TabBarPresentation) 
     }
 }
 
-/// Convert core_editor's flat sidebar to ora's SidebarPresentation (flat entry list).
+fn convert_file_tree_node(n: core_editor::view_model::FileTreeNode) -> ora::editor_adapter::FileTreeNode {
+    ora::editor_adapter::FileTreeNode {
+        name: n.name,
+        path: n.path,
+        extension: n.extension,
+        is_dir: n.is_dir,
+        is_expanded: n.is_expanded,
+        children: n.children.into_iter().map(convert_file_tree_node).collect(),
+    }
+}
+
 fn convert_sidebar_presentation(s: core_editor::view_model::SidebarPresentation) -> SidebarPresentation {
     SidebarPresentation {
         visible: s.visible,
@@ -181,6 +191,7 @@ fn convert_sidebar_presentation(s: core_editor::view_model::SidebarPresentation)
             is_dir: e.is_dir,
             is_selected: e.is_selected,
         }).collect(),
+        tree: s.tree.into_iter().map(convert_file_tree_node).collect(),
         width: s.width,
     }
 }
@@ -351,9 +362,9 @@ impl CommandDispatcher for CoreEditorAdapter {
                 return;
             }
             EditorCommand::ToggleSidebarDir(path) => {
-                // Click on directory in sidebar: navigate into it.
+                // Click on directory in sidebar: expand/collapse in tree.
                 let path = std::path::PathBuf::from(path);
-                self.app.sidebar.set_base_directory(path);
+                self.app.sidebar.toggle_dir(&path);
                 self.app.needs_render = true;
                 return;
             }

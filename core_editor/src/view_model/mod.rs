@@ -299,8 +299,10 @@ pub struct SidebarPresentation {
     pub focused: bool,
     /// The base directory name (for title).
     pub directory_name: String,
-    /// The visible file entries.
+    /// The visible file entries (flat, for backward compat).
     pub entries: Vec<FileEntryPresentation>,
+    /// Recursive file tree (for tree-based rendering).
+    pub tree: Vec<FileTreeNode>,
     /// Width of the sidebar in characters.
     pub width: usize,
 }
