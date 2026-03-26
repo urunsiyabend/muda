@@ -250,9 +250,9 @@ fn to_core_command(cmd: EditorCommand) -> Option<CoreEditorCommand> {
         }
         ToggleLineNumbers => CoreEditorCommand::ToggleLineNumbers,
         Scroll(lines) => CoreEditorCommand::Scroll { lines },
-        // v2 stub commands — handled before to_core_command is called,
+        // v2 commands — handled before to_core_command is called,
         // but listed here for exhaustiveness.
-        SaveAs | OpenFile | New | CloseTab | SwitchTab(_)
+        SaveAs | OpenFile | New | CloseTab | SwitchTab(_) | SwitchTabPrev
         | Find | Replace | ReplaceAll | GoToLine => return None,
     })
 }
@@ -319,13 +319,36 @@ impl CommandDispatcher for CoreEditorAdapter {
             return;
         }
 
+        // Tab management commands — wired to real App handlers.
+        match &cmd {
+            EditorCommand::SwitchTab(0) => {
+                // Ctrl+Tab: cycle to next tab in visual order.
+                self.app.switch_tab_relative(1);
+                return;
+            }
+            EditorCommand::SwitchTab(view_id) => {
+                // Click on a specific tab or Ctrl+1..9 direct switch.
+                self.app.switch_tab(*view_id);
+                return;
+            }
+            EditorCommand::SwitchTabPrev => {
+                // Ctrl+Shift+Tab: cycle to previous tab in visual order.
+                self.app.switch_tab_relative(-1);
+                return;
+            }
+            EditorCommand::CloseTab => {
+                // Ctrl+W: close active tab with dirty-buffer protection.
+                self.app.close_active_tab();
+                return;
+            }
+            _ => {}
+        }
+
         // Stub handlers for v2 commands not yet implemented.
         let stub_msg = match &cmd {
             EditorCommand::SaveAs => Some("Save As: not yet available"),
             EditorCommand::OpenFile => Some("Open File: not yet available"),
             EditorCommand::New => Some("New File: not yet available"),
-            EditorCommand::CloseTab => Some("Close Tab: not yet available"),
-            EditorCommand::SwitchTab(_) => Some("Switch Tab: not yet available"),
             EditorCommand::Find => Some("Find: not yet available"),
             EditorCommand::Replace => Some("Replace: not yet available"),
             EditorCommand::ReplaceAll => Some("Replace All: not yet available"),

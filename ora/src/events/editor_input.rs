@@ -69,6 +69,10 @@ pub fn translate_editor_command(event: &KeyboardEvent, modifiers: Modifiers) -> 
         Key::Named(NamedKey::Backspace) => Some(EditorCommand::Backspace),
         Key::Named(NamedKey::Delete) => Some(EditorCommand::Delete),
         Key::Named(NamedKey::Enter) => Some(EditorCommand::InsertNewline),
+        Key::Named(NamedKey::Tab) if ctrl && shift => {
+            // Ctrl+Shift+Tab cycles to the previous tab (more specific guard first).
+            Some(EditorCommand::SwitchTabPrev)
+        }
         Key::Named(NamedKey::Tab) if ctrl => {
             // Ctrl+Tab cycles to the next tab.
             Some(EditorCommand::SwitchTab(0))
@@ -263,5 +267,13 @@ mod tests {
         let mods = Modifiers { ctrl: true, ..Modifiers::none() };
         let cmd = translate_editor_command(&ev, mods).unwrap();
         assert!(matches!(cmd, EditorCommand::SwitchTab(0)));
+    }
+
+    #[test]
+    fn test_ctrl_shift_tab_switch_tab_prev() {
+        let ev = make_event(Key::Named(NamedKey::Tab));
+        let mods = Modifiers { ctrl: true, shift: true, ..Modifiers::none() };
+        let cmd = translate_editor_command(&ev, mods).unwrap();
+        assert!(matches!(cmd, EditorCommand::SwitchTabPrev));
     }
 }
