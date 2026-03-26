@@ -9,7 +9,8 @@ use std::rc::Rc;
 
 use crate::context::ViewContext;
 use crate::editor_adapter::{
-    EditorDataSource, FileTreeNode, FileTreePresentation, RenderModel, SidebarPresentation,
+    EditorCommand, EditorDataSource, FileTreeNode, FileTreePresentation, RenderModel,
+    SidebarPresentation,
 };
 use crate::element::AnyElement;
 use crate::events::FocusHandle;
@@ -97,7 +98,14 @@ impl EditorRootView {
     fn build_layout(&self, model: &RenderModel) -> AppLayout {
         let file_tree = Self::build_file_tree(&model.sidebar);
         let sidebar = SidebarView::new(model.sidebar.clone(), file_tree);
-        let tab_bar = TabBarView::new(model.tab_bar.clone());
+
+        // Build dispatch closure for tab click handlers.
+        // Clone the Rc<RefCell<...>> adapter so the closure captures a reference.
+        let adapter_for_tabs = self.adapter.clone();
+        let tab_dispatch: Rc<dyn Fn(EditorCommand)> = Rc::new(move |cmd: EditorCommand| {
+            adapter_for_tabs.borrow_mut().dispatch_command(cmd);
+        });
+        let tab_bar = TabBarView::new(model.tab_bar.clone()).with_dispatch(tab_dispatch);
         let gutter = GutterView::new_with_scroll_offset(
             model.gutter.clone(),
             model.visible_lines.clone(),
