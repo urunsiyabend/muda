@@ -69,7 +69,9 @@ impl App {
         let mut workspace = Workspace::new();
 
         match workspace.open_document(&path_buf) {
-            Ok(doc_id) => {
+            Ok((doc_id, _was_existing)) => {
+                // App::open_file creates a fresh Workspace, so was_existing is always false.
+                // We always create a new view here.
                 workspace.create_view(doc_id);
                 log::debug!("Opened file: {}", path);
             }
@@ -616,11 +618,28 @@ impl App {
     }
 
     /// Opens a file from the sidebar into the workspace.
+    ///
+    /// If the file is already open (deduplication via Buffer Registry), switches
+    /// to the existing view instead of creating a duplicate.
     fn open_file_from_sidebar(&mut self, path: &PathBuf) {
         match self.workspace.open_document(path) {
-            Ok(doc_id) => {
-                self.workspace.create_view(doc_id);
-                log::debug!("Opened file from sidebar: {:?}", path);
+            Ok((doc_id, was_existing)) => {
+                if was_existing {
+                    // File already open — find the existing view and switch to it
+                    let existing_view = self
+                        .workspace
+                        .views()
+                        .find(|(_, v)| v.document_id() == doc_id)
+                        .map(|(&id, _)| id);
+                    if let Some(view_id) = existing_view {
+                        self.workspace.set_active_view(view_id);
+                        log::debug!("Switched to existing view for: {:?}", path);
+                    }
+                } else {
+                    self.workspace.create_view(doc_id);
+                    log::debug!("Opened file from sidebar: {:?}", path);
+                }
+                self.needs_render = true;
             }
             Err(e) => {
                 log::debug!("Could not open file from sidebar: {:?}, error: {}", path, e);
@@ -644,13 +663,18 @@ impl App {
     // =========================================================================
 
     /// Returns information about all open views for the tab bar.
-    /// Returns a list of (view_id, title, is_active, is_dirty) tuples.
+    /// Returns a list of (view_id, title, is_active, is_dirty) tuples in tab strip order.
+    ///
+    /// Uses `tab_order` to guarantee deterministic insertion-order rendering,
+    /// rather than random HashMap iteration order.
     fn get_open_views_info(&self) -> Vec<(u64, String, bool, bool)> {
         let active_view_id = self.workspace.active_view_id();
 
-        self.workspace.views()
-            .filter_map(|(view_id, view)| {
-                // Get the document for this view
+        self.workspace
+            .tab_order()
+            .iter()
+            .filter_map(|view_id| {
+                let view = self.workspace.view(*view_id)?;
                 let doc = self.workspace.document(view.document_id())?;
                 let title = doc.title();
                 let is_active = Some(*view_id) == active_view_id;
