@@ -7,6 +7,25 @@
 //! in `wgpu_client`, not here. This keeps ora free of core_editor as a dependency.
 
 // =============================================================================
+// PendingFileOp — queued file-dialog operation
+// =============================================================================
+
+/// A file operation that must be dispatched from the event loop.
+///
+/// Because native file dialogs block the thread and `dispatch_command` returns `()`,
+/// this queue pattern is used: the adapter sets `pending_file_op` and the event
+/// loop polls `take_pending_file_op()` each frame to open the appropriate dialog.
+#[derive(Debug)]
+pub enum PendingFileOp {
+    /// Show an open-file dialog (Ctrl+O).
+    Open,
+    /// Show a save-as dialog (Ctrl+Shift+S or save of untitled buffer).
+    SaveAs,
+    /// Trigger a direct save (Ctrl+S with known path).
+    Save,
+}
+
+// =============================================================================
 // TextStyle — semantic syntax highlighting tokens
 // =============================================================================
 

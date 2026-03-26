@@ -20,6 +20,8 @@
 pub mod types;
 pub use types::*;
 
+use std::path::PathBuf;
+
 // =============================================================================
 // Sub-traits (FIX-04): split the monolithic EditorDataSource into three
 // focused traits. This allows future phases to add methods to the correct
@@ -71,10 +73,44 @@ pub trait WindowDataSource {
     fn window_title(&self) -> String;
 }
 
+/// File-operation callbacks invoked by the event loop's async dialog futures.
+///
+/// The event loop spawns async tasks that open native file dialogs, read files,
+/// and then call these methods to deliver results back to the adapter.
+pub trait FileOpDataSource {
+    /// Take and clear any pending file operation queued by `dispatch_command`.
+    ///
+    /// Called every frame by the event loop; returns `None` most frames.
+    fn take_pending_file_op(&mut self) -> Option<PendingFileOp>;
+
+    /// Called when a file has been successfully read and validated.
+    ///
+    /// `path` is the canonical path of the file; `content` is the UTF-8 text
+    /// (BOM already stripped by the caller). The adapter must create or
+    /// activate the appropriate tab and trigger a re-render.
+    fn handle_file_loaded(&mut self, path: PathBuf, content: String);
+
+    /// Called when a file could not be opened (I/O error or non-UTF-8 data).
+    ///
+    /// `message` is a user-visible error string to display in the status bar.
+    fn handle_file_error(&mut self, message: String);
+
+    /// Returns `true` if a native file dialog is currently open.
+    ///
+    /// Used to guard against concurrent dialogs (e.g. rapid Ctrl+O presses).
+    fn is_dialog_open(&self) -> bool;
+
+    /// Set the dialog-open guard flag.
+    ///
+    /// Called by the event loop before spawning a dialog task and cleared
+    /// when the dialog completes.
+    fn set_dialog_open(&mut self, open: bool);
+}
+
 // =============================================================================
 // EditorDataSource — convenience super-trait combining all sub-traits.
 //
-// The blanket impl means any type implementing all three sub-traits
+// The blanket impl means any type implementing all four sub-traits
 // automatically implements EditorDataSource, preserving full backward
 // compatibility. Existing Box<dyn EditorDataSource> usage is unchanged.
 // =============================================================================
@@ -85,8 +121,15 @@ pub trait WindowDataSource {
 /// ora views receive `&dyn EditorDataSource` to query presentation data.
 ///
 /// This is a convenience super-trait combining `BufferDataSource`,
-/// `CommandDispatcher`, and `WindowDataSource`. Implement those three
-/// sub-traits and this trait is satisfied automatically via blanket impl.
-pub trait EditorDataSource: BufferDataSource + CommandDispatcher + WindowDataSource {}
+/// `CommandDispatcher`, `WindowDataSource`, and `FileOpDataSource`.
+/// Implement those four sub-traits and this trait is satisfied automatically
+/// via blanket impl.
+pub trait EditorDataSource:
+    BufferDataSource + CommandDispatcher + WindowDataSource + FileOpDataSource
+{
+}
 
-impl<T> EditorDataSource for T where T: BufferDataSource + CommandDispatcher + WindowDataSource {}
+impl<T> EditorDataSource for T where
+    T: BufferDataSource + CommandDispatcher + WindowDataSource + FileOpDataSource
+{
+}

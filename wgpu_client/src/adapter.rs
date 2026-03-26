@@ -11,29 +11,15 @@ use core_editor::commands::editor_command::{Direction, MoveScope as CoreMoveScop
 use core_editor::commands::EditorCommand as CoreEditorCommand;
 use ora::editor_adapter::{
     BufferDataSource, CaretPresentation, CommandDispatcher, CursorDirection, DialogPresentation,
-    EditorCommand, FileEntryPresentation, GutterModel, LinePresentation,
-    MoveScope as OraMoveScope, RenderModel, SidebarPresentation, StyledSpan, StatusPresentation,
-    TabBarPresentation, TabPresentation, TextStyle, VisualPosition, WindowDataSource,
+    EditorCommand, FileEntryPresentation, FileOpDataSource, GutterModel, LinePresentation,
+    MoveScope as OraMoveScope, PendingFileOp, RenderModel, SidebarPresentation, StyledSpan,
+    StatusPresentation, TabBarPresentation, TabPresentation, TextStyle, VisualPosition,
+    WindowDataSource,
 };
 
 // =============================================================================
 // CoreEditorAdapter struct
 // =============================================================================
-
-/// Represents a file operation that must be dispatched from the event loop.
-///
-/// Because native file dialogs block the thread and `dispatch_command` returns `()`,
-/// this queue pattern is used: the adapter sets `pending_file_op` and the event
-/// loop polls `take_pending_file_op()` each frame to open the appropriate dialog.
-#[derive(Debug)]
-pub enum PendingFileOp {
-    /// Show an open-file dialog.
-    Open,
-    /// Show a save-as dialog.
-    SaveAs,
-    /// Trigger a save (for completeness; usually handled synchronously).
-    Save,
-}
 
 /// Adapter that wraps `core_editor::app::App` and implements `EditorDataSource`.
 ///
@@ -93,19 +79,14 @@ impl CoreEditorAdapter {
         })
     }
 
-    /// Takes and returns the pending file operation (if any), resetting it to None.
-    ///
-    /// Called by the event loop each frame to check if a file dialog should be opened.
-    pub fn take_pending_file_op(&mut self) -> Option<PendingFileOp> {
+}
+
+impl FileOpDataSource for CoreEditorAdapter {
+    fn take_pending_file_op(&mut self) -> Option<PendingFileOp> {
         self.pending_file_op.take()
     }
 
-    /// Called by the async file-open future when a file has been successfully read.
-    ///
-    /// Uses the Buffer Registry to deduplicate: if the file is already open, switches
-    /// to the existing tab instead of creating a duplicate. If new, creates a document
-    /// from the pre-read content, creates a view, and activates it.
-    pub fn handle_file_loaded(&mut self, path: std::path::PathBuf, content: String) {
+    fn handle_file_loaded(&mut self, path: std::path::PathBuf, content: String) {
         let (doc_id, was_existing) = self.app.workspace.open_document_with_content(path, content);
 
         if was_existing {
@@ -129,13 +110,18 @@ impl CoreEditorAdapter {
         self.app.needs_render = true;
     }
 
-    /// Called by the async file-open future when a file could not be loaded.
-    ///
-    /// Sets a status bar message with the error description.
-    pub fn handle_file_error(&mut self, message: String) {
+    fn handle_file_error(&mut self, message: String) {
         self.pending_status_message = Some(message);
         self.dialog_open = false;
         self.app.needs_render = true;
+    }
+
+    fn is_dialog_open(&self) -> bool {
+        self.dialog_open
+    }
+
+    fn set_dialog_open(&mut self, open: bool) {
+        self.dialog_open = open;
     }
 }
 
