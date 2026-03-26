@@ -67,7 +67,9 @@ impl EditorRootView {
 
         FileTreePresentation {
             roots: sidebar.tree.clone(),
-            selected_index: sidebar.entries.iter().position(|e| e.is_selected),
+            // Don't highlight any entry by default — keyboard selection
+            // is a TUI concept, not relevant for mouse-driven tree view
+            selected_index: None,
         }
     }
 

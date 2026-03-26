@@ -230,6 +230,7 @@ impl SidebarView {
             .flex_col()
             .grow(1.0)
             .bg(theme.color(ColorToken::BgSecondary))
+            .overflow_hidden()
             .child(tree.render(cx))
     }
 
