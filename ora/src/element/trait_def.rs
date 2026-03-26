@@ -50,6 +50,10 @@ pub enum PaintCommand {
     /// Marks a boundary between z-layers (e.g., between Stack children).
     /// The renderer flushes rects and text at each boundary to maintain correct z-ordering.
     LayerBoundary,
+    /// Push a paint offset — shifts all subsequent paint commands by (dx, dy).
+    PushOffset { dx: f32, dy: f32 },
+    /// Pop a paint offset, restoring the previous offset.
+    PopOffset,
 }
 
 /// Context for computing layout requirements.
@@ -232,6 +236,11 @@ impl<'a> PrepaintContext<'a> {
         let hitbox = Hitbox { id, bounds, opaque };
         self.hitboxes.push(hitbox);
 
+        // Auto-register parent relationship if a parent is on the stack
+        if let Some(&parent) = self.hitbox_stack.last() {
+            self.event_handlers.register_parent(id, parent);
+        }
+
         id
     }
 
@@ -342,6 +351,7 @@ pub struct PaintContext<'a> {
     pub(crate) window_size: (u32, u32),
     pub(crate) layout_outputs: &'a [LayoutOutput],
     pub(crate) clip_stack: Vec<Rect>,
+    pub(crate) offset_stack: Vec<(f32, f32)>,
     pub(crate) interaction_state: &'a InteractionState,
     pub(crate) focus_state: &'a FocusState,
 }
@@ -362,6 +372,7 @@ impl<'a> PaintContext<'a> {
             window_size,
             layout_outputs,
             clip_stack: Vec::new(),
+            offset_stack: Vec::new(),
             interaction_state,
             focus_state,
         }
@@ -502,6 +513,19 @@ impl<'a> PaintContext<'a> {
                 self.paint_commands.push(PaintCommand::ResetScissor);
             }
         }
+    }
+
+    /// Push a paint offset — shifts all subsequent paint commands by (dx, dy).
+    /// Used by ScrollArea to scroll content without affecting layout.
+    pub fn push_offset(&mut self, dx: f32, dy: f32) {
+        self.offset_stack.push((dx, dy));
+        self.paint_commands.push(PaintCommand::PushOffset { dx, dy });
+    }
+
+    /// Pop a paint offset.
+    pub fn pop_offset(&mut self) {
+        self.offset_stack.pop();
+        self.paint_commands.push(PaintCommand::PopOffset);
     }
 
     /// Get or advance the background-color transition for the given element.

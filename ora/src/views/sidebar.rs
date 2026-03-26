@@ -92,6 +92,8 @@ pub struct SidebarView {
     dispatch: Option<Rc<dyn Fn(EditorCommand)>>,
     /// Shared scroll state for the file tree scroll area.
     tree_scroll: SharedScrollState,
+    /// Available height for the tree content (window height minus chrome).
+    content_height: f32,
 }
 
 impl SidebarView {
@@ -105,6 +107,7 @@ impl SidebarView {
             file_tree: FileTreeView::new(tree),
             dispatch: None,
             tree_scroll: scroll_state(),
+            content_height: 600.0,
         }
     }
 
@@ -118,6 +121,7 @@ impl SidebarView {
             file_tree: FileTreeView::new(tree),
             dispatch: None,
             tree_scroll: scroll_state(),
+            content_height: 600.0,
         }
     }
 
@@ -130,6 +134,12 @@ impl SidebarView {
     /// Set a shared scroll state for the file tree.
     pub fn with_scroll_state(mut self, scroll: SharedScrollState) -> Self {
         self.tree_scroll = scroll;
+        self
+    }
+
+    /// Set available content height (window height minus chrome).
+    pub fn with_content_height(mut self, h: f32) -> Self {
+        self.content_height = h;
         self
     }
 
@@ -240,8 +250,11 @@ impl SidebarView {
         }
         let tree_element = tree.render(cx);
 
+        let available_h = (self.content_height - HEADER_HEIGHT).max(100.0);
+
         scroll_area(self.tree_scroll.clone())
             .bg(bg)
+            .max_h(available_h)
             .child(tree_element)
             .into()
     }

@@ -84,10 +84,21 @@ impl EditorRootView {
             adapter_for_dispatch.borrow_mut().dispatch_command(cmd);
         });
 
+        // Get window height from viewport_lines (reverse the event loop calculation)
+        const LINE_HEIGHT: f32 = 21.0;
+        const TAB_BAR_H: f32 = 36.0;
+        const STATUS_BAR_H: f32 = 28.0;
+        let viewport_lines = {
+            let adapter = self.adapter.borrow();
+            adapter.viewport_lines()
+        };
+        let window_h = (viewport_lines as f32 * LINE_HEIGHT) + TAB_BAR_H + STATUS_BAR_H;
+
         let file_tree = Self::build_file_tree(&model.sidebar);
         let sidebar = SidebarView::new(model.sidebar.clone(), file_tree)
             .with_dispatch(dispatch.clone())
-            .with_scroll_state(self.sidebar_scroll.clone());
+            .with_scroll_state(self.sidebar_scroll.clone())
+            .with_content_height(window_h);
 
         let tab_bar = TabBarView::new(model.tab_bar.clone()).with_dispatch(dispatch.clone());
         let gutter = GutterView::new_with_scroll_offset(

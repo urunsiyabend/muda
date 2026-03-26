@@ -355,9 +355,9 @@ impl ApplicationHandler for OraApp {
                     modifiers: self.modifiers,
                 };
                 let hit = hit_test(&self.hitboxes, self.cursor_position);
-                let has_scroll_handlers = self.event_handlers.has_scroll_handlers();
-                log::info!("Scroll: delta={:.1}, hit={:?}, scroll_handlers={}", delta_px, hit.map(|h| h.0), has_scroll_handlers);
                 let consumed = if let Some(hit_id) = hit {
+                    let path = crate::events::dispatch::build_dispatch_path(&self.event_handlers.parent_map, hit_id);
+                    log::info!("Scroll: hit={}, path={:?}, scroll_handler_count={}", hit_id.0, path.iter().map(|h| h.0).collect::<Vec<_>>(), self.event_handlers.has_scroll_handlers());
                     dispatch_mouse_scroll(&mut self.event_handlers, &scroll_event, hit_id)
                 } else {
                     false

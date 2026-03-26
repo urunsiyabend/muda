@@ -445,10 +445,12 @@ impl Element for Div {
             state.focus_id = Some(focus_handle.id);
         }
 
-        // Prepaint children
+        // Push this hitbox as parent so children establish parent chain for bubbling
+        cx.push_hitbox_parent(hitbox_id);
         for child in &mut self.children {
             child.prepaint(cx);
         }
+        cx.pop_hitbox_parent();
     }
 
     fn paint(&mut self, state: &mut DivState, cx: &mut PaintContext) {
@@ -506,9 +508,19 @@ impl Element for Div {
         // Emit PaintCommand::StyledRect with computed style
         cx.paint_styled_rect(&style, &bounds);
 
+        // If overflow is hidden or scroll, clip children to this div's bounds
+        let clipping = matches!(self.style.overflow, Overflow::Hidden | Overflow::Scroll);
+        if clipping {
+            cx.push_clip(bounds);
+        }
+
         // Paint children
         for child in &mut self.children {
             child.paint(cx);
+        }
+
+        if clipping {
+            cx.pop_clip();
         }
     }
 }

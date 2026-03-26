@@ -107,12 +107,13 @@ impl GpuState {
         }
     }
 
-    /// Render a frame using the layered GPU pipeline.
+    /// Render a frame using the layered GPU pipeline with scissor clipping.
     /// Processes paint commands and renders rectangles and text.
     ///
     /// Paint commands are split at `LayerBoundary` markers (inserted by Stack).
-    /// Each layer group renders its rects then text before the next layer,
-    /// ensuring correct z-ordering when overlays occlude lower content.
+    /// Within each layer, `SetScissor`/`ResetScissor` commands create "draw groups"
+    /// that share a common scissor rect. Each draw group renders its rects then text
+    /// with the appropriate scissor state.
     ///
     /// When no LayerBoundary markers are present (common case — no overlays),
     /// exactly one render pass is created, identical in cost to the old single-pass approach.
@@ -123,80 +124,155 @@ impl GpuState {
         use crate::element::PaintCommand;
         use crate::rendering::RectInstance;
 
+        let (surface_w, surface_h) = self.size;
+
         let output = self.surface.get_current_texture()?;
         let view = output
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
-        // Step 1: Group commands by LayerBoundary.
-        // Each group contains rects and text entries for one layer.
-        // The first group starts implicitly (no leading LayerBoundary needed).
-        let mut layer_rect_instances: Vec<Vec<RectInstance>> = vec![Vec::new()];
-        let mut layer_text_data: Vec<Vec<(glyphon::Buffer, f32, f32, crate::style::Rect, crate::style::Color)>> = vec![Vec::new()];
+        // A DrawGroup is a sequence of draw commands sharing the same scissor state.
+        // Scissor changes (SetScissor/ResetScissor) create new draw groups.
+        struct DrawGroup {
+            scissor: Option<(u32, u32, u32, u32)>, // None = full viewport
+            rect_instances: Vec<RectInstance>,
+            text_data: Vec<(glyphon::Buffer, f32, f32, crate::style::Rect, crate::style::Color)>,
+        }
+
+        // Step 1: Group commands by LayerBoundary, then by scissor changes within each layer.
+        let mut layers: Vec<Vec<DrawGroup>> = vec![vec![DrawGroup {
+            scissor: None,
+            rect_instances: Vec::new(),
+            text_data: Vec::new(),
+        }]];
+
+        let mut offset_stack: Vec<(f32, f32)> = Vec::new();
 
         for command in commands {
             match command {
                 PaintCommand::LayerBoundary => {
-                    layer_rect_instances.push(Vec::new());
-                    layer_text_data.push(Vec::new());
+                    layers.push(vec![DrawGroup {
+                        scissor: None,
+                        rect_instances: Vec::new(),
+                        text_data: Vec::new(),
+                    }]);
+                }
+                PaintCommand::SetScissor { x, y, width, height } => {
+                    // Start a new draw group with the given scissor rect.
+                    let current_layer = layers.last_mut().unwrap();
+                    current_layer.push(DrawGroup {
+                        scissor: Some((*x, *y, *width, *height)),
+                        rect_instances: Vec::new(),
+                        text_data: Vec::new(),
+                    });
+                }
+                PaintCommand::ResetScissor => {
+                    // Start a new draw group with no scissor (full viewport).
+                    let current_layer = layers.last_mut().unwrap();
+                    current_layer.push(DrawGroup {
+                        scissor: None,
+                        rect_instances: Vec::new(),
+                        text_data: Vec::new(),
+                    });
+                }
+                PaintCommand::PushOffset { dx, dy } => {
+                    let (cur_x, cur_y) = offset_stack.last().copied().unwrap_or((0.0, 0.0));
+                    offset_stack.push((cur_x + dx, cur_y + dy));
+                }
+                PaintCommand::PopOffset => {
+                    offset_stack.pop();
                 }
                 PaintCommand::StyledRect { bounds, style } => {
-                    layer_rect_instances.last_mut().unwrap()
-                        .push(RectInstance::from_style(style, bounds, self.size));
+                    let (ox, oy) = offset_stack.last().copied().unwrap_or((0.0, 0.0));
+                    let shifted = crate::style::Rect {
+                        origin: crate::style::Point::new(bounds.origin.x + ox, bounds.origin.y + oy),
+                        size: bounds.size,
+                    };
+                    let group = layers.last_mut().unwrap().last_mut().unwrap();
+                    group.rect_instances.push(RectInstance::from_style(style, &shifted, self.size));
                 }
                 PaintCommand::Rect { x, y, width, height, color } => {
-                    layer_rect_instances.last_mut().unwrap()
-                        .push(RectInstance::from_legacy(*x, *y, *width, *height, *color, self.size));
+                    let (ox, oy) = offset_stack.last().copied().unwrap_or((0.0, 0.0));
+                    let group = layers.last_mut().unwrap().last_mut().unwrap();
+                    group.rect_instances.push(RectInstance::from_legacy(*x + ox, *y + oy, *width, *height, *color, self.size));
                 }
                 PaintCommand::Text { buffer, left, top, bounds, color } => {
-                    layer_text_data.last_mut().unwrap()
-                        .push((buffer.clone(), *left, *top, *bounds, *color));
+                    let (ox, oy) = offset_stack.last().copied().unwrap_or((0.0, 0.0));
+                    let shifted_bounds = crate::style::Rect {
+                        origin: crate::style::Point::new(bounds.origin.x + ox, bounds.origin.y + oy),
+                        size: bounds.size,
+                    };
+                    let group = layers.last_mut().unwrap().last_mut().unwrap();
+                    group.text_data.push((buffer.clone(), *left + ox, *top + oy, shifted_bounds, *color));
                 }
-                PaintCommand::SetScissor { .. } => {} // TODO: future scissor support
-                PaintCommand::ResetScissor => {}
             }
         }
 
-        let layer_count = layer_rect_instances.len();
-
-        // Step 2: Flatten all rect instances into one buffer, track per-layer ranges.
+        // Step 2: Flatten all rect instances into one buffer, track per-group ranges.
         // Single prepare() call avoids bind_group invalidation from multiple uploads.
         let mut all_rect_instances: Vec<RectInstance> = Vec::new();
-        let mut layer_ranges: Vec<std::ops::Range<u32>> = Vec::new();
+        // Store (layer_idx, group_idx) -> rect range
+        let mut group_rect_ranges: Vec<Vec<std::ops::Range<u32>>> = Vec::new();
 
-        for layer_rects in &layer_rect_instances {
-            let start = all_rect_instances.len() as u32;
-            all_rect_instances.extend_from_slice(layer_rects);
-            let end = all_rect_instances.len() as u32;
-            layer_ranges.push(start..end);
+        for layer_groups in &layers {
+            let mut ranges = Vec::new();
+            for group in layer_groups {
+                let start = all_rect_instances.len() as u32;
+                all_rect_instances.extend_from_slice(&group.rect_instances);
+                let end = all_rect_instances.len() as u32;
+                ranges.push(start..end);
+            }
+            group_rect_ranges.push(ranges);
         }
 
         // Step 3: Single prepare for all rect instances.
         self.rect_renderer.prepare(&self.device, &self.queue, &all_rect_instances);
 
-        // Step 4: Add text entries to per-layer text system and ensure pool size.
-        self.text_system.ensure_layer_renderers(&self.device, layer_count);
+        // Step 4: Count total draw groups for text renderer allocation.
+        // Each draw group with text needs its own TextRenderer to allow independent
+        // scissor-scoped rendering within a single render pass.
+        let total_text_groups: usize = layers.iter()
+            .flat_map(|layer| layer.iter())
+            .filter(|g| !g.text_data.is_empty())
+            .count();
 
-        for (layer_idx, text_entries) in layer_text_data.iter().enumerate() {
-            for (buffer, left, top, bounds, color) in text_entries {
-                self.text_system.add_text_to_layer(
-                    layer_idx,
-                    buffer.clone(),
-                    *left,
-                    *top,
-                    *bounds,
-                    *color,
-                );
+        self.text_system.ensure_layer_renderers(&self.device, total_text_groups);
+
+        // Assign text renderer indices to groups that have text.
+        let mut text_renderer_idx = 0usize;
+        let mut group_text_indices: Vec<Vec<Option<usize>>> = Vec::new();
+
+        for layer_groups in &layers {
+            let mut indices = Vec::new();
+            for group in layer_groups {
+                if group.text_data.is_empty() {
+                    indices.push(None);
+                } else {
+                    // Add text to this renderer
+                    for (buffer, left, top, bounds, color) in &group.text_data {
+                        self.text_system.add_text_to_layer(
+                            text_renderer_idx,
+                            buffer.clone(),
+                            *left,
+                            *top,
+                            *bounds,
+                            *color,
+                        );
+                    }
+                    indices.push(Some(text_renderer_idx));
+                    text_renderer_idx += 1;
+                }
             }
+            group_text_indices.push(indices);
         }
 
-        // Step 5: Prepare ALL layers before rendering any.
+        // Step 5: Prepare ALL text renderers before rendering any.
         // All text prepares must complete before any renders to stabilize the atlas
         // and prevent bind_group invalidation during the render phase.
-        for layer_idx in 0..layer_count {
+        for idx in 0..text_renderer_idx {
             self.text_system
-                .prepare_layer(&self.device, &self.queue, layer_idx, self.size.0, self.size.1)
-                .unwrap_or_else(|e| log::warn!("Text prepare error for layer {}: {:?}", layer_idx, e));
+                .prepare_layer(&self.device, &self.queue, idx, surface_w, surface_h)
+                .unwrap_or_else(|e| log::warn!("Text prepare error for group {}: {:?}", idx, e));
         }
 
         // Step 6: Create command encoder.
@@ -207,9 +283,10 @@ impl GpuState {
             });
 
         // Step 7: Render each layer in its own render pass.
+        // Within each layer, iterate draw groups: set scissor, draw rects, draw text.
         // First pass: Clear (required — Vulkan UB if Load on uninitialized texture).
         // Subsequent passes: Load (preserves previous layers for correct occlusion).
-        for layer_idx in 0..layer_count {
+        for (layer_idx, layer_groups) in layers.iter().enumerate() {
             let load_op = if layer_idx == 0 {
                 wgpu::LoadOp::Clear(wgpu::Color {
                     r: 0.1,
@@ -237,16 +314,31 @@ impl GpuState {
                     occlusion_query_set: None,
                 });
 
-                // Draw rects for this layer (range slice of the single prepared buffer).
-                let range = layer_ranges[layer_idx].clone();
-                if !range.is_empty() {
-                    self.rect_renderer.render_range(&mut render_pass, range);
-                }
+                for (group_idx, group) in layer_groups.iter().enumerate() {
+                    // Apply scissor state for this draw group.
+                    match group.scissor {
+                        Some((x, y, w, h)) => {
+                            render_pass.set_scissor_rect(x, y, w, h);
+                        }
+                        None => {
+                            // Full viewport — reset scissor
+                            render_pass.set_scissor_rect(0, 0, surface_w, surface_h);
+                        }
+                    }
 
-                // Draw text for this layer.
-                self.text_system
-                    .render_layer(layer_idx, &mut render_pass)
-                    .unwrap_or_else(|e| log::warn!("Text render error for layer {}: {:?}", layer_idx, e));
+                    // Draw rects for this group.
+                    let range = group_rect_ranges[layer_idx][group_idx].clone();
+                    if !range.is_empty() {
+                        self.rect_renderer.render_range(&mut render_pass, range);
+                    }
+
+                    // Draw text for this group (if any).
+                    if let Some(text_idx) = group_text_indices[layer_idx][group_idx] {
+                        self.text_system
+                            .render_layer(text_idx, &mut render_pass)
+                            .unwrap_or_else(|e| log::warn!("Text render error for group {}: {:?}", text_idx, e));
+                    }
+                }
             } // render_pass dropped here — encoder borrow released
         }
 

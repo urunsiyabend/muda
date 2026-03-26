@@ -139,21 +139,22 @@ fn erf_approx(x: f32) -> f32 {
     return s - s / (val * val);
 }
 
-// Closed-form box shadow using Gaussian integral
+// Box shadow using distance-based Gaussian falloff.
+// Returns 1.0 at the box edge and decays smoothly to 0.0 at ~blur distance.
 fn box_shadow_alpha(p: vec2<f32>, half_size: vec2<f32>, blur: f32, spread: f32) -> f32 {
     if blur <= 0.0 {
         return 0.0;
     }
 
     let expanded = half_size + vec2<f32>(spread);
+    // Signed distance from expanded box: negative inside, positive outside
     let d = abs(p) - expanded;
+    let outside_dist = length(max(d, vec2<f32>(0.0)));
 
-    // Use error function for closed-form Gaussian integral
-    let sigma = blur * 0.5;
-    let integral_x = 0.5 * (erf_approx((d.x + blur) / (sigma * 1.414213)) - erf_approx((d.x - blur) / (sigma * 1.414213)));
-    let integral_y = 0.5 * (erf_approx((d.y + blur) / (sigma * 1.414213)) - erf_approx((d.y - blur) / (sigma * 1.414213)));
-
-    return clamp(integral_x * integral_y, 0.0, 1.0);
+    // Gaussian falloff: sigma = blur / 3 gives smooth fade across blur radius
+    let sigma = blur / 3.0;
+    let alpha = exp(-(outside_dist * outside_dist) / (2.0 * sigma * sigma));
+    return alpha;
 }
 
 @fragment

@@ -89,6 +89,8 @@ impl AbsoluteWrapper {
         style.position = Position::Absolute;
         style.top = Length::Px(0.0);
         style.left = Length::Px(0.0);
+        style.width = Length::Percent(100.0);
+        style.height = Length::Percent(100.0);
 
         AbsoluteWrapper {
             style,
@@ -163,8 +165,13 @@ impl Element for Stack {
 
     fn paint(&mut self, _state: &mut StackState, cx: &mut PaintContext) {
         // Paint children in order (first = bottom, last = top)
-        // This creates z-layering through paint order
-        for child in &mut self.children {
+        // This creates z-layering through paint order.
+        // Insert LayerBoundary between children so the renderer flushes
+        // rects and text at each boundary, maintaining correct z-ordering.
+        for (i, child) in self.children.iter_mut().enumerate() {
+            if i > 0 {
+                cx.push_layer_boundary();
+            }
             child.paint(cx);
         }
     }

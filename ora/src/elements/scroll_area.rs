@@ -25,6 +25,7 @@ pub struct ScrollArea {
     children: Vec<AnyElement>,
     scroll: SharedScrollState,
     bg: Option<Color>,
+    max_height: Option<f32>,
 }
 
 /// Constructor.
@@ -33,6 +34,7 @@ pub fn scroll_area(scroll: SharedScrollState) -> ScrollArea {
         children: Vec::new(),
         scroll,
         bg: None,
+        max_height: None,
     }
 }
 
@@ -44,6 +46,13 @@ impl ScrollArea {
 
     pub fn bg(mut self, color: Color) -> Self {
         self.bg = Some(color);
+        self
+    }
+
+    /// Set explicit max height for the viewport (required when layout
+    /// engine doesn't constrain the container from parent).
+    pub fn max_h(mut self, h: f32) -> Self {
+        self.max_height = Some(h);
         self
     }
 }
@@ -58,20 +67,23 @@ impl Element for ScrollArea {
     type RequestLayoutState = ScrollAreaState;
 
     fn request_layout(&mut self, cx: &mut LayoutContext) -> (LayoutId, Self::RequestLayoutState) {
-        // Container: fills available space
+        // Container: fixed or bounded height viewport
         let mut container_style = Style::default();
         container_style.display = Display::Flex;
         container_style.flex_direction = FlexDirection::Column;
         container_style.flex_grow = 1.0;
         container_style.overflow = Overflow::Hidden;
+        if let Some(h) = self.max_height {
+            container_style.height = Length::Px(h);
+        }
         let container_id = cx.request_layout(&container_style);
 
-        // Inner content wrapper: unconstrained height, shifted by scroll offset
+        // Inner content wrapper: unconstrained height, never shrunk by parent
+        // NO negative margin — scroll offset applied via PushOffset in paint phase
         let mut content_style = Style::default();
         content_style.display = Display::Flex;
         content_style.flex_direction = FlexDirection::Column;
-        // Negative top margin shifts content up — same pattern as TextAreaView
-        content_style.margin.top = -self.scroll.get();
+        content_style.flex_shrink = 0.0;
         let content_id = cx.request_layout(&content_style);
         cx.add_child(container_id, content_id);
 
@@ -94,13 +106,13 @@ impl Element for ScrollArea {
         let hitbox_id = cx.register_hitbox(bounds, true);
         state.hitbox_id = Some(hitbox_id);
 
-        // max_scroll: how far content can scroll before bottom is reached
-        // content_bounds.size.height includes the negative margin, so actual
-        // content height = content_bounds.size.height + current scroll offset
+        // max_scroll: content that exceeds viewport can be scrolled
+        // Half-viewport overscroll at bottom so last items aren't glued to edge
         let current_scroll = self.scroll.get();
-        let actual_content_h = content_bounds.size.height + current_scroll;
+        let content_h = content_bounds.size.height;
         let viewport_h = bounds.size.height;
-        let max_scroll = (actual_content_h - viewport_h).max(0.0);
+        let bottom_padding = viewport_h * 0.1;
+        let max_scroll = (content_h - viewport_h + bottom_padding).max(0.0);
 
         // Clamp and update
         let clamped = current_scroll.clamp(0.0, max_scroll);
@@ -118,13 +130,15 @@ impl Element for ScrollArea {
             if (new_val - cur).abs() > 0.01 {
                 scroll_state.set(new_val);
             }
-            // Always consume scroll events on a scroll area
             ctx.stop_propagation();
         });
 
+        // Push as parent so child hitboxes bubble scroll events to us
+        cx.push_hitbox_parent(hitbox_id);
         for child in &mut self.children {
             child.prepaint(cx);
         }
+        cx.pop_hitbox_parent();
     }
 
     fn paint(&mut self, state: &mut Self::RequestLayoutState, cx: &mut PaintContext) {
@@ -136,13 +150,20 @@ impl Element for ScrollArea {
             cx.paint_styled_rect(&style, &bounds);
         }
 
-        // Clip to viewport
+        // Clip to viewport, then shift content up by scroll offset
         cx.push_clip(bounds);
+        let scroll_y = self.scroll.get();
+        if scroll_y > 0.0 {
+            cx.push_offset(0.0, -scroll_y);
+        }
 
         for child in &mut self.children {
             child.paint(cx);
         }
 
+        if scroll_y > 0.0 {
+            cx.pop_offset();
+        }
         cx.pop_clip();
     }
 }
