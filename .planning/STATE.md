@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-03-26)
 ## Current Position
 
 Phase: 12 — File Operations (in progress)
-Plan: 01 of 3 (complete)
-Status: In progress — Plan 01 done
-Last activity: 2026-03-26 — Completed 12-01-PLAN.md (rfd/dirs deps, untitled naming, PendingFileOp queue, Ctrl+N)
+Plan: 02 of 3 (complete)
+Status: In progress — Plan 02 done
+Last activity: 2026-03-26 — Completed 12-02-PLAN.md (Ctrl+O native file dialog, async I/O, UTF-8 validation, BOM strip, Buffer Registry dedup)
 
-Progress: [█████████░░░░░░░░░░░░░░░░░░░░░░░░░░░] v2.0 Phase 12 in progress (9/~17 plans)
+Progress: [██████████░░░░░░░░░░░░░░░░░░░░░░░░░░] v2.0 Phase 12 in progress (10/~17 plans)
 
 ## Performance Metrics
 
@@ -43,7 +43,8 @@ None.
 
 ### Blockers/Concerns
 
-- Async file I/O return path: RESOLVED (12-01) — PendingFileOp queue pattern: dispatch_command sets pending_file_op; event loop polls take_pending_file_op() each frame to open rfd dialogs
+- Async file I/O return path: RESOLVED (12-02) — Full flow: dispatch_command queues PendingFileOp → poll_pending_file_ops() → LocalExecutor future → background thread reads file → adapter callback delivers result; rfd AsyncFileDialog + futures-lite yield_now pattern
+- FileOpDataSource sub-trait: RESOLVED (12-02) — file-op callbacks isolated in FileOpDataSource sub-trait; EditorDataSource super-trait updated; PendingFileOp relocated to ora
 - EditorDataSource trait pressure: RESOLVED (10-02) — split into BufferDataSource + CommandDispatcher + WindowDataSource with blanket super-trait
 - Selection rendering: RESOLVED (10-03) — selection_ranges in LinePresentation, 5-layer Stack, span filter removed
 - Idle GPU fixed (10-01): unconditional request_redraw at event_loop.rs removed; ControlFlow state machine now drives frame cadence
@@ -57,10 +58,10 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-26T17:45:43Z
-Stopped at: Completed 12-01-PLAN.md
+Last session: 2026-03-26T18:21:00Z
+Stopped at: Completed 12-02-PLAN.md
 Resume file: None
-Next: Phase 12 Plan 02 — Open File dialog integration
+Next: Phase 12 Plan 03 — Save As / Save dialog integration
 
 ---
 *State initialized: 2026-01-28*
