@@ -5,7 +5,7 @@
 See: .planning/PROJECT.md (updated 2026-03-26)
 
 **Core value:** A functional, performant code editor built on ora's GPU-accelerated UI framework.
-**Current focus:** v2.0 Functional Editor — Phase 12: File Operations (Phase 11 complete).
+**Current focus:** v2.0 Functional Editor — Phase 12 complete, next: Phase 13 (Selection + Clipboard).
 
 ## Current Position
 
@@ -68,7 +68,7 @@ Plan 03: Ctrl+S silent save / Save As dialog (rfd save_file), handle_file_saved 
 Last session: 2026-03-26T18:02:00Z
 Stopped at: Completed 12-03-PLAN.md (Phase 12 complete)
 Resume file: None
-Next: Phase 13 (sidebar navigation) or Phase 14 (selection editing)
+Next: Phase 13 — Selection + Clipboard
 
 ---
 *State initialized: 2026-01-28*

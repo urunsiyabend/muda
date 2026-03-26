@@ -31,7 +31,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 10: Foundation Fixes** - Event-driven redraw, command audit, EditorDataSource redesign, selection rendering fix
 - [x] **Phase 11: Buffer Registry + Multi-Tab** - Central buffer deduplication, tab switching, Ctrl+W close, Ctrl+Tab cycle
-- [ ] **Phase 12: File Operations** - Ctrl+O open, Ctrl+S save, Ctrl+Shift+S Save As, Ctrl+N new, async I/O
+- [x] **Phase 12: File Operations** - Ctrl+O open, Ctrl+S save, Ctrl+Shift+S Save As, Ctrl+N new, async I/O
 - [ ] **Phase 13: Selection + Clipboard** - Click-to-position, drag selection, Shift+arrow, Ctrl+A, Ctrl+C/X/V
 - [ ] **Phase 14: File Browser** - Real directory tree, click to open, expand/collapse state, file watcher
 - [ ] **Phase 15: Find / Replace** - Inline find bar, match highlighting, next/prev, replace one/all, Go to line
@@ -287,7 +287,12 @@ Plans:
   4. Pressing Ctrl+N opens a new untitled buffer ready for editing
   5. Opening a non-UTF-8 file shows a user-visible error message instead of crashing or displaying garbled text
   6. The editor remains responsive during file load — UI does not freeze on large files
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [x] PLAN-01.md -- rfd/dirs deps, untitled naming, PendingFileOp queue, Ctrl+N (Wave 1)
+- [x] PLAN-02.md -- Ctrl+O native file dialog, async I/O, UTF-8 validation, BOM strip (Wave 2)
+- [x] PLAN-03.md -- Ctrl+S save, Ctrl+Shift+S Save As, last-dir persistence (Wave 3)
 
 ### Phase 13: Selection + Clipboard
 **Goal**: Users can select text with mouse and keyboard, and copy/cut/paste through the OS clipboard
@@ -368,7 +373,7 @@ v2.0: 10 -> 11 -> 12 -> 13 (can follow 10) -> 14 (needs 11+12) -> 15 (needs 10+1
 |-------|----------------|--------|---------|
 | 10. Foundation Fixes | 4/4 | Complete | 2026-03-26 |
 | 11. Buffer Registry + Multi-Tab | 4/4 | Complete | 2026-03-26 |
-| 12. File Operations | 0/TBD | Pending | — |
+| 12. File Operations | 3/3 | Complete | 2026-03-26 |
 | 13. Selection + Clipboard | 0/TBD | Pending | — |
 | 14. File Browser | 0/TBD | Pending | — |
 | 15. Find / Replace | 0/TBD | Pending | — |

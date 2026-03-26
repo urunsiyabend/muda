@@ -31,12 +31,12 @@ Requirements for v2.0 Functional Editor milestone. Each maps to roadmap phases.
 
 ### File Operations
 
-- [ ] **FILE-01**: User can open a file via Ctrl+O with native OS file picker (rfd)
-- [ ] **FILE-02**: User can save the active file via Ctrl+S (silently if path known, Save As dialog if untitled)
-- [ ] **FILE-03**: User can Save As via Ctrl+Shift+S to choose a new file path
-- [ ] **FILE-04**: User can create a new untitled buffer via Ctrl+N
-- [ ] **FILE-05**: File I/O uses async wrapper at wgpu_client dispatch layer — UI thread never blocks on disk
-- [ ] **FILE-06**: Non-UTF-8 files show user-facing error message; UTF-8 BOM stripped on load
+- [x] **FILE-01**: User can open a file via Ctrl+O with native OS file picker (rfd)
+- [x] **FILE-02**: User can save the active file via Ctrl+S (silently if path known, Save As dialog if untitled)
+- [x] **FILE-03**: User can Save As via Ctrl+Shift+S to choose a new file path
+- [x] **FILE-04**: User can create a new untitled buffer via Ctrl+N
+- [x] **FILE-05**: File I/O uses async wrapper at wgpu_client dispatch layer — UI thread never blocks on disk
+- [x] **FILE-06**: Non-UTF-8 files show user-facing error message; UTF-8 BOM stripped on load
 
 ### Sidebar File Browser
 
@@ -135,12 +135,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TAB-03 | Phase 11 | Pending |
 | TAB-04 | Phase 11 | Pending |
 | TAB-05 | Phase 11 | Pending |
-| FILE-01 | Phase 12 | Pending |
-| FILE-02 | Phase 12 | Pending |
-| FILE-03 | Phase 12 | Pending |
-| FILE-04 | Phase 12 | Pending |
-| FILE-05 | Phase 12 | Pending |
-| FILE-06 | Phase 12 | Pending |
+| FILE-01 | Phase 12 | Complete |
+| FILE-02 | Phase 12 | Complete |
+| FILE-03 | Phase 12 | Complete |
+| FILE-04 | Phase 12 | Complete |
+| FILE-05 | Phase 12 | Complete |
+| FILE-06 | Phase 12 | Complete |
 | SIDE-01 | Phase 14 | Pending |
 | SIDE-02 | Phase 14 | Pending |
 | SIDE-03 | Phase 14 | Pending |
