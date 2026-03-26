@@ -1,6 +1,9 @@
+use std::rc::Rc;
+
 use crate::element::{Element, LayoutContext, LayoutId, PaintContext, PrepaintContext};
 use crate::elements::text::{TextElement, TextState};
 use crate::events::mouse::HitboxId;
+use crate::events::MouseButton;
 use crate::style::*;
 use crate::theme::ColorToken;
 
@@ -19,8 +22,8 @@ pub struct TreeItem {
     is_selected: bool,
     is_generated: bool,
     icon_color: Option<Color>,
-    on_click: Option<Box<dyn Fn() + 'static>>,
-    on_toggle: Option<Box<dyn Fn() + 'static>>,
+    on_click: Option<Rc<dyn Fn() + 'static>>,
+    on_toggle: Option<Rc<dyn Fn() + 'static>>,
     // Internal text elements (created during request_layout)
     chevron_element: Option<TextElement>,
     icon_element: Option<TextElement>,
@@ -79,13 +82,13 @@ impl TreeItem {
 
     /// Attach a click handler for selection
     pub fn on_click(mut self, handler: impl Fn() + 'static) -> Self {
-        self.on_click = Some(Box::new(handler));
+        self.on_click = Some(Rc::new(handler));
         self
     }
 
     /// Attach a handler for expand/collapse toggle
     pub fn on_toggle(mut self, handler: impl Fn() + 'static) -> Self {
-        self.on_toggle = Some(Box::new(handler));
+        self.on_toggle = Some(Rc::new(handler));
         self
     }
 }
@@ -175,25 +178,28 @@ impl Element for TreeItem {
         let hitbox_id = cx.register_hitbox(bounds, true);
         state.hitbox_id = Some(hitbox_id);
 
-        if self.is_dir {
-            // Directories: single click toggles expand (ignore double-click's second press)
-            if let Some(on_toggle) = self.on_toggle.take() {
-                cx.on_mouse_down(hitbox_id, move |event, _ctx| {
-                    if event.click_count == 1 {
-                        on_toggle();
-                    }
-                });
+        // Wire click handlers — use clone (Rc) like Tab element, not take
+        let on_click = self.on_click.clone();
+        let on_toggle = self.on_toggle.clone();
+        let is_dir = self.is_dir;
+        cx.on_mouse_down(hitbox_id, move |event, _ctx| {
+            if event.button != MouseButton::Left {
+                return;
             }
-        } else {
-            // Files: double-click to open
-            if let Some(on_click) = self.on_click.take() {
-                cx.on_mouse_down(hitbox_id, move |event, _ctx| {
-                    if event.click_count >= 2 {
-                        on_click();
+            if is_dir {
+                // Directories: click to expand/collapse
+                if let Some(handler) = &on_toggle {
+                    handler();
+                }
+            } else {
+                // Files: double-click to open
+                if event.click_count >= 2 {
+                    if let Some(handler) = &on_click {
+                        handler();
                     }
-                });
+                }
             }
-        }
+        });
 
         // Prepaint child elements
         if let Some(chevron_el) = &mut self.chevron_element {
@@ -216,12 +222,7 @@ impl Element for TreeItem {
         // Extract all needed colors from theme up front
         let bg_color = if self.is_selected {
             let mut c = cx.theme().color(ColorToken::Accent);
-            c.a = 0.15; // low-alpha accent for selection
-            c
-        } else if self.is_generated {
-            // Generated/build dirs get a subtle background tint
-            let mut c = cx.theme().color(ColorToken::FgMuted);
-            c.a = 0.06;
+            c.a = 0.15;
             c
         } else if is_hovered {
             cx.theme().color(ColorToken::BgElevated)
@@ -231,7 +232,8 @@ impl Element for TreeItem {
 
         let chevron_color = cx.theme().color(ColorToken::FgMuted);
         let label_color = if self.is_generated {
-            cx.theme().color(ColorToken::FgMuted)
+            // Generated dirs: slightly dimmed but still readable
+            cx.theme().color(ColorToken::FgSecondary)
         } else {
             cx.theme().color(ColorToken::FgPrimary)
         };
