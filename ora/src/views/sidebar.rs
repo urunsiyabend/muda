@@ -13,7 +13,7 @@ use crate::animation::transition::TransitionId;
 use crate::context::ViewContext;
 use crate::editor_adapter::EditorCommand;
 use crate::element::AnyElement;
-use crate::elements::{Div, TextElement};
+use crate::elements::{Div, TextElement, scroll_area, scroll_state, SharedScrollState};
 use crate::events::focus::FocusHandle;
 use crate::style::{pct, px};
 use crate::theme::ColorToken;
@@ -90,8 +90,8 @@ pub struct SidebarView {
     file_tree: FileTreeView,
     /// Command dispatch callback for sidebar actions.
     dispatch: Option<Rc<dyn Fn(EditorCommand)>>,
-    /// Scroll offset in pixels for the file tree content.
-    scroll_offset_px: f32,
+    /// Shared scroll state for the file tree scroll area.
+    tree_scroll: SharedScrollState,
 }
 
 impl SidebarView {
@@ -104,7 +104,7 @@ impl SidebarView {
             toggle_focus: None,
             file_tree: FileTreeView::new(tree),
             dispatch: None,
-            scroll_offset_px: 0.0,
+            tree_scroll: scroll_state(),
         }
     }
 
@@ -117,7 +117,7 @@ impl SidebarView {
             toggle_focus: Some(toggle_focus),
             file_tree: FileTreeView::new(tree),
             dispatch: None,
-            scroll_offset_px: 0.0,
+            tree_scroll: scroll_state(),
         }
     }
 
@@ -127,9 +127,9 @@ impl SidebarView {
         self
     }
 
-    /// Set the scroll offset for the file tree content area.
-    pub fn with_scroll_offset(mut self, offset: f32) -> Self {
-        self.scroll_offset_px = offset;
+    /// Set a shared scroll state for the file tree.
+    pub fn with_scroll_state(mut self, scroll: SharedScrollState) -> Self {
+        self.tree_scroll = scroll;
         self
     }
 
@@ -216,7 +216,7 @@ impl SidebarView {
     }
 
     /// Renders the content area with FileTree or empty state.
-    fn render_content(&self, cx: &mut ViewContext) -> Div {
+    fn render_content(&self, cx: &mut ViewContext) -> AnyElement {
         if self.file_tree.is_empty() {
             let bg = cx.theme().color(ColorToken::BgSecondary);
             let fg = cx.theme().color(ColorToken::FgMuted);
@@ -227,30 +227,23 @@ impl SidebarView {
                 .bg(bg)
                 .child(TextElement::new("No folder open")
                     .size(ENTRY_FONT_SIZE)
-                    .color(fg));
+                    .color(fg))
+                .into();
         }
 
         let bg = cx.theme().color(ColorToken::BgSecondary);
 
-        // Render FileTree — pass dispatch callback if available
+        // Render FileTree inside a ScrollArea
         let mut tree = FileTreeView::new(self.file_tree.presentation.clone());
         if let Some(ref dispatch) = self.dispatch {
             tree = tree.with_dispatch(dispatch.clone());
         }
         let tree_element = tree.render(cx);
 
-        // Inner container shifts up by scroll_offset_px (negative margin)
-        let inner = Div::new()
-            .flex_col()
-            .mt(-self.scroll_offset_px)
-            .child(tree_element);
-
-        Div::new()
-            .flex_col()
-            .grow(1.0)
+        scroll_area(self.tree_scroll.clone())
             .bg(bg)
-            .overflow_hidden()
-            .child(inner)
+            .child(tree_element)
+            .into()
     }
 
     /// Renders the collapsed icon rail state.

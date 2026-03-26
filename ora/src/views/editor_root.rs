@@ -32,8 +32,6 @@ pub struct EditorRootView {
     adapter: SharedAdapter,
     /// Shared smooth-scroll pixel offset from the event loop accumulator.
     scroll_offset: crate::app::SharedScrollOffset,
-    /// Shared sidebar scroll offset in pixels.
-    sidebar_scroll: std::rc::Rc<std::cell::Cell<f32>>,
     /// Persistent focus handles (created once, reused across frames).
     dialog_save_focus: FocusHandle,
     dialog_dont_save_focus: FocusHandle,
@@ -49,13 +47,11 @@ impl EditorRootView {
     pub fn new(
         adapter: SharedAdapter,
         scroll_offset: crate::app::SharedScrollOffset,
-        sidebar_scroll: std::rc::Rc<std::cell::Cell<f32>>,
         cx: &mut ViewContext,
     ) -> Self {
         Self {
             adapter,
             scroll_offset,
-            sidebar_scroll,
             dialog_save_focus: cx.focus_handle(),
             dialog_dont_save_focus: cx.focus_handle(),
             dialog_cancel_focus: cx.focus_handle(),
@@ -87,8 +83,7 @@ impl EditorRootView {
 
         let file_tree = Self::build_file_tree(&model.sidebar);
         let sidebar = SidebarView::new(model.sidebar.clone(), file_tree)
-            .with_dispatch(dispatch.clone())
-            .with_scroll_offset(self.sidebar_scroll.get());
+            .with_dispatch(dispatch.clone());
 
         let tab_bar = TabBarView::new(model.tab_bar.clone()).with_dispatch(dispatch.clone());
         let gutter = GutterView::new_with_scroll_offset(

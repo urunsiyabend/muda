@@ -283,6 +283,15 @@ impl<'a> PrepaintContext<'a> {
         self.event_handlers.register_mouse_move(hitbox_id, Box::new(handler));
     }
 
+    /// Register a mouse scroll handler for a hitbox.
+    pub fn on_mouse_scroll(
+        &mut self,
+        hitbox_id: HitboxId,
+        handler: impl FnMut(&crate::events::mouse::MouseScrollEvent, &crate::events::dispatch::EventContext) + 'static,
+    ) {
+        self.event_handlers.register_mouse_scroll(hitbox_id, Box::new(handler));
+    }
+
     /// Push a parent hitbox onto the stack.
     /// Call before processing children to establish parent relationships.
     pub fn push_hitbox_parent(&mut self, parent: HitboxId) {
@@ -439,15 +448,30 @@ impl<'a> PaintContext<'a> {
         self.focus_state.focused_id() == Some(focus_id) && self.focus_state.is_keyboard_focused()
     }
 
-    /// Push a clipping rectangle onto the stack
+    /// Push a clipping rectangle onto the stack.
+    /// If there is already a clip on the stack, the effective scissor is the
+    /// intersection of the new rect and the current clip (nested clipping).
     pub fn push_clip(&mut self, clip_rect: Rect) {
-        // Round scissor coordinates to nearest integer (RESEARCH.md Pitfall 3)
-        let x = clip_rect.origin.x.round() as u32;
-        let y = clip_rect.origin.y.round() as u32;
-        let width = clip_rect.size.width.round() as u32;
-        let height = clip_rect.size.height.round() as u32;
+        // Compute effective clip: intersection with current top-of-stack (if any)
+        let effective = if let Some(current) = self.clip_stack.last() {
+            current.intersect(&clip_rect)
+        } else {
+            clip_rect
+        };
 
-        self.clip_stack.push(clip_rect);
+        // Clamp to surface bounds to satisfy wgpu requirements
+        let (sw, sh) = self.window_size;
+        let x = (effective.origin.x.round() as u32).min(sw);
+        let y = (effective.origin.y.round() as u32).min(sh);
+        let width = (effective.size.width.round() as u32).min(sw.saturating_sub(x));
+        let height = (effective.size.height.round() as u32).min(sh.saturating_sub(y));
+
+        // Ensure width/height are at least 1 if the rect is non-degenerate,
+        // otherwise wgpu will reject a zero-size scissor.
+        let width = width.max(1).min(sw.saturating_sub(x));
+        let height = height.max(1).min(sh.saturating_sub(y));
+
+        self.clip_stack.push(effective);
         self.paint_commands.push(PaintCommand::SetScissor {
             x,
             y,
@@ -460,11 +484,12 @@ impl<'a> PaintContext<'a> {
     pub fn pop_clip(&mut self) {
         if self.clip_stack.pop().is_some() {
             if let Some(previous) = self.clip_stack.last() {
-                // Restore previous scissor
-                let x = previous.origin.x.round() as u32;
-                let y = previous.origin.y.round() as u32;
-                let width = previous.size.width.round() as u32;
-                let height = previous.size.height.round() as u32;
+                // Restore previous scissor (already an intersection from push_clip)
+                let (sw, sh) = self.window_size;
+                let x = (previous.origin.x.round() as u32).min(sw);
+                let y = (previous.origin.y.round() as u32).min(sh);
+                let width = (previous.size.width.round() as u32).min(sw.saturating_sub(x)).max(1);
+                let height = (previous.size.height.round() as u32).min(sh.saturating_sub(y)).max(1);
 
                 self.paint_commands.push(PaintCommand::SetScissor {
                     x,

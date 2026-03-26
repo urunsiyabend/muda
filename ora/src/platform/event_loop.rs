@@ -7,14 +7,12 @@ use crate::entity::EntityStorage;
 use crate::events::editor_input::translate_editor_command;
 use crate::events::mouse::{hit_test, Hitbox, MouseDownEvent, MouseMoveEvent, MouseUpEvent};
 use crate::events::types::{MouseButton, Modifiers, Point};
-use crate::events::dispatch::{dispatch_mouse_down, dispatch_mouse_move, dispatch_mouse_up, EventHandlers};
+use crate::events::dispatch::{dispatch_mouse_down, dispatch_mouse_move, dispatch_mouse_scroll, dispatch_mouse_up, EventHandlers};
 use crate::events::keyboard::{translate_key_event, Key, NamedKey};
 use crate::events::actions::KeyContext;
 use crate::platform::gpu::GpuState;
 use crate::views::SharedAdapter;
 use crate::window::OraWindow;
-use std::cell::Cell;
-use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
 use winit::application::ApplicationHandler;
@@ -61,10 +59,6 @@ pub struct OraApp {
     last_click_time: Option<Instant>,
     last_click_pos: Point,
     click_count: u32,
-    /// Sidebar scroll offset in pixels (separate from editor scroll).
-    sidebar_scroll_px: f32,
-    /// Shared sidebar scroll offset, read by EditorRootView each frame.
-    shared_sidebar_scroll: Option<Rc<Cell<f32>>>,
 }
 
 impl OraApp {
@@ -86,24 +80,14 @@ impl OraApp {
             last_click_time: None,
             last_click_pos: Point::new(0.0, 0.0),
             click_count: 0,
-            sidebar_scroll_px: 0.0,
-            shared_sidebar_scroll: None,
         }
     }
 
     /// Create a new OraApp that includes an editor backend adapter.
-    ///
-    /// The adapter is shared via `Rc<RefCell<>>` with the `EditorRootView`
-    /// so both the view (for `build_render_model`) and the event loop
-    /// (for `dispatch_command`) can access it.
-    ///
-    /// `scroll_offset` is the shared absolute pixel scroll offset, also read
-    /// by `EditorRootView` for pixel-based scroll rendering.
     pub fn new_with_editor(
         app: App,
         adapter: SharedAdapter,
         scroll_offset: crate::app::SharedScrollOffset,
-        sidebar_scroll: Rc<Cell<f32>>,
     ) -> Self {
         Self {
             app_config: Some(app),
@@ -121,8 +105,6 @@ impl OraApp {
             last_click_time: None,
             last_click_pos: Point::new(0.0, 0.0),
             click_count: 0,
-            sidebar_scroll_px: 0.0,
-            shared_sidebar_scroll: Some(sidebar_scroll),
         }
     }
 }
@@ -367,20 +349,20 @@ impl ApplicationHandler for OraApp {
                     }
                 };
 
-                // Determine if cursor is over the sidebar area
-                const SIDEBAR_WIDTH: f32 = 480.0; // matches SIDEBAR_DEFAULT_WIDTH
-                let cursor_over_sidebar = self.cursor_position.x < SIDEBAR_WIDTH
-                    && self.editor_adapter.is_some();
+                // Dispatch scroll to hitbox handlers first (ScrollArea etc.)
+                let scroll_event = crate::events::mouse::MouseScrollEvent {
+                    delta: Point::new(0.0, delta_px),
+                    modifiers: self.modifiers,
+                };
+                let consumed = if let Some(hit_id) = hit_test(&self.hitboxes, self.cursor_position) {
+                    dispatch_mouse_scroll(&mut self.event_handlers, &scroll_event, hit_id)
+                } else {
+                    false
+                };
 
-                if cursor_over_sidebar {
-                    // Sidebar scroll — simple pixel offset, clamped to [0, max]
-                    // Max is not known precisely, so use a large upper bound;
-                    // overflow_hidden clips visually.
-                    self.sidebar_scroll_px = (self.sidebar_scroll_px + delta_px).max(0.0);
-                    if let Some(ref ss) = self.shared_sidebar_scroll {
-                        ss.set(self.sidebar_scroll_px);
-                    }
-                } else if let Some(adapter) = &self.editor_adapter {
+                // If no scroll handler consumed it, fall back to editor scroll
+                if !consumed {
+                if let Some(adapter) = &self.editor_adapter {
                     use crate::editor_adapter::EditorCommand;
 
                     let total_lines = adapter.borrow().total_lines().max(1);
@@ -409,6 +391,7 @@ impl ApplicationHandler for OraApp {
                         offset.set(self.scroll_top_px);
                     }
                 }
+                } // end if !consumed
 
                 if let Some(gpu_state) = &self.gpu_state {
                     gpu_state.window.request_redraw();

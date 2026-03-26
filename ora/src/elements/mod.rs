@@ -10,6 +10,7 @@ pub mod tab;
 pub mod text;
 pub mod toast;
 pub mod tree_item;
+pub mod scroll_area;
 pub mod image;
 
 pub use button::{button, Button, ButtonVariant, WidgetSize};
@@ -24,4 +25,5 @@ pub use tab::{tab, Tab};
 pub use text::TextElement;
 pub use toast::{Toast, ToastNotification, ToastSeverity};
 pub use tree_item::{tree_item, TreeItem};
+pub use scroll_area::{scroll_area, scroll_state, ScrollArea, SharedScrollState};
 pub use image::{Image, img, img_from_bytes, ObjectFit};
