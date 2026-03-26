@@ -80,15 +80,9 @@ impl TabBarView {
         // Hover color for inactive tabs (subtle highlight)
         let hover_color = theme.color(ColorToken::BgElevated);
 
-        // Build title with dirty indicator
-        let title = if tab.is_dirty {
-            format!("* {}", tab.title)
-        } else {
-            tab.title.clone()
-        };
-
-        // Create text element for tab title
-        let text = TextElement::new(&title)
+        // Create title text element
+        let title_text = tab.title.clone();
+        let text = TextElement::new(&title_text)
             .size(TAB_FONT_SIZE)
             .color(theme.color(ColorToken::FgPrimary));
 
@@ -111,8 +105,8 @@ impl TabBarView {
         // Stable TransitionId per tab: base + view_id (avoids collisions with other views)
         let tid = TransitionId(TAB_TRANSITION_BASE + tab.view_id);
 
-        // Build tab container with title and close button.
-        // Inactive tabs also get a hover_bg; the transition smoothly interpolates between states.
+        // Build tab container. For dirty tabs, render a small dot before the title.
+        // Order: [dot if dirty] [title] [close button]
         let mut tab_div = Div::new()
             .flex_row()
             .align_center()
@@ -121,16 +115,51 @@ impl TabBarView {
             .py(TAB_PADDING_V)
             .bg(bg_color)
             .transition_id(tid)
-            .transition_bg(150)
-            .child(text)
-            .child(close_button);
+            .transition_bg(150);
+
+        // Dot dirty indicator: small filled circle rendered before the title
+        if tab.is_dirty {
+            let dot = Div::new()
+                .w(px(6.0))
+                .h(px(6.0))
+                .border_radius(3.0)
+                .bg(theme.color(ColorToken::FgMuted))
+                .shrink(0.0);
+            tab_div = tab_div.child(dot);
+        }
+
+        tab_div = tab_div.child(text).child(close_button);
 
         // Add hover effect for inactive tabs only
         if !tab.is_active {
             tab_div = tab_div.hover_bg(hover_color);
         }
 
-        tab_div
+        // Active tab accent border: 2px bottom border using AccentPrimary color
+        // Wrap content in column to add accent bar at bottom
+        if tab.is_active {
+            let accent_bar = Div::new()
+                .w(pct(100.0))
+                .h(px(2.0))
+                .shrink(0.0)
+                .bg(theme.color(ColorToken::Accent));
+
+            return Div::new()
+                .flex_col()
+                .child(tab_div)
+                .child(accent_bar);
+        }
+
+        // Inactive tabs: transparent 2px bar at bottom for height alignment
+        let spacer = Div::new()
+            .w(pct(100.0))
+            .h(px(2.0))
+            .shrink(0.0);
+
+        Div::new()
+            .flex_col()
+            .child(tab_div)
+            .child(spacer)
     }
 }
 
