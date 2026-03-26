@@ -355,6 +355,37 @@ mod tests {
     }
 
     #[test]
+    fn test_real_tree_expand() {
+        // Use the actual project directory to test tree building
+        let cwd = std::env::current_dir().unwrap();
+        let mut sidebar = Sidebar::new(Some(cwd.clone()));
+        assert!(sidebar.visible);
+        assert!(!sidebar.entries.is_empty());
+
+        let tree = sidebar.build_tree();
+        assert!(!tree.is_empty(), "Tree should have root entries");
+
+        // Find a directory in the tree
+        let dir_node = tree.iter().find(|n| n.is_dir);
+        assert!(dir_node.is_some(), "Should have at least one directory");
+        let dir_node = dir_node.unwrap();
+        assert!(!dir_node.is_expanded, "Should start collapsed");
+        assert!(dir_node.children.is_empty(), "Collapsed dir has no children");
+
+        // Toggle it open using the path from the tree node
+        let dir_path = PathBuf::from(&dir_node.path);
+        sidebar.toggle_dir(&dir_path);
+        assert!(sidebar.is_expanded(&dir_path));
+
+        // Rebuild tree — expanded dir should have children
+        let tree2 = sidebar.build_tree();
+        let dir_node2 = tree2.iter().find(|n| n.name == dir_node.name).unwrap();
+        assert!(dir_node2.is_expanded, "Dir should be expanded after toggle");
+        // It should have children now (unless it's an empty directory)
+        eprintln!("Dir '{}' expanded, children: {}", dir_node2.name, dir_node2.children.len());
+    }
+
+    #[test]
     fn test_toggle_dir() {
         let mut sidebar = Sidebar::default();
         let dir = PathBuf::from("/some/dir");

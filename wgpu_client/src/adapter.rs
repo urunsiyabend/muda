@@ -29,22 +29,24 @@ pub struct CoreEditorAdapter {
     /// Pending status message set by stub command handlers.
     /// Consumed and injected into `StatusPresentation` during `build_render_model`.
     pending_status_message: Option<String>,
+    /// Last known viewport size from resize events, applied to new views.
+    last_viewport: (usize, usize),
 }
 
 impl CoreEditorAdapter {
     /// Create an adapter wrapping a new empty document.
     pub fn new() -> Self {
-        Self { app: core_editor::app::App::new(), pending_status_message: None }
+        Self { app: core_editor::app::App::new(), pending_status_message: None, last_viewport: (200, 40) }
     }
 
     /// Create an adapter that opens the given file path.
     pub fn open_file(path: &str) -> std::io::Result<Self> {
-        Ok(Self { app: core_editor::app::App::open_file(path)?, pending_status_message: None })
+        Ok(Self { app: core_editor::app::App::open_file(path)?, pending_status_message: None, last_viewport: (200, 40) })
     }
 
     /// Create an adapter that opens a directory (shows sidebar).
     pub fn open_directory(path: &str) -> std::io::Result<Self> {
-        Ok(Self { app: core_editor::app::App::open_directory(path)?, pending_status_message: None })
+        Ok(Self { app: core_editor::app::App::open_directory(path)?, pending_status_message: None, last_viewport: (200, 40) })
     }
 }
 
@@ -300,6 +302,7 @@ impl BufferDataSource for CoreEditorAdapter {
     }
 
     fn resize_viewport(&mut self, width_chars: usize, height_lines: usize) {
+        self.last_viewport = (width_chars, height_lines);
         self.app.check_scrolling(width_chars, height_lines);
     }
 
@@ -308,7 +311,7 @@ impl BufferDataSource for CoreEditorAdapter {
             .active_view()
             .map(|v| v.viewport.height)
             .filter(|&h| h > 0)
-            .unwrap_or(40)
+            .unwrap_or(self.last_viewport.1.max(1))
     }
 
     fn scroll_y(&self) -> usize {
@@ -360,12 +363,17 @@ impl CommandDispatcher for CoreEditorAdapter {
                 // Double-click on file in sidebar: open in editor.
                 let path = std::path::PathBuf::from(path);
                 let _ = self.app.request_open_file(path);
+                // Apply stored viewport size to the newly created view
+                let (w, h) = self.last_viewport;
+                self.app.check_scrolling(w, h);
                 return;
             }
             EditorCommand::ToggleSidebarDir(path) => {
                 // Click on directory in sidebar: expand/collapse in tree.
-                let path = std::path::PathBuf::from(path);
-                self.app.sidebar.toggle_dir(&path);
+                let path_buf = std::path::PathBuf::from(path);
+                log::info!("ToggleSidebarDir: {:?}, was_expanded={}", path_buf, self.app.sidebar.is_expanded(&path_buf));
+                self.app.sidebar.toggle_dir(&path_buf);
+                log::info!("ToggleSidebarDir: now_expanded={}", self.app.sidebar.is_expanded(&path_buf));
                 self.app.needs_render = true;
                 return;
             }

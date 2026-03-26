@@ -178,25 +178,24 @@ impl Element for TreeItem {
         let hitbox_id = cx.register_hitbox(bounds, true);
         state.hitbox_id = Some(hitbox_id);
 
-        // Wire click handlers — use clone (Rc) like Tab element, not take
+        // Wire click handlers — only fire on Bubble phase to avoid double dispatch
         let on_click = self.on_click.clone();
         let on_toggle = self.on_toggle.clone();
         let is_dir = self.is_dir;
-        cx.on_mouse_down(hitbox_id, move |event, _ctx| {
+        cx.on_mouse_down(hitbox_id, move |event, ctx| {
+            if ctx.phase() != crate::events::dispatch::DispatchPhase::Bubble {
+                return;
+            }
             if event.button != MouseButton::Left {
                 return;
             }
             if is_dir {
-                // Directories: click to expand/collapse
                 if let Some(handler) = &on_toggle {
                     handler();
                 }
-            } else {
-                // Files: double-click to open
-                if event.click_count >= 2 {
-                    if let Some(handler) = &on_click {
-                        handler();
-                    }
+            } else if event.click_count >= 2 {
+                if let Some(handler) = &on_click {
+                    handler();
                 }
             }
         });

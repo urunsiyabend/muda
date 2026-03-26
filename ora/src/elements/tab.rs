@@ -170,8 +170,8 @@ impl Element for Tab {
 
             // Wire on_close to close button mouse down
             if let Some(on_close) = self.on_close.clone() {
-                cx.on_mouse_down(close_hitbox_id, move |event, _ctx| {
-                    // Left or middle click on close button closes the tab
+                cx.on_mouse_down(close_hitbox_id, move |event, ctx| {
+                    if ctx.phase() != crate::events::dispatch::DispatchPhase::Bubble { return; }
                     if matches!(event.button, MouseButton::Left | MouseButton::Middle) {
                         on_close();
                     }
@@ -182,7 +182,8 @@ impl Element for Tab {
         // Wire on_click to tab body mouse down (left click = switch, middle = close)
         let on_click = self.on_click.clone();
         let on_close_for_middle = self.on_close.clone();
-        cx.on_mouse_down(hitbox_id, move |event, _ctx| {
+        cx.on_mouse_down(hitbox_id, move |event, ctx| {
+            if ctx.phase() != crate::events::dispatch::DispatchPhase::Bubble { return; }
             match event.button {
                 MouseButton::Left => {
                     if let Some(handler) = &on_click {
