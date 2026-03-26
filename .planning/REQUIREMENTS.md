@@ -15,11 +15,11 @@ Requirements for v2.0 Functional Editor milestone. Each maps to roadmap phases.
 
 ### Foundation & Bug Fixes
 
-- [ ] **FIX-01**: Event loop uses event-driven redraw — no unconditional `request_redraw()`, idle GPU work eliminated
-- [ ] **FIX-02**: Selection rendering works correctly — Shift+arrow no longer causes text to disappear
-- [ ] **FIX-03**: All v2 EditorCommand variants defined at once (SwitchTab, CloseTab, OpenFile, SaveAs, New, Find, Replace, ReplaceAll, GoToLine)
-- [ ] **FIX-04**: EditorDataSource trait split into focused sub-traits covering all v2 methods (workspace, search, file operations)
-- [ ] **FIX-05**: Caret blink timer drives redraw in `about_to_wait()` instead of continuous rendering
+- [x] **FIX-01**: Event loop uses event-driven redraw — no unconditional `request_redraw()`, idle GPU work eliminated
+- [x] **FIX-02**: Selection rendering works correctly — Shift+arrow no longer causes text to disappear
+- [x] **FIX-03**: All v2 EditorCommand variants defined at once (SwitchTab, CloseTab, OpenFile, SaveAs, New, Find, Replace, ReplaceAll, GoToLine)
+- [x] **FIX-04**: EditorDataSource trait split into focused sub-traits covering all v2 methods (workspace, search, file operations)
+- [x] **FIX-05**: Caret blink timer drives redraw in `about_to_wait()` instead of continuous rendering
 
 ### Buffer Registry & Multi-Tab
 
@@ -125,11 +125,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FIX-01 | Phase 10 | Pending |
-| FIX-02 | Phase 10 | Pending |
-| FIX-03 | Phase 10 | Pending |
-| FIX-04 | Phase 10 | Pending |
-| FIX-05 | Phase 10 | Pending |
+| FIX-01 | Phase 10 | Complete |
+| FIX-02 | Phase 10 | Complete |
+| FIX-03 | Phase 10 | Complete |
+| FIX-04 | Phase 10 | Complete |
+| FIX-05 | Phase 10 | Complete |
 | TAB-01 | Phase 11 | Pending |
 | TAB-02 | Phase 11 | Pending |
 | TAB-03 | Phase 11 | Pending |

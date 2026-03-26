@@ -29,7 +29,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 ### v2.0 Phases (Active)
 
-- [ ] **Phase 10: Foundation Fixes** - Event-driven redraw, command audit, EditorDataSource redesign, selection rendering fix
+- [x] **Phase 10: Foundation Fixes** - Event-driven redraw, command audit, EditorDataSource redesign, selection rendering fix
 - [ ] **Phase 11: Buffer Registry + Multi-Tab** - Central buffer deduplication, tab switching, Ctrl+W close, Ctrl+Tab cycle
 - [ ] **Phase 12: File Operations** - Ctrl+O open, Ctrl+S save, Ctrl+Shift+S Save As, Ctrl+N new, async I/O
 - [ ] **Phase 13: Selection + Clipboard** - Click-to-position, drag selection, Shift+arrow, Ctrl+A, Ctrl+C/X/V
@@ -253,10 +253,10 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 10-01-PLAN.md -- Event-driven redraw + caret blink timer (Wave 1)
-- [ ] 10-02-PLAN.md -- v2 command variants + EditorDataSource trait split (Wave 1)
-- [ ] 10-03-PLAN.md -- Selection rendering fix (Wave 2)
-- [ ] 10-04-PLAN.md -- Integration verification checkpoint (Wave 2)
+- [x] 10-01-PLAN.md -- Event-driven redraw + caret blink timer (Wave 1)
+- [x] 10-02-PLAN.md -- v2 command variants + EditorDataSource trait split (Wave 1)
+- [x] 10-03-PLAN.md -- Selection rendering fix (Wave 2)
+- [x] 10-04-PLAN.md -- Integration verification checkpoint (Wave 2)
 
 ### Phase 11: Buffer Registry + Multi-Tab
 **Goal**: Users can open multiple files in tabs and switch between them — each buffer is deduplicated and preserves its own scroll and cursor state
@@ -360,7 +360,7 @@ v2.0: 10 -> 11 -> 12 -> 13 (can follow 10) -> 14 (needs 11+12) -> 15 (needs 10+1
 
 | Phase | Plans Complete | Status | Started |
 |-------|----------------|--------|---------|
-| 10. Foundation Fixes | 0/4 | Planned | — |
+| 10. Foundation Fixes | 4/4 | Complete | 2026-03-26 |
 | 11. Buffer Registry + Multi-Tab | 0/TBD | Pending | — |
 | 12. File Operations | 0/TBD | Pending | — |
 | 13. Selection + Clipboard | 0/TBD | Pending | — |

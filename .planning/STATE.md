@@ -51,7 +51,6 @@ None.
 ### Known Issues
 
 - Windows resize flickering: Brief black/white flicker during window resize on Windows is expected wgpu/winit swap chain reconfiguration behavior, not an ora bug
-- Unconditional `request_redraw()` at event_loop.rs line 549 causes ~90% idle GPU waste (Phase 10 fix target)
 - `can_switch_active()` in workspace.rs must NOT be called during normal tab switching — only on close/quit (Phase 11)
 - `open_document()` creates duplicate Document instances for same path — Buffer Registry fixes this (Phase 11)
 - `Document::title()` returned "Yeni Dosya" (Turkish): RESOLVED (10-04) — changed to "[New File]"
