@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-03-26)
 ## Current Position
 
 Phase: 13 — Selection + Clipboard (in progress)
-Plan: 01 of 4 (complete)
-Status: In progress — Plan 01 complete (click-to-cursor positioning)
-Last activity: 2026-03-26 — Completed 13-01-PLAN.md (ClickAt/DragTo command pipeline, pixel-to-doc conversion)
+Plan: 03 of 4 (complete)
+Status: In progress — Plans 01, 03 complete; Plan 02 pending
+Last activity: 2026-03-27 — Completed 13-03-PLAN.md (full-line copy/cut/paste with auto-indent)
 
-Progress: [█████████████░░░░░░░░░░░░░░░░░░░░░░░] v2.0 Phase 13 plan 1 complete (13/~18 plans)
+Progress: [██████████████░░░░░░░░░░░░░░░░░░░░░░] v2.0 Phase 13: 2 of 4 plans complete (14/~18 plans)
 
 ## Performance Metrics
 
@@ -76,10 +76,10 @@ Plan 01: ClickAt/DragTo command pipeline, pixel_to_doc conversion with mid-chara
 
 ## Session Continuity
 
-Last session: 2026-03-26T19:36:00Z
-Stopped at: Completed 13-01-PLAN.md (click-to-cursor positioning)
+Last session: 2026-03-27
+Stopped at: Completed 13-03-PLAN.md (full-line copy/cut/paste with auto-indent)
 Resume file: None
-Next: Phase 13 Plan 02 — Drag Selection + Shift-Click
+Next: Phase 13 Plan 02 — Drag Selection + Snap Modes
 
 ---
 *State initialized: 2026-01-28*
