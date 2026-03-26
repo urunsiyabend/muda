@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-03-26)
 
 ## Current Position
 
-Phase: 12 — File Operations (complete)
-Plan: 03 of 3 (complete)
-Status: Phase 12 complete — all 3 plans done
-Last activity: 2026-03-26 — Completed 12-03-PLAN.md (Ctrl+S silent save, Ctrl+Shift+S Save As dialog, last-dir persistence)
+Phase: 12 — File Operations (complete, including gap closure)
+Plan: 04 of 4 (complete)
+Status: Phase 12 complete — all 4 plans done (including gap closure 12-04)
+Last activity: 2026-03-26 — Completed 12-04-PLAN.md (dialog input suppression, 3s timed status messages)
 
-Progress: [████████████░░░░░░░░░░░░░░░░░░░░░░░░] v2.0 Phase 12 complete (11/~17 plans)
+Progress: [████████████░░░░░░░░░░░░░░░░░░░░░░░░] v2.0 Phase 12 complete (12/~18 plans)
 
 ## Performance Metrics
 
@@ -24,6 +24,12 @@ Progress: [████████████░░░░░░░░░░░
 - Total execution time: ~5 hours 34 minutes
 
 *Updated after each plan completion*
+
+### Phase 12 Gap Closure Decisions (Plan 04)
+
+- Field-level unsafe cast (individual fields, not whole struct) to avoid `invalid_reference_casting` deny lint in Rust — cast `*.pending_status_message` and `*.status_message_expiry` separately
+- status_message_expiry set at every pending_status_message assignment site (5 total) to guarantee 3s lifetime for all messages
+- about_to_wait uses `earliest_wake = min(blink_instant, message_expiry)` so event loop wakes exactly once at the sooner deadline
 
 ## Accumulated Context
 
@@ -62,11 +68,12 @@ None.
 Plan 01: rfd 0.15 + dirs 5 deps, untitled naming, PendingFileOp queue, dialog_open guard, Ctrl+N, Ctrl+S queues SaveAs
 Plan 02: Ctrl+O native dialog, background file reading, UTF-8 validation, BOM strip, Buffer Registry dedup, FileOpDataSource sub-trait, poll_pending_file_ops
 Plan 03: Ctrl+S silent save / Save As dialog (rfd save_file), handle_file_saved callback, last-dir persisted to state.json, open+save dialogs pre-populate directory
+Plan 04 (gap closure): Dialog input suppression for CursorMoved/MouseInput/MouseWheel/KeyboardInput; 3-second timed status messages with Instant expiry; about_to_wait earliest-wake scheduling
 
 ## Session Continuity
 
-Last session: 2026-03-26T18:02:00Z
-Stopped at: Completed 12-03-PLAN.md (Phase 12 complete)
+Last session: 2026-03-26T18:48:12Z
+Stopped at: Completed 12-04-PLAN.md (Phase 12 gap closure complete)
 Resume file: None
 Next: Phase 13 — Selection + Clipboard
 
