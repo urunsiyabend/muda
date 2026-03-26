@@ -354,7 +354,10 @@ impl ApplicationHandler for OraApp {
                     delta: Point::new(0.0, delta_px),
                     modifiers: self.modifiers,
                 };
-                let consumed = if let Some(hit_id) = hit_test(&self.hitboxes, self.cursor_position) {
+                let hit = hit_test(&self.hitboxes, self.cursor_position);
+                let has_scroll_handlers = self.event_handlers.has_scroll_handlers();
+                log::info!("Scroll: delta={:.1}, hit={:?}, scroll_handlers={}", delta_px, hit.map(|h| h.0), has_scroll_handlers);
+                let consumed = if let Some(hit_id) = hit {
                     dispatch_mouse_scroll(&mut self.event_handlers, &scroll_event, hit_id)
                 } else {
                     false

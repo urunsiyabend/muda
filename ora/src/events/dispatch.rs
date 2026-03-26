@@ -108,6 +108,11 @@ impl EventHandlers {
     pub fn register_parent(&mut self, child: HitboxId, parent: HitboxId) {
         self.parent_map.insert(child, parent);
     }
+
+    /// Check if any scroll handlers are registered (for debugging).
+    pub fn has_scroll_handlers(&self) -> bool {
+        !self.mouse_scroll_handlers.is_empty()
+    }
 }
 
 impl Default for EventHandlers {
