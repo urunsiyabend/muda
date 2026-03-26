@@ -174,6 +174,20 @@ impl App {
     // Application-Level Command Handlers
     // =========================================================================
 
+    /// Creates a new untitled document and switches to it.
+    ///
+    /// The document is named "Untitled", "Untitled (2)", etc. according to the
+    /// workspace's monotonically increasing untitled counter.
+    ///
+    /// Returns the new DocumentId.
+    pub fn new_untitled(&mut self) -> crate::domain::DocumentId {
+        let doc_id = self.workspace.create_untitled_document();
+        let view_id = self.workspace.create_view(doc_id);
+        self.workspace.set_active_view(view_id);
+        self.needs_render = true;
+        doc_id
+    }
+
     // =========================================================================
     // Tab Management
     // =========================================================================

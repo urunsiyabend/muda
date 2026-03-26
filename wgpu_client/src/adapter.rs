@@ -20,6 +20,21 @@ use ora::editor_adapter::{
 // CoreEditorAdapter struct
 // =============================================================================
 
+/// Represents a file operation that must be dispatched from the event loop.
+///
+/// Because native file dialogs block the thread and `dispatch_command` returns `()`,
+/// this queue pattern is used: the adapter sets `pending_file_op` and the event
+/// loop polls `take_pending_file_op()` each frame to open the appropriate dialog.
+#[derive(Debug)]
+pub enum PendingFileOp {
+    /// Show an open-file dialog.
+    Open,
+    /// Show a save-as dialog.
+    SaveAs,
+    /// Trigger a save (for completeness; usually handled synchronously).
+    Save,
+}
+
 /// Adapter that wraps `core_editor::app::App` and implements `EditorDataSource`.
 ///
 /// This is wgpu_client's only connection point to core_editor. All ora views
@@ -31,22 +46,58 @@ pub struct CoreEditorAdapter {
     pending_status_message: Option<String>,
     /// Last known viewport size from resize events, applied to new views.
     last_viewport: (usize, usize),
+    /// Queued file operation to be processed by the event loop on the next frame.
+    ///
+    /// The event loop calls `take_pending_file_op()` each frame and opens the
+    /// appropriate native dialog if `Some`. This is `None` most frames.
+    pub pending_file_op: Option<PendingFileOp>,
+    /// Guard flag that prevents concurrent file dialogs.
+    ///
+    /// Set to `true` by the event loop before spawning a dialog task and reset
+    /// to `false` when the dialog completes. Commands that would open a dialog
+    /// check this before setting `pending_file_op`.
+    pub dialog_open: bool,
 }
 
 impl CoreEditorAdapter {
     /// Create an adapter wrapping a new empty document.
     pub fn new() -> Self {
-        Self { app: core_editor::app::App::new(), pending_status_message: None, last_viewport: (200, 40) }
+        Self {
+            app: core_editor::app::App::new(),
+            pending_status_message: None,
+            last_viewport: (200, 40),
+            pending_file_op: None,
+            dialog_open: false,
+        }
     }
 
     /// Create an adapter that opens the given file path.
     pub fn open_file(path: &str) -> std::io::Result<Self> {
-        Ok(Self { app: core_editor::app::App::open_file(path)?, pending_status_message: None, last_viewport: (200, 40) })
+        Ok(Self {
+            app: core_editor::app::App::open_file(path)?,
+            pending_status_message: None,
+            last_viewport: (200, 40),
+            pending_file_op: None,
+            dialog_open: false,
+        })
     }
 
     /// Create an adapter that opens a directory (shows sidebar).
     pub fn open_directory(path: &str) -> std::io::Result<Self> {
-        Ok(Self { app: core_editor::app::App::open_directory(path)?, pending_status_message: None, last_viewport: (200, 40) })
+        Ok(Self {
+            app: core_editor::app::App::open_directory(path)?,
+            pending_status_message: None,
+            last_viewport: (200, 40),
+            pending_file_op: None,
+            dialog_open: false,
+        })
+    }
+
+    /// Takes and returns the pending file operation (if any), resetting it to None.
+    ///
+    /// Called by the event loop each frame to check if a file dialog should be opened.
+    pub fn take_pending_file_op(&mut self) -> Option<PendingFileOp> {
+        self.pending_file_op.take()
     }
 }
 
@@ -333,7 +384,16 @@ impl CommandDispatcher for CoreEditorAdapter {
     fn dispatch_command(&mut self, cmd: EditorCommand) {
         // Save is an app-level operation that doesn't go through the dispatcher.
         if matches!(cmd, EditorCommand::Save) {
-            let _ = self.app.save();
+            match self.app.save() {
+                Ok(true) => {}  // saved successfully
+                Ok(false) => {
+                    // No file path — untitled buffer. Queue Save As dialog.
+                    if !self.dialog_open {
+                        self.pending_file_op = Some(PendingFileOp::SaveAs);
+                    }
+                }
+                Err(_) => {}
+            }
             return;
         }
 
@@ -359,6 +419,28 @@ impl CommandDispatcher for CoreEditorAdapter {
                 self.app.close_active_tab();
                 return;
             }
+            EditorCommand::New => {
+                // Ctrl+N: create a new untitled buffer and switch to it.
+                self.app.new_untitled();
+                // Apply stored viewport size to the newly created view.
+                let (w, h) = self.last_viewport;
+                self.app.check_scrolling(w, h);
+                return;
+            }
+            EditorCommand::OpenFile => {
+                // Ctrl+O: queue an Open dialog for the event loop to handle.
+                if !self.dialog_open {
+                    self.pending_file_op = Some(PendingFileOp::Open);
+                }
+                return;
+            }
+            EditorCommand::SaveAs => {
+                // Ctrl+Shift+S: queue a Save As dialog for the event loop to handle.
+                if !self.dialog_open {
+                    self.pending_file_op = Some(PendingFileOp::SaveAs);
+                }
+                return;
+            }
             EditorCommand::OpenSidebarFile(path) => {
                 // Double-click on file in sidebar: open in editor.
                 let path = std::path::PathBuf::from(path);
@@ -382,9 +464,6 @@ impl CommandDispatcher for CoreEditorAdapter {
 
         // Stub handlers for v2 commands not yet implemented.
         let stub_msg = match &cmd {
-            EditorCommand::SaveAs => Some("Save As: not yet available"),
-            EditorCommand::OpenFile => Some("Open File: not yet available"),
-            EditorCommand::New => Some("New File: not yet available"),
             EditorCommand::Find => Some("Find: not yet available"),
             EditorCommand::Replace => Some("Replace: not yet available"),
             EditorCommand::ReplaceAll => Some("Replace All: not yet available"),
