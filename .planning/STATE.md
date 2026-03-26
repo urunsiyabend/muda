@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-03-26)
 
 **Core value:** A functional, performant code editor built on ora's GPU-accelerated UI framework.
-**Current focus:** v2.0 Functional Editor — Phase 11: Tab Management (Phase 10 complete).
+**Current focus:** v2.0 Functional Editor — Phase 12: File Operations (Phase 11 complete).
 
 ## Current Position
 
-Phase: 11 — Buffer Registry + Multi-Tab (in progress)
-Plan: 03 of 4 (Tab bar click handlers + visual polish)
-Status: In progress — Plan 03 complete
-Last activity: 2026-03-26 — Completed 11-03-PLAN.md (Interactive tab bar: click handlers, dot indicator, accent border)
+Phase: 11 — Buffer Registry + Multi-Tab (complete)
+Plan: 04 of 4 (all complete)
+Status: Phase 11 complete — all 4 plans done
+Last activity: 2026-03-26 — Phase 11 complete (buffer registry, tab management, sidebar tree, ScrollArea)
 
-Progress: [██████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] v2.0 Phase 10 complete + Phase 11 Plans 01-03 done (7/~17 plans)
+Progress: [████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░] v2.0 Phase 11 complete (8/~17 plans)
 
 ## Performance Metrics
 
@@ -51,19 +51,17 @@ None.
 ### Known Issues
 
 - Windows resize flickering: Brief black/white flicker during window resize on Windows is expected wgpu/winit swap chain reconfiguration behavior, not an ora bug
-- `can_switch_active()` in workspace.rs must NOT be called during normal tab switching — CONFIRMED PATTERN (11-02): switch_tab uses set_active_view directly
-- Hitbox registration order determines priority: hit_test iterates in REVERSE order — register children (close button) AFTER parents (tab body) so children win. CONFIRMED PATTERN (11-03)
-- Callbacks shared across multiple handlers must use Rc<dyn Fn()> not Box (11-03: close button + middle-click both need on_close)
-- `open_document()` creates duplicate Document instances for same path — RESOLVED (11-01) Buffer Registry (path_to_doc) prevents duplicates
-- `Document::title()` returned "Yeni Dosya" (Turkish): RESOLVED (10-04) — changed to "[New File]"
+- Window close (X button) doesn't check for dirty documents — exits without save dialog
+- Dialog butonları (Save/Don't Save/Cancel) tıklanamıyor — hitbox/event wiring eksik
+- Dispatch system fires handlers in both capture+bubble phases — all handlers must check `ctx.phase() == Bubble`
 
 ## Session Continuity
 
 Last session: 2026-03-26
-Stopped at: Completed 11-03-PLAN.md (Tab bar click handlers, dot indicator, accent border)
+Stopped at: Phase 11 complete
 Resume file: None
-Next: Phase 11 Plan 04 — Human verification checkpoint for tab bar interactivity
+Next: Phase 12 — File Operations
 
 ---
 *State initialized: 2026-01-28*
-*Last updated: 2026-03-26 after 11-02 completion (Tab switching commands end-to-end)*
+*Last updated: 2026-03-26 after Phase 11 completion*

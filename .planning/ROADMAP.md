@@ -30,7 +30,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 ### v2.0 Phases (Active)
 
 - [x] **Phase 10: Foundation Fixes** - Event-driven redraw, command audit, EditorDataSource redesign, selection rendering fix
-- [ ] **Phase 11: Buffer Registry + Multi-Tab** - Central buffer deduplication, tab switching, Ctrl+W close, Ctrl+Tab cycle
+- [x] **Phase 11: Buffer Registry + Multi-Tab** - Central buffer deduplication, tab switching, Ctrl+W close, Ctrl+Tab cycle
 - [ ] **Phase 12: File Operations** - Ctrl+O open, Ctrl+S save, Ctrl+Shift+S Save As, Ctrl+N new, async I/O
 - [ ] **Phase 13: Selection + Clipboard** - Click-to-position, drag selection, Shift+arrow, Ctrl+A, Ctrl+C/X/V
 - [ ] **Phase 14: File Browser** - Real directory tree, click to open, expand/collapse state, file watcher
@@ -271,10 +271,10 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 11-01-PLAN.md -- Buffer Registry + tab ordering + MRU stack in Workspace (Wave 1)
-- [ ] 11-02-PLAN.md -- SwitchTab + CloseTab handlers + adapter wiring + Ctrl+Shift+Tab (Wave 2)
-- [ ] 11-03-PLAN.md -- Tab bar click handlers + dot dirty indicator + accent border (Wave 3)
-- [ ] 11-04-PLAN.md -- Integration verification checkpoint (Wave 4)
+- [x] 11-01-PLAN.md -- Buffer Registry + tab ordering + MRU stack in Workspace (Wave 1)
+- [x] 11-02-PLAN.md -- SwitchTab + CloseTab handlers + adapter wiring + Ctrl+Shift+Tab (Wave 2)
+- [x] 11-03-PLAN.md -- Tab bar click handlers + dot dirty indicator + accent border (Wave 3)
+- [x] 11-04-PLAN.md -- Integration verification checkpoint (Wave 4)
 
 ### Phase 12: File Operations
 **Goal**: Users can open, save, and create files using OS-native dialogs — disk I/O never blocks the UI thread
@@ -367,7 +367,7 @@ v2.0: 10 -> 11 -> 12 -> 13 (can follow 10) -> 14 (needs 11+12) -> 15 (needs 10+1
 | Phase | Plans Complete | Status | Started |
 |-------|----------------|--------|---------|
 | 10. Foundation Fixes | 4/4 | Complete | 2026-03-26 |
-| 11. Buffer Registry + Multi-Tab | 0/4 | Planning | — |
+| 11. Buffer Registry + Multi-Tab | 4/4 | Complete | 2026-03-26 |
 | 12. File Operations | 0/TBD | Pending | — |
 | 13. Selection + Clipboard | 0/TBD | Pending | — |
 | 14. File Browser | 0/TBD | Pending | — |
