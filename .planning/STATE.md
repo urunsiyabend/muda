@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-03-26)
 
 ## Current Position
 
-Phase: 11 — Buffer Registry + Multi-Tab (complete)
-Plan: 04 of 4 (all complete)
-Status: Phase 11 complete — all 4 plans done
-Last activity: 2026-03-26 — Phase 11 complete (buffer registry, tab management, sidebar tree, ScrollArea)
+Phase: 12 — File Operations (in progress)
+Plan: 01 of 3 (complete)
+Status: In progress — Plan 01 done
+Last activity: 2026-03-26 — Completed 12-01-PLAN.md (rfd/dirs deps, untitled naming, PendingFileOp queue, Ctrl+N)
 
-Progress: [████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░] v2.0 Phase 11 complete (8/~17 plans)
+Progress: [█████████░░░░░░░░░░░░░░░░░░░░░░░░░░░] v2.0 Phase 12 in progress (9/~17 plans)
 
 ## Performance Metrics
 
@@ -43,7 +43,7 @@ None.
 
 ### Blockers/Concerns
 
-- Async file I/O return path: `dispatch_command(&mut self, cmd)` returns `()` — need result channel or callback for file operations (Phase 12 design decision, flag in Phase 10 planning)
+- Async file I/O return path: RESOLVED (12-01) — PendingFileOp queue pattern: dispatch_command sets pending_file_op; event loop polls take_pending_file_op() each frame to open rfd dialogs
 - EditorDataSource trait pressure: RESOLVED (10-02) — split into BufferDataSource + CommandDispatcher + WindowDataSource with blanket super-trait
 - Selection rendering: RESOLVED (10-03) — selection_ranges in LinePresentation, 5-layer Stack, span filter removed
 - Idle GPU fixed (10-01): unconditional request_redraw at event_loop.rs removed; ControlFlow state machine now drives frame cadence
@@ -57,10 +57,10 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-26
-Stopped at: Phase 11 complete
+Last session: 2026-03-26T17:45:43Z
+Stopped at: Completed 12-01-PLAN.md
 Resume file: None
-Next: Phase 12 — File Operations
+Next: Phase 12 Plan 02 — Open File dialog integration
 
 ---
 *State initialized: 2026-01-28*
