@@ -13,6 +13,8 @@ use crate::events::actions::KeyContext;
 use crate::platform::gpu::GpuState;
 use crate::views::SharedAdapter;
 use crate::window::OraWindow;
+use std::cell::Cell;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
 use winit::application::ApplicationHandler;
@@ -59,6 +61,10 @@ pub struct OraApp {
     last_click_time: Option<Instant>,
     last_click_pos: Point,
     click_count: u32,
+    /// Sidebar scroll offset in pixels (separate from editor scroll).
+    sidebar_scroll_px: f32,
+    /// Shared sidebar scroll offset, read by EditorRootView each frame.
+    shared_sidebar_scroll: Option<Rc<Cell<f32>>>,
 }
 
 impl OraApp {
@@ -80,6 +86,8 @@ impl OraApp {
             last_click_time: None,
             last_click_pos: Point::new(0.0, 0.0),
             click_count: 0,
+            sidebar_scroll_px: 0.0,
+            shared_sidebar_scroll: None,
         }
     }
 
@@ -95,6 +103,7 @@ impl OraApp {
         app: App,
         adapter: SharedAdapter,
         scroll_offset: crate::app::SharedScrollOffset,
+        sidebar_scroll: Rc<Cell<f32>>,
     ) -> Self {
         Self {
             app_config: Some(app),
@@ -112,6 +121,8 @@ impl OraApp {
             last_click_time: None,
             last_click_pos: Point::new(0.0, 0.0),
             click_count: 0,
+            sidebar_scroll_px: 0.0,
+            shared_sidebar_scroll: Some(sidebar_scroll),
         }
     }
 }
@@ -356,53 +367,47 @@ impl ApplicationHandler for OraApp {
                     }
                 };
 
-                if let Some(adapter) = &self.editor_adapter {
+                // Determine if cursor is over the sidebar area
+                const SIDEBAR_WIDTH: f32 = 480.0; // matches SIDEBAR_DEFAULT_WIDTH
+                let cursor_over_sidebar = self.cursor_position.x < SIDEBAR_WIDTH
+                    && self.editor_adapter.is_some();
+
+                if cursor_over_sidebar {
+                    // Sidebar scroll — simple pixel offset, clamped to [0, max]
+                    // Max is not known precisely, so use a large upper bound;
+                    // overflow_hidden clips visually.
+                    self.sidebar_scroll_px = (self.sidebar_scroll_px + delta_px).max(0.0);
+                    if let Some(ref ss) = self.shared_sidebar_scroll {
+                        ss.set(self.sidebar_scroll_px);
+                    }
+                } else if let Some(adapter) = &self.editor_adapter {
                     use crate::editor_adapter::EditorCommand;
 
-                    // Max scroll: allow the last line to reach the middle of
-                    // the viewport (half-screen overscroll), matching VS Code
-                    // behaviour. This prevents the jarring "last line glued to
-                    // bottom" effect and lets users centre the last line.
                     let total_lines = adapter.borrow().total_lines().max(1);
                     let viewport_lines = adapter.borrow().viewport_lines().max(1);
                     let half_viewport = viewport_lines / 2;
                     let scrollable_lines = total_lines.saturating_sub(viewport_lines.saturating_sub(half_viewport));
                     let max_scroll_px = scrollable_lines as f32 * LINE_HEIGHT;
 
-                    // Apply delta and clamp.
                     let new_top = (self.scroll_top_px + delta_px).clamp(0.0, max_scroll_px);
                     let new_first_line = (new_top / LINE_HEIGHT).floor() as usize;
 
-                    // Sync core_editor's scroll_y to match new_first_line.
                     let current_scroll_y = adapter.borrow().scroll_y();
                     let line_delta = new_first_line as i32 - current_scroll_y as i32;
                     if line_delta != 0 {
                         adapter.borrow_mut().dispatch_command(EditorCommand::Scroll(line_delta));
                     }
 
-                    // After dispatch, core_editor may have clamped the scroll.
-                    // Re-read actual scroll_y and reconstruct scroll_top_px so
-                    // the two stay in sync.
                     let actual_scroll_y = adapter.borrow().scroll_y();
-                    // Preserve fractional pixels from the new target when within bounds.
                     if actual_scroll_y == new_first_line {
                         self.scroll_top_px = new_top;
                     } else {
-                        // core_editor clamped — snap to actual line boundary.
                         self.scroll_top_px = actual_scroll_y as f32 * LINE_HEIGHT;
                     }
 
-                    // Publish for EditorRootView.
                     if let Some(ref offset) = self.shared_scroll_offset {
                         offset.set(self.scroll_top_px);
                     }
-
-                    log::debug!(
-                        "Mouse wheel: delta_px={:.1}, scroll_top_px={:.1}, first_line={}",
-                        delta_px,
-                        self.scroll_top_px,
-                        actual_scroll_y,
-                    );
                 }
 
                 if let Some(gpu_state) = &self.gpu_state {

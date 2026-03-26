@@ -90,6 +90,8 @@ pub struct SidebarView {
     file_tree: FileTreeView,
     /// Command dispatch callback for sidebar actions.
     dispatch: Option<Rc<dyn Fn(EditorCommand)>>,
+    /// Scroll offset in pixels for the file tree content.
+    scroll_offset_px: f32,
 }
 
 impl SidebarView {
@@ -102,6 +104,7 @@ impl SidebarView {
             toggle_focus: None,
             file_tree: FileTreeView::new(tree),
             dispatch: None,
+            scroll_offset_px: 0.0,
         }
     }
 
@@ -114,12 +117,19 @@ impl SidebarView {
             toggle_focus: Some(toggle_focus),
             file_tree: FileTreeView::new(tree),
             dispatch: None,
+            scroll_offset_px: 0.0,
         }
     }
 
     /// Attach a command dispatch callback for sidebar file actions.
     pub fn with_dispatch(mut self, dispatch: Rc<dyn Fn(EditorCommand)>) -> Self {
         self.dispatch = Some(dispatch);
+        self
+    }
+
+    /// Set the scroll offset for the file tree content area.
+    pub fn with_scroll_offset(mut self, offset: f32) -> Self {
+        self.scroll_offset_px = offset;
         self
     }
 
@@ -207,31 +217,40 @@ impl SidebarView {
 
     /// Renders the content area with FileTree or empty state.
     fn render_content(&self, cx: &mut ViewContext) -> Div {
-        let theme = cx.theme();
-
         if self.file_tree.is_empty() {
-            // Show "No folder open" placeholder
+            let bg = cx.theme().color(ColorToken::BgSecondary);
+            let fg = cx.theme().color(ColorToken::FgMuted);
             return Div::new()
                 .flex_col()
                 .grow(1.0)
                 .p(ENTRY_PADDING_H)
-                .bg(theme.color(ColorToken::BgSecondary))
+                .bg(bg)
                 .child(TextElement::new("No folder open")
                     .size(ENTRY_FONT_SIZE)
-                    .color(theme.color(ColorToken::FgMuted)));
+                    .color(fg));
         }
+
+        let bg = cx.theme().color(ColorToken::BgSecondary);
 
         // Render FileTree — pass dispatch callback if available
         let mut tree = FileTreeView::new(self.file_tree.presentation.clone());
         if let Some(ref dispatch) = self.dispatch {
             tree = tree.with_dispatch(dispatch.clone());
         }
+        let tree_element = tree.render(cx);
+
+        // Inner container shifts up by scroll_offset_px (negative margin)
+        let inner = Div::new()
+            .flex_col()
+            .mt(-self.scroll_offset_px)
+            .child(tree_element);
+
         Div::new()
             .flex_col()
             .grow(1.0)
-            .bg(theme.color(ColorToken::BgSecondary))
+            .bg(bg)
             .overflow_hidden()
-            .child(tree.render(cx))
+            .child(inner)
     }
 
     /// Renders the collapsed icon rail state.
