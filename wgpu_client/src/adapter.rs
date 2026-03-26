@@ -475,6 +475,10 @@ fn to_core_command(cmd: EditorCommand) -> Option<CoreEditorCommand> {
         }
         ToggleLineNumbers => CoreEditorCommand::ToggleLineNumbers,
         Scroll(lines) => CoreEditorCommand::Scroll { lines },
+        ClickAt { line, col, extend_selection, click_count } =>
+            CoreEditorCommand::ClickAt { line, col, extend_selection, click_count },
+        DragTo { line, col } =>
+            CoreEditorCommand::DragTo { line, col },
         // v2 commands — handled before to_core_command is called,
         // but listed here for exhaustiveness.
         SaveAs | OpenFile | New | CloseTab | SwitchTab(_) | SwitchTabPrev

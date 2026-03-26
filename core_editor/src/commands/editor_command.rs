@@ -94,6 +94,12 @@ pub enum EditorCommand {
     /// Scroll the viewport.
     Scroll { lines: i32 },
 
+    // === Mouse interaction ===
+    /// Mouse click at document position (0-indexed line, col).
+    ClickAt { line: usize, col: usize, extend_selection: bool, click_count: u32 },
+    /// Mouse drag to document position (0-indexed line, col).
+    DragTo { line: usize, col: usize },
+
     // === Application ===
     /// Request to quit the application.
     Quit,
@@ -130,6 +136,8 @@ impl EditorCommand {
                 | EditorCommand::ClearSelection
                 | EditorCommand::DeleteSelection
                 | EditorCommand::Cut
+                | EditorCommand::ClickAt { .. }
+                | EditorCommand::DragTo { .. }
         )
     }
 }

@@ -566,6 +566,16 @@ pub enum EditorCommand {
     // --- Scrolling ---
     /// Scroll the viewport by the given number of lines (positive = down).
     Scroll(i32),
+
+    // --- Mouse interaction ---
+    /// Click at a document position (from mouse click in text area).
+    /// line and col are 0-indexed document coordinates.
+    /// extend_selection: true if Shift was held (extend from anchor).
+    /// click_count: 1=single, 2=double (word), 3=triple (line).
+    ClickAt { line: usize, col: usize, extend_selection: bool, click_count: u32 },
+    /// Drag to a document position (from mouse move during drag).
+    /// line and col are 0-indexed document coordinates.
+    DragTo { line: usize, col: usize },
 }
 
 /// Direction for cursor movement.

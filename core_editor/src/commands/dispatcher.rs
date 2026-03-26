@@ -140,6 +140,16 @@ impl CommandDispatcher {
                 DispatchResult::Executed
             }
 
+            // === Mouse interaction ===
+            EditorCommand::ClickAt { line, col, extend_selection, click_count } => {
+                self.handle_click_at(ctx, line, col, extend_selection, click_count);
+                DispatchResult::Executed
+            }
+            EditorCommand::DragTo { line, col } => {
+                self.handle_drag_to(ctx, line, col);
+                DispatchResult::Executed
+            }
+
             // === View ===
             EditorCommand::ToggleLineNumbers => {
                 ctx.view.toggle_line_numbers();
@@ -389,6 +399,111 @@ impl CommandDispatcher {
     }
 
     // =========================================================================
+    // Mouse Click Handlers
+    // =========================================================================
+
+    fn handle_click_at(
+        &self,
+        ctx: &mut CommandContext,
+        line: usize,
+        col: usize,
+        extend_selection: bool,
+        click_count: u32,
+    ) {
+        let max_line = ctx.document.len_lines().saturating_sub(1);
+        let line = line.min(max_line);
+        let max_col = self.line_len(ctx, line);
+        let col = col.min(max_col);
+        let offset = self.position_to_offset(ctx, TextPosition::new(line, col));
+
+        match click_count {
+            2 => {
+                // Double-click: select word under cursor.
+                let (word_start, word_end) = self.find_word_boundaries(ctx, offset);
+                // Set anchor at word start, move caret to word end extending selection.
+                ctx.view.move_caret_to(word_start, false);
+                ctx.view.begin_selection();
+                ctx.view.move_caret_to(word_end, true);
+            }
+            3 => {
+                // Triple-click: select entire line.
+                let line_start = self.position_to_offset(ctx, TextPosition::new(line, 0));
+                let line_end = if line + 1 < ctx.document.len_lines() {
+                    self.position_to_offset(ctx, TextPosition::new(line + 1, 0))
+                } else {
+                    ctx.document.len_chars()
+                };
+                ctx.view.move_caret_to(line_start, false);
+                ctx.view.begin_selection();
+                ctx.view.move_caret_to(line_end, true);
+            }
+            _ => {
+                // Single click.
+                if extend_selection {
+                    // Shift+click: extend selection from current anchor.
+                    if !ctx.view.has_selection() {
+                        ctx.view.begin_selection();
+                    }
+                    ctx.view.move_caret_to(offset, true);
+                } else {
+                    ctx.view.move_caret_to(offset, false);
+                    ctx.view.clear_selection();
+                }
+            }
+        }
+
+        self.emit_selection_changed(ctx);
+    }
+
+    fn handle_drag_to(&self, ctx: &mut CommandContext, line: usize, col: usize) {
+        let max_line = ctx.document.len_lines().saturating_sub(1);
+        let line = line.min(max_line);
+        let max_col = self.line_len(ctx, line);
+        let col = col.min(max_col);
+        let offset = self.position_to_offset(ctx, TextPosition::new(line, col));
+
+        ctx.view.move_caret_to(offset, true);
+        self.emit_selection_changed(ctx);
+    }
+
+    /// Find word boundaries around the given offset using VS Code-like rules:
+    /// alphanumeric+underscore vs punctuation vs whitespace.
+    fn find_word_boundaries(&self, ctx: &CommandContext, offset: usize) -> (usize, usize) {
+        let total = ctx.document.len_chars();
+        if total == 0 {
+            return (0, 0);
+        }
+        let offset = offset.min(total.saturating_sub(1));
+
+        let ch = ctx.document.buffer().char_at(offset).unwrap_or(' ');
+        let class = char_class(ch);
+
+        // Scan left for word start.
+        let mut start = offset;
+        while start > 0 {
+            if let Some(prev) = ctx.document.buffer().char_at(start - 1) {
+                if char_class(prev) != class {
+                    break;
+                }
+            }
+            start -= 1;
+        }
+
+        // Scan right for word end.
+        let mut end = offset;
+        while end < total {
+            if let Some(next) = ctx.document.buffer().char_at(end) {
+                if char_class(next) != class {
+                    break;
+                }
+            }
+            end += 1;
+        }
+
+        (start, end)
+    }
+
+    // =========================================================================
     // Editing Handlers
     // =========================================================================
 
@@ -626,6 +741,27 @@ impl Default for CommandDispatcher {
     }
 }
 
+/// Character class for word boundary detection (VS Code-like rules).
+#[derive(PartialEq, Eq)]
+enum CharClass {
+    /// Alphanumeric characters and underscore.
+    Word,
+    /// Whitespace (space, tab, newline).
+    Whitespace,
+    /// Everything else (punctuation, symbols).
+    Punctuation,
+}
+
+fn char_class(ch: char) -> CharClass {
+    if ch.is_alphanumeric() || ch == '_' {
+        CharClass::Word
+    } else if ch.is_whitespace() {
+        CharClass::Whitespace
+    } else {
+        CharClass::Punctuation
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -768,5 +904,184 @@ mod tests {
             dispatcher.dispatch(EditorCommand::Save, &mut ctx),
             DispatchResult::RequiresAppHandling
         );
+    }
+
+    #[test]
+    fn test_click_at_positions_cursor() {
+        // "Hello World" — clicking at (0, 5) should place caret at offset 5.
+        let (mut doc, mut view, mut history, mut event_bus) = create_test_context();
+        let mut dispatcher = CommandDispatcher::new();
+
+        let mut ctx = CommandContext {
+            view: &mut view,
+            document: &mut doc,
+            history: &mut history,
+            event_bus: &mut event_bus,
+        };
+
+        let result = dispatcher.dispatch(
+            EditorCommand::ClickAt { line: 0, col: 5, extend_selection: false, click_count: 1 },
+            &mut ctx,
+        );
+
+        assert_eq!(result, DispatchResult::Executed);
+        assert_eq!(ctx.view.caret_offset(), 5);
+        assert!(!ctx.view.has_selection());
+    }
+
+    #[test]
+    fn test_double_click_selects_word() {
+        // "Hello World" — double-click at col 2 should select "Hello" (0..5).
+        let (mut doc, mut view, mut history, mut event_bus) = create_test_context();
+        let mut dispatcher = CommandDispatcher::new();
+
+        let mut ctx = CommandContext {
+            view: &mut view,
+            document: &mut doc,
+            history: &mut history,
+            event_bus: &mut event_bus,
+        };
+
+        dispatcher.dispatch(
+            EditorCommand::ClickAt { line: 0, col: 2, extend_selection: false, click_count: 2 },
+            &mut ctx,
+        );
+
+        assert!(ctx.view.has_selection());
+        assert_eq!(ctx.view.selection_range(), Some((0, 5)));
+    }
+
+    #[test]
+    fn test_shift_click_extends_selection() {
+        // ClickAt (0, 2) without shift (sets caret at 2), then
+        // ClickAt (0, 8) with shift -> selection range (2..8).
+        let (mut doc, mut view, mut history, mut event_bus) = create_test_context();
+        let mut dispatcher = CommandDispatcher::new();
+
+        let mut ctx = CommandContext {
+            view: &mut view,
+            document: &mut doc,
+            history: &mut history,
+            event_bus: &mut event_bus,
+        };
+
+        // First click at col 2 (no shift).
+        dispatcher.dispatch(
+            EditorCommand::ClickAt { line: 0, col: 2, extend_selection: false, click_count: 1 },
+            &mut ctx,
+        );
+        assert_eq!(ctx.view.caret_offset(), 2);
+        assert!(!ctx.view.has_selection());
+
+        // Shift+click at col 8.
+        dispatcher.dispatch(
+            EditorCommand::ClickAt { line: 0, col: 8, extend_selection: true, click_count: 1 },
+            &mut ctx,
+        );
+        assert!(ctx.view.has_selection());
+        assert_eq!(ctx.view.selection_range(), Some((2, 8)));
+    }
+
+    #[test]
+    fn test_triple_click_selects_line() {
+        // Multi-line document: triple-click on line 0 selects full line including newline.
+        let doc = Document::from_str("Hello World\nSecond Line", None);
+        let view = EditorView::new(doc.id());
+        let history = CommandHistory::new();
+        let event_bus = EventBus::new();
+        let (mut doc, mut view, mut history, mut event_bus) = (doc, view, history, event_bus);
+        let mut dispatcher = CommandDispatcher::new();
+
+        let mut ctx = CommandContext {
+            view: &mut view,
+            document: &mut doc,
+            history: &mut history,
+            event_bus: &mut event_bus,
+        };
+
+        dispatcher.dispatch(
+            EditorCommand::ClickAt { line: 0, col: 3, extend_selection: false, click_count: 3 },
+            &mut ctx,
+        );
+
+        assert!(ctx.view.has_selection());
+        // "Hello World\n" is 12 chars (0..12). Line 1 starts at offset 12.
+        assert_eq!(ctx.view.selection_range(), Some((0, 12)));
+    }
+
+    #[test]
+    fn test_click_past_end_of_line_snaps() {
+        let (mut doc, mut view, mut history, mut event_bus) = create_test_context();
+        let mut dispatcher = CommandDispatcher::new();
+
+        let mut ctx = CommandContext {
+            view: &mut view,
+            document: &mut doc,
+            history: &mut history,
+            event_bus: &mut event_bus,
+        };
+
+        // "Hello World" has 11 chars on line 0. Click at col 100 should snap.
+        dispatcher.dispatch(
+            EditorCommand::ClickAt { line: 0, col: 100, extend_selection: false, click_count: 1 },
+            &mut ctx,
+        );
+
+        assert_eq!(ctx.view.caret_offset(), 11); // end of "Hello World"
+    }
+
+    #[test]
+    fn test_click_below_last_line_snaps() {
+        let (mut doc, mut view, mut history, mut event_bus) = create_test_context();
+        let mut dispatcher = CommandDispatcher::new();
+
+        let mut ctx = CommandContext {
+            view: &mut view,
+            document: &mut doc,
+            history: &mut history,
+            event_bus: &mut event_bus,
+        };
+
+        // Only 1 line. Click at line 100 should snap to last line.
+        dispatcher.dispatch(
+            EditorCommand::ClickAt { line: 100, col: 5, extend_selection: false, click_count: 1 },
+            &mut ctx,
+        );
+
+        assert_eq!(ctx.view.caret_offset(), 5);
+    }
+
+    #[test]
+    fn test_drag_to_extends_selection() {
+        let (mut doc, mut view, mut history, mut event_bus) = create_test_context();
+        let mut dispatcher = CommandDispatcher::new();
+
+        let mut ctx = CommandContext {
+            view: &mut view,
+            document: &mut doc,
+            history: &mut history,
+            event_bus: &mut event_bus,
+        };
+
+        // Click at col 2 (starts potential drag).
+        dispatcher.dispatch(
+            EditorCommand::ClickAt { line: 0, col: 2, extend_selection: false, click_count: 1 },
+            &mut ctx,
+        );
+
+        // Now begin a drag — first we need to set anchor. The event loop would
+        // have called ClickAt first, which positions caret. For DragTo to
+        // extend selection, we need to begin selection at the click point.
+        // Actually, re-reading the code: single click does move_caret_to(offset, false)
+        // + clear_selection. DragTo calls move_caret_to(offset, true) which calls
+        // extend_to. But extend_to on a collapsed selection should create a selection.
+        // Let's verify by checking if DragTo produces a selection.
+        dispatcher.dispatch(
+            EditorCommand::DragTo { line: 0, col: 8 },
+            &mut ctx,
+        );
+
+        assert!(ctx.view.has_selection());
+        assert_eq!(ctx.view.selection_range(), Some((2, 8)));
     }
 }
