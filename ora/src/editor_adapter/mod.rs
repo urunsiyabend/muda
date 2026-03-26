@@ -130,6 +130,12 @@ pub trait FileOpDataSource {
     ///
     /// Used to pre-populate the directory in subsequent open/save dialogs.
     fn last_opened_directory(&self) -> PathBuf;
+
+    /// Returns the expiry instant of the current status message, if any.
+    ///
+    /// The event loop uses this to wake at the right moment and clear
+    /// the message from the status bar without polling every frame.
+    fn status_message_expiry(&self) -> Option<std::time::Instant>;
 }
 
 // =============================================================================

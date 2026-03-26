@@ -797,21 +797,31 @@ impl ApplicationHandler for OraApp {
                 gpu_state.window.request_redraw();
             }
         } else {
-            // Sleep until next caret blink or indefinitely
-            match self.next_blink_instant {
+            // Sleep until next caret blink or status message expiry, whichever is sooner.
+            let mut earliest_wake: Option<Instant> = self.next_blink_instant;
+            if let Some(adapter) = &self.editor_adapter {
+                if let Some(expiry) = adapter.borrow().status_message_expiry() {
+                    earliest_wake = Some(match earliest_wake {
+                        Some(existing) => existing.min(expiry),
+                        None => expiry,
+                    });
+                }
+            }
+            match earliest_wake {
                 Some(instant) if instant > Instant::now() => {
                     event_loop.set_control_flow(ControlFlow::WaitUntil(instant));
                 }
                 Some(_) => {
-                    // Blink instant already passed — request redraw for blink toggle
-                    // and schedule next blink
+                    // Wake instant already passed — request redraw and reschedule
                     if let Some(gpu_state) = &self.gpu_state {
                         gpu_state.window.request_redraw();
                     }
-                    self.next_blink_instant = Some(Instant::now() + BLINK_RATE);
-                    event_loop.set_control_flow(
-                        ControlFlow::WaitUntil(self.next_blink_instant.unwrap())
-                    );
+                    if self.next_blink_instant.map_or(false, |i| i <= Instant::now()) {
+                        self.next_blink_instant = Some(Instant::now() + BLINK_RATE);
+                    }
+                    event_loop.set_control_flow(ControlFlow::WaitUntil(
+                        earliest_wake.unwrap_or_else(|| Instant::now() + BLINK_RATE)
+                    ));
                 }
                 None => {
                     event_loop.set_control_flow(ControlFlow::Wait);

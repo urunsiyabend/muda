@@ -9,6 +9,7 @@
 
 use core_editor::commands::editor_command::{Direction, MoveScope as CoreMoveScope};
 use core_editor::commands::EditorCommand as CoreEditorCommand;
+use std::time::Instant;
 use ora::editor_adapter::{
     BufferDataSource, CaretPresentation, CommandDispatcher, CursorDirection, DialogPresentation,
     EditorCommand, FileEntryPresentation, FileOpDataSource, GutterModel, LinePresentation,
@@ -105,6 +106,11 @@ pub struct CoreEditorAdapter {
     /// Loaded from the platform config directory at startup and updated whenever
     /// a file is opened or saved. Pre-populates future open/save dialogs.
     last_dir: std::path::PathBuf,
+    /// Expiry instant for `pending_status_message`.
+    ///
+    /// Set to `Instant::now() + 3s` whenever `pending_status_message` is set.
+    /// The event loop wakes at this instant to redraw and clear the message.
+    status_message_expiry: Option<Instant>,
 }
 
 impl CoreEditorAdapter {
@@ -117,6 +123,7 @@ impl CoreEditorAdapter {
             pending_file_op: None,
             dialog_open: false,
             last_dir: load_last_dir(),
+            status_message_expiry: None,
         }
     }
 
@@ -129,6 +136,7 @@ impl CoreEditorAdapter {
             pending_file_op: None,
             dialog_open: false,
             last_dir: load_last_dir(),
+            status_message_expiry: None,
         })
     }
 
@@ -141,6 +149,7 @@ impl CoreEditorAdapter {
             pending_file_op: None,
             dialog_open: false,
             last_dir: load_last_dir(),
+            status_message_expiry: None,
         })
     }
 
@@ -183,6 +192,7 @@ impl FileOpDataSource for CoreEditorAdapter {
 
     fn handle_file_error(&mut self, message: String) {
         self.pending_status_message = Some(message);
+        self.status_message_expiry = Some(Instant::now() + std::time::Duration::from_secs(3));
         self.dialog_open = false;
         self.app.needs_render = true;
     }
@@ -200,6 +210,7 @@ impl FileOpDataSource for CoreEditorAdapter {
         match self.app.save_as(path.to_str().unwrap_or_default()) {
             Ok(()) => {
                 self.pending_status_message = Some("File saved".to_string());
+                self.status_message_expiry = Some(Instant::now() + std::time::Duration::from_secs(3));
                 // Register the new path in the buffer registry.
                 self.app.workspace.register_path_for_active_doc(&path);
                 // Update last_dir.
@@ -210,6 +221,7 @@ impl FileOpDataSource for CoreEditorAdapter {
             }
             Err(e) => {
                 self.pending_status_message = Some(format!("Save failed: {}", e));
+                self.status_message_expiry = Some(Instant::now() + std::time::Duration::from_secs(3));
             }
         }
         self.app.needs_render = true;
@@ -232,6 +244,7 @@ impl FileOpDataSource for CoreEditorAdapter {
             Err(e) => {
                 let msg = format!("Save failed: {}", e);
                 self.pending_status_message = Some(msg.clone());
+                self.status_message_expiry = Some(Instant::now() + std::time::Duration::from_secs(3));
                 self.app.needs_render = true;
                 Err(msg)
             }
@@ -240,6 +253,10 @@ impl FileOpDataSource for CoreEditorAdapter {
 
     fn last_opened_directory(&self) -> std::path::PathBuf {
         self.last_dir.clone()
+    }
+
+    fn status_message_expiry(&self) -> Option<Instant> {
+        self.status_message_expiry
     }
 }
 
@@ -485,11 +502,23 @@ impl BufferDataSource for CoreEditorAdapter {
         let core_model = app.build_render_model(viewport_lines);
         let mut render_model = convert_render_model(core_model);
         // Inject pending status message from stub handlers, overriding core's message.
+        // Message persists until its expiry instant (3 seconds after being set).
+        //
+        // SAFETY: Single-threaded GUI application. No other reference exists during
+        // this call. Mutations are limited to clearing Option<String/Instant> fields.
         let pending = unsafe {
             &mut (*(self as *const CoreEditorAdapter as *mut CoreEditorAdapter)).pending_status_message
         };
-        if let Some(msg) = pending.take() {
-            render_model.status.message = Some(msg);
+        let expiry = unsafe {
+            &mut (*(self as *const CoreEditorAdapter as *mut CoreEditorAdapter)).status_message_expiry
+        };
+        if let Some(ref msg) = *pending {
+            if expiry.map_or(false, |exp| Instant::now() < exp) {
+                render_model.status.message = Some(msg.clone());
+            } else {
+                *pending = None;
+                *expiry = None;
+            }
         }
         render_model
     }
@@ -608,6 +637,7 @@ impl CommandDispatcher for CoreEditorAdapter {
         };
         if let Some(msg) = stub_msg {
             self.pending_status_message = Some(msg.to_string());
+            self.status_message_expiry = Some(Instant::now() + std::time::Duration::from_secs(3));
             return;
         }
 
