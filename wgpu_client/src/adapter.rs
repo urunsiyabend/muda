@@ -33,50 +33,173 @@ fn config_state_path() -> std::path::PathBuf {
         .join("state.json")
 }
 
-/// Loads the last-used directory from persistent state.
-///
-/// Returns the stored path if it exists on disk, otherwise falls back to
-/// the user's home directory.
-fn load_last_dir() -> std::path::PathBuf {
-    let state_path = config_state_path();
-    if let Ok(text) = std::fs::read_to_string(&state_path) {
-        // Minimal JSON parse: find "last_dir": "..." without pulling in serde.
-        if let Some(start) = text.find("\"last_dir\"") {
-            let after_key = &text[start + 10..];
-            if let Some(colon) = after_key.find(':') {
-                let after_colon = after_key[colon + 1..].trim();
-                if after_colon.starts_with('"') {
-                    let inner = &after_colon[1..];
-                    if let Some(end) = inner.find('"') {
-                        let raw = &inner[..end];
-                        // Unescape backslashes and quotes stored as \\ and \"
-                        let unescaped = raw.replace("\\\\", "\x00").replace("\\\"", "\"").replace("\x00", "\\");
-                        let p = std::path::PathBuf::from(&unescaped);
-                        if p.exists() {
-                            return p;
-                        }
-                    }
-                }
-            }
-        }
-    }
-    dirs::home_dir().unwrap_or_default()
+/// Persistent editor state stored in state.json.
+struct AppState {
+    /// Last directory visited in a file open/save dialog.
+    last_dir: std::path::PathBuf,
+    /// Last opened workspace folder, restored on startup.
+    workspace_path: Option<std::path::PathBuf>,
+    /// Directory/file names to hide from the sidebar tree.
+    ignored_patterns: Vec<String>,
 }
 
-/// Writes the last-used directory to persistent state.
+/// Escape a string for inclusion in a JSON string value.
+fn escape_json_string(s: &str) -> String {
+    s.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+/// Extracts a JSON string field value from a flat JSON text.
+///
+/// Finds `"key": "value"` and returns the unescaped value string.
+fn extract_json_string_field(text: &str, key: &str) -> Option<String> {
+    let needle = format!("\"{}\"", key);
+    let start = text.find(&needle)?;
+    let after_key = &text[start + needle.len()..];
+    let colon = after_key.find(':')?;
+    let after_colon = after_key[colon + 1..].trim();
+    if after_colon.starts_with('"') {
+        let inner = &after_colon[1..];
+        // Find closing quote that is not escaped
+        let mut end = None;
+        let mut prev_backslash = false;
+        for (i, c) in inner.char_indices() {
+            if c == '\\' {
+                prev_backslash = !prev_backslash;
+            } else {
+                if c == '"' && !prev_backslash {
+                    end = Some(i);
+                    break;
+                }
+                prev_backslash = false;
+            }
+        }
+        let raw = &inner[..end?];
+        // Unescape \\ → \ and \" → "
+        let unescaped = raw.replace("\\\\", "\x00").replace("\\\"", "\"").replace("\x00", "\\");
+        Some(unescaped)
+    } else {
+        None
+    }
+}
+
+/// Extracts a JSON array of strings field value from a flat JSON text.
+///
+/// Finds `"key": ["val1", "val2"]` and returns the values.
+fn extract_json_string_array(text: &str, key: &str) -> Option<Vec<String>> {
+    let needle = format!("\"{}\"", key);
+    let start = text.find(&needle)?;
+    let after_key = &text[start + needle.len()..];
+    let colon = after_key.find(':')?;
+    let after_colon = after_key[colon + 1..].trim();
+    if !after_colon.starts_with('[') {
+        return None;
+    }
+    let bracket_content = &after_colon[1..];
+    let close = bracket_content.find(']')?;
+    let inner = &bracket_content[..close];
+
+    let mut results = Vec::new();
+    let mut remaining = inner;
+    loop {
+        remaining = remaining.trim();
+        if remaining.is_empty() {
+            break;
+        }
+        if !remaining.starts_with('"') {
+            // Skip non-string tokens (e.g., commas if we're off)
+            if let Some(next_quote) = remaining.find('"') {
+                remaining = &remaining[next_quote..];
+            } else {
+                break;
+            }
+        }
+        let inner_str = &remaining[1..];
+        // Find closing quote
+        let mut end = None;
+        let mut prev_backslash = false;
+        for (i, c) in inner_str.char_indices() {
+            if c == '\\' {
+                prev_backslash = !prev_backslash;
+            } else {
+                if c == '"' && !prev_backslash {
+                    end = Some(i);
+                    break;
+                }
+                prev_backslash = false;
+            }
+        }
+        let end_idx = match end {
+            Some(e) => e,
+            None => break,
+        };
+        let raw = &inner_str[..end_idx];
+        let unescaped = raw.replace("\\\\", "\x00").replace("\\\"", "\"").replace("\x00", "\\");
+        results.push(unescaped);
+        remaining = &inner_str[end_idx + 1..];
+        // Skip comma
+        remaining = remaining.trim_start_matches(',');
+    }
+
+    Some(results)
+}
+
+/// Loads full editor state from the platform config file.
+///
+/// Falls back gracefully: missing fields use sensible defaults.
+fn load_state() -> AppState {
+    let text = std::fs::read_to_string(config_state_path()).unwrap_or_default();
+
+    let last_dir = extract_json_string_field(&text, "last_dir")
+        .and_then(|p| {
+            let pb = std::path::PathBuf::from(&p);
+            if pb.exists() { Some(pb) } else { None }
+        })
+        .unwrap_or_else(|| dirs::home_dir().unwrap_or_default());
+
+    let workspace_path = extract_json_string_field(&text, "workspace_path")
+        .map(std::path::PathBuf::from)
+        .filter(|p| p.exists());
+
+    let ignored_patterns = extract_json_string_array(&text, "ignored_patterns")
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| vec![".git".to_string()]);
+
+    AppState { last_dir, workspace_path, ignored_patterns }
+}
+
+/// Writes full editor state to the platform config file atomically.
 ///
 /// Creates parent directories as needed. Write errors are silently ignored
 /// (not worth crashing the editor over a preference write failure).
-fn save_last_dir(dir: &std::path::Path) {
+fn save_state(state: &AppState) {
     let state_path = config_state_path();
     if let Some(parent) = state_path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
-    // Manually escape the path string for JSON.
-    let raw = dir.to_string_lossy();
-    let escaped = raw.replace('\\', "\\\\").replace('"', "\\\"");
-    let json = format!("{{\"last_dir\": \"{}\"}}", escaped);
+
+    let escaped_last = escape_json_string(&state.last_dir.to_string_lossy());
+
+    let workspace_json = state.workspace_path.as_ref()
+        .map(|p| format!("\"{}\"", escape_json_string(&p.to_string_lossy())))
+        .unwrap_or_else(|| "null".to_string());
+
+    let patterns_json = state.ignored_patterns.iter()
+        .map(|p| format!("\"{}\"", escape_json_string(p)))
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    let json = format!(
+        "{{\"last_dir\": \"{}\", \"workspace_path\": {}, \"ignored_patterns\": [{}]}}",
+        escaped_last, workspace_json, patterns_json
+    );
     let _ = std::fs::write(&state_path, json);
+}
+
+/// Returns the last opened workspace path if it exists on disk.
+///
+/// Used by `main.rs` to restore the workspace at startup before creating the adapter.
+pub fn load_workspace_path() -> Option<std::path::PathBuf> {
+    load_state().workspace_path
 }
 
 /// Adapter that wraps `core_editor::app::App` and implements `EditorDataSource`.
@@ -111,45 +234,86 @@ pub struct CoreEditorAdapter {
     /// Set to `Instant::now() + 3s` whenever `pending_status_message` is set.
     /// The event loop wakes at this instant to redraw and clear the message.
     status_message_expiry: Option<Instant>,
+    /// Last opened workspace folder, persisted in state.json.
+    ///
+    /// Set when `open_directory()` is called. Restored at startup by main.rs
+    /// via `load_workspace_path()`.
+    workspace_path: Option<std::path::PathBuf>,
+    /// Sidebar ignore patterns loaded from state.json.
+    ///
+    /// Passed to `Sidebar` so the file tree filters only the configured entries.
+    /// Default: `[".git"]`.
+    ignored_patterns: Vec<String>,
 }
 
 impl CoreEditorAdapter {
     /// Create an adapter wrapping a new empty document.
     pub fn new() -> Self {
+        let state = load_state();
         Self {
             app: core_editor::app::App::new(),
             pending_status_message: None,
             last_viewport: (200, 40),
             pending_file_op: None,
             dialog_open: false,
-            last_dir: load_last_dir(),
+            last_dir: state.last_dir,
             status_message_expiry: None,
+            workspace_path: state.workspace_path,
+            ignored_patterns: state.ignored_patterns,
         }
     }
 
     /// Create an adapter that opens the given file path.
     pub fn open_file(path: &str) -> std::io::Result<Self> {
+        let state = load_state();
         Ok(Self {
             app: core_editor::app::App::open_file(path)?,
             pending_status_message: None,
             last_viewport: (200, 40),
             pending_file_op: None,
             dialog_open: false,
-            last_dir: load_last_dir(),
+            last_dir: state.last_dir,
             status_message_expiry: None,
+            workspace_path: state.workspace_path,
+            ignored_patterns: state.ignored_patterns,
         })
     }
 
     /// Create an adapter that opens a directory (shows sidebar).
+    ///
+    /// Persists the opened workspace path to state.json and configures the
+    /// sidebar with `ignored_patterns` from state. First-level directories
+    /// are auto-expanded via `Sidebar::new_with_patterns`.
     pub fn open_directory(path: &str) -> std::io::Result<Self> {
+        let state = load_state();
+        let canonical = std::fs::canonicalize(std::path::Path::new(path))?;
+
+        // Build the App with ignored_patterns applied to the sidebar
+        let mut app = core_editor::app::App::new();
+        app.sidebar = core_editor::view::Sidebar::new_with_patterns(
+            Some(canonical.clone()),
+            state.ignored_patterns.clone(),
+        );
+        app.sidebar.visible = true;
+        app.focus = core_editor::view::FocusState::Sidebar;
+
+        let new_state = AppState {
+            last_dir: state.last_dir.clone(),
+            workspace_path: Some(canonical.clone()),
+            ignored_patterns: state.ignored_patterns.clone(),
+        };
+        save_state(&new_state);
+
         Ok(Self {
-            app: core_editor::app::App::open_directory(path)?,
+            app,
             pending_status_message: None,
             last_viewport: (200, 40),
             pending_file_op: None,
             dialog_open: false,
-            last_dir: load_last_dir(),
+            last_dir: state.last_dir,
             status_message_expiry: None,
+            workspace_path: Some(canonical),
+            ignored_patterns: state.ignored_patterns,
         })
     }
 
@@ -164,7 +328,11 @@ impl FileOpDataSource for CoreEditorAdapter {
         // Update last_dir to this file's parent directory.
         if let Some(parent) = path.parent() {
             self.last_dir = parent.to_path_buf();
-            save_last_dir(parent);
+            save_state(&AppState {
+                last_dir: self.last_dir.clone(),
+                workspace_path: self.workspace_path.clone(),
+                ignored_patterns: self.ignored_patterns.clone(),
+            });
         }
 
         let (doc_id, was_existing) = self.app.workspace.open_document_with_content(path, content);
@@ -216,7 +384,11 @@ impl FileOpDataSource for CoreEditorAdapter {
                 // Update last_dir.
                 if let Some(parent) = path.parent() {
                     self.last_dir = parent.to_path_buf();
-                    save_last_dir(parent);
+                    save_state(&AppState {
+                        last_dir: self.last_dir.clone(),
+                        workspace_path: self.workspace_path.clone(),
+                        ignored_patterns: self.ignored_patterns.clone(),
+                    });
                 }
             }
             Err(e) => {

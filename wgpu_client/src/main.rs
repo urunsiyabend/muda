@@ -37,6 +37,14 @@ fn main() {
             CoreEditorAdapter::open_file(path_str)
                 .unwrap_or_else(|_| CoreEditorAdapter::new())
         }
+    } else if let Some(workspace_path) = adapter::load_workspace_path() {
+        // No path arg given — restore last opened workspace from state.json.
+        debug!("Restoring workspace: {:?}", workspace_path);
+        CoreEditorAdapter::open_directory(workspace_path.to_str().unwrap_or_default())
+            .unwrap_or_else(|e| {
+                debug!("Failed to restore workspace {:?}: {}", workspace_path, e);
+                CoreEditorAdapter::new()
+            })
     } else {
         CoreEditorAdapter::new()
     };
