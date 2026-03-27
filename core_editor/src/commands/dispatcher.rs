@@ -418,10 +418,16 @@ impl CommandDispatcher {
         click_count: u32,
     ) {
         let max_line = ctx.document.len_lines().saturating_sub(1);
+        // Clicking below the last line snaps to end of file.
+        let below_document = line > max_line;
         let line = line.min(max_line);
         let max_col = self.line_len(ctx, line);
         let col = col.min(max_col);
-        let offset = self.position_to_offset(ctx, TextPosition::new(line, col));
+        let offset = if below_document {
+            ctx.document.len_chars()
+        } else {
+            self.position_to_offset(ctx, TextPosition::new(line, col))
+        };
 
         match click_count {
             2 => {
@@ -1467,13 +1473,14 @@ mod tests {
             event_bus: &mut event_bus,
         };
 
-        // Only 1 line. Click at line 100 should snap to last line.
+        // Only 1 line ("Hello World", 11 chars).
+        // Click at line 100 should snap to end of file.
         dispatcher.dispatch(
             EditorCommand::ClickAt { line: 100, col: 5, extend_selection: false, click_count: 1 },
             &mut ctx,
         );
 
-        assert_eq!(ctx.view.caret_offset(), 5);
+        assert_eq!(ctx.view.caret_offset(), 11);
     }
 
     #[test]

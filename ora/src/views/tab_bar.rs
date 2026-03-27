@@ -91,11 +91,12 @@ impl View for TabBarView {
                 });
             }
 
-            // Wire close handler: dispatch CloseTab
-            // Note: Tab element uses Rc<dyn Fn()> internally so this closure
-            // is shared between the close button and middle-click on tab body.
+            // Wire close handler: switch to this tab first, then close it.
+            // Without the SwitchTab, CloseTab closes the *active* tab which
+            // may differ from the tab whose close button was clicked.
             if let Some(d) = dispatch.clone() {
                 t = t.on_close(move || {
+                    d(EditorCommand::SwitchTab(view_id));
                     d(EditorCommand::CloseTab);
                 });
             }
