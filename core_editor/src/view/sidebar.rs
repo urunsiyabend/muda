@@ -61,6 +61,10 @@ pub struct Sidebar {
     tree_cache: Vec<crate::view_model::FileTreeNode>,
     /// Whether the tree cache needs rebuilding.
     tree_dirty: bool,
+    /// Patterns to hide from the file tree. Default: [".git"].
+    /// Only entries whose name exactly matches one of these patterns are hidden.
+    /// Dotfiles like .env, .gitignore are visible by default.
+    pub ignored_patterns: Vec<String>,
 }
 
 impl Default for Sidebar {
@@ -75,13 +79,19 @@ impl Default for Sidebar {
             viewport_height: 20,
             tree_cache: Vec::new(),
             tree_dirty: true,
+            ignored_patterns: vec![".git".to_string()],
         }
     }
 }
 
 impl Sidebar {
-    /// Creates a new sidebar with the given base directory.
+    /// Creates a new sidebar with the given base directory and default ignored patterns.
     pub fn new(base_directory: Option<PathBuf>) -> Self {
+        Self::new_with_patterns(base_directory, vec![".git".to_string()])
+    }
+
+    /// Creates a new sidebar with the given base directory and custom ignored patterns.
+    pub fn new_with_patterns(base_directory: Option<PathBuf>, ignored_patterns: Vec<String>) -> Self {
         let mut sidebar = Self {
             visible: base_directory.is_some(),
             base_directory,
@@ -92,17 +102,47 @@ impl Sidebar {
             viewport_height: 20,
             tree_cache: Vec::new(),
             tree_dirty: true,
+            ignored_patterns,
         };
         sidebar.refresh_entries();
+        sidebar.auto_expand_first_level();
         sidebar
+    }
+
+    /// Sets the ignored patterns and marks the tree as dirty.
+    pub fn set_ignored_patterns(&mut self, patterns: Vec<String>) {
+        self.ignored_patterns = patterns;
+        self.tree_dirty = true;
+    }
+
+    /// Marks the tree cache as dirty so it will be rebuilt on next `build_tree` call.
+    /// Used by the filesystem watcher to trigger a tree refresh.
+    pub fn mark_tree_dirty(&mut self) {
+        self.tree_dirty = true;
+    }
+
+    /// Expands all first-level directories in the current base directory.
+    ///
+    /// Called automatically when `set_base_directory` is invoked.
+    /// This gives an immediate overview of the workspace structure on open.
+    pub fn auto_expand_first_level(&mut self) {
+        if let Some(ref base) = self.base_directory.clone() {
+            let entries = Self::read_dir_sorted(base, &self.ignored_patterns);
+            for entry in &entries {
+                if entry.is_dir {
+                    self.expanded_dirs.insert(entry.path.clone());
+                }
+            }
+            self.tree_dirty = true;
+        }
     }
 
     /// Refreshes the root-level file list from the base directory.
     pub fn refresh_entries(&mut self) {
         self.entries.clear();
 
-        if let Some(ref base_dir) = self.base_directory {
-            self.entries = Self::read_dir_sorted(base_dir);
+        if let Some(ref base_dir) = self.base_directory.clone() {
+            self.entries = Self::read_dir_sorted(base_dir, &self.ignored_patterns);
         }
 
         if self.selected_index >= self.entries.len() {
@@ -112,7 +152,10 @@ impl Sidebar {
     }
 
     /// Read a directory and return sorted entries (dirs first, then alpha).
-    fn read_dir_sorted(dir: &PathBuf) -> Vec<FileEntry> {
+    ///
+    /// Only entries whose name exactly matches one of `ignored_patterns` are hidden.
+    /// Dotfiles like `.env` and `.gitignore` are visible; only explicit matches are filtered.
+    fn read_dir_sorted(dir: &PathBuf, ignored_patterns: &[String]) -> Vec<FileEntry> {
         let Ok(read_dir) = fs::read_dir(dir) else {
             return Vec::new();
         };
@@ -123,8 +166,9 @@ impl Sidebar {
                 let path = entry.path();
                 let name = entry.file_name().to_string_lossy().to_string();
 
-                // Skip hidden files (dotfiles)
-                if name.starts_with('.') {
+                // Only hide entries matching an ignored pattern (exact name match).
+                // Dotfiles like .env, .gitignore are NOT hidden unless explicitly listed.
+                if ignored_patterns.iter().any(|p| p == &name) {
                     return None;
                 }
 
@@ -172,7 +216,7 @@ impl Sidebar {
 
     /// Recursively builds tree nodes for a directory.
     fn build_tree_recursive(&self, dir: &PathBuf) -> Vec<crate::view_model::FileTreeNode> {
-        let entries = Self::read_dir_sorted(dir);
+        let entries = Self::read_dir_sorted(dir, &self.ignored_patterns);
 
         entries
             .into_iter()
@@ -292,13 +336,15 @@ impl Sidebar {
         }
     }
 
-    /// Sets a new base directory and refreshes the file list.
+    /// Sets a new base directory, resets selection, clears expanded dirs,
+    /// refreshes entries, and auto-expands first-level directories.
     pub fn set_base_directory(&mut self, path: PathBuf) {
         self.base_directory = Some(path);
         self.selected_index = 0;
         self.scroll_offset = 0;
         self.expanded_dirs.clear();
         self.refresh_entries();
+        self.auto_expand_first_level();
     }
 
     /// Navigates to the parent directory.
@@ -331,6 +377,7 @@ mod tests {
         assert!(!sidebar.visible);
         assert!(sidebar.base_directory.is_none());
         assert!(sidebar.entries.is_empty());
+        assert_eq!(sidebar.ignored_patterns, vec![".git".to_string()]);
     }
 
     #[test]
@@ -371,7 +418,7 @@ mod tests {
 
     #[test]
     fn test_real_tree_expand() {
-        // Use the actual project directory to test tree building
+        // Use the actual project directory to test tree building.
         let cwd = std::env::current_dir().unwrap();
         let mut sidebar = Sidebar::new(Some(cwd.clone()));
         assert!(sidebar.visible);
@@ -380,24 +427,32 @@ mod tests {
         let tree = sidebar.build_tree();
         assert!(!tree.is_empty(), "Tree should have root entries");
 
-        // Find a directory in the tree
+        // Find a directory in the tree (should already be expanded at first level)
         let dir_node = tree.iter().find(|n| n.is_dir);
         assert!(dir_node.is_some(), "Should have at least one directory");
-        let dir_node = dir_node.unwrap();
-        assert!(!dir_node.is_expanded, "Should start collapsed");
-        assert!(dir_node.children.is_empty(), "Collapsed dir has no children");
 
-        // Toggle it open using the path from the tree node
+        // All first-level dirs should be expanded after auto_expand_first_level
+        let dir_node = dir_node.unwrap();
+        assert!(dir_node.is_expanded, "First-level dirs should be auto-expanded");
+        assert!(!dir_node.children.is_empty(), "Auto-expanded dir should have children");
+
+        // Toggle collapse using the path from the tree node
         let dir_path = PathBuf::from(&dir_node.path);
         sidebar.toggle_dir(&dir_path);
-        assert!(sidebar.is_expanded(&dir_path));
+        assert!(!sidebar.is_expanded(&dir_path));
 
-        // Rebuild tree — expanded dir should have children
+        // Rebuild tree — collapsed dir should have no children
         let tree2 = sidebar.build_tree();
         let dir_node2 = tree2.iter().find(|n| n.name == dir_node.name).unwrap();
-        assert!(dir_node2.is_expanded, "Dir should be expanded after toggle");
-        // It should have children now (unless it's an empty directory)
-        eprintln!("Dir '{}' expanded, children: {}", dir_node2.name, dir_node2.children.len());
+        assert!(!dir_node2.is_expanded, "Dir should be collapsed after toggle");
+        assert!(dir_node2.children.is_empty(), "Collapsed dir has no children");
+
+        // Toggle back open
+        sidebar.toggle_dir(&dir_path);
+        let tree3 = sidebar.build_tree();
+        let dir_node3 = tree3.iter().find(|n| n.name == dir_node.name).unwrap();
+        assert!(dir_node3.is_expanded, "Dir should be expanded after toggle");
+        eprintln!("Dir '{}' expanded, children: {}", dir_node3.name, dir_node3.children.len());
     }
 
     #[test]
@@ -409,5 +464,96 @@ mod tests {
         assert!(sidebar.is_expanded(&dir));
         sidebar.toggle_dir(&dir);
         assert!(!sidebar.is_expanded(&dir));
+    }
+
+    #[test]
+    fn test_ignored_patterns_filtering() {
+        use std::fs;
+
+        // Create a temp directory with .git (dir), .env (file), .gitignore (file), src (dir)
+        let tmp = std::env::temp_dir().join(format!("muda_sidebar_test_{}", std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis()));
+        fs::create_dir_all(&tmp).expect("create tmp dir");
+
+        // Create test entries
+        fs::create_dir(tmp.join(".git")).expect("create .git dir");
+        fs::write(tmp.join(".env"), "SECRET=foo").expect("create .env");
+        fs::write(tmp.join(".gitignore"), "target/").expect("create .gitignore");
+        fs::create_dir(tmp.join("src")).expect("create src dir");
+
+        // Default patterns: only .git hidden
+        let sidebar = Sidebar::new(Some(tmp.clone()));
+        let names: Vec<String> = sidebar.entries.iter().map(|e| e.name.clone()).collect();
+
+        // .git should be hidden
+        assert!(!names.contains(&".git".to_string()), ".git should be hidden by default");
+
+        // dotfiles .env and .gitignore should be visible
+        assert!(names.contains(&".env".to_string()), ".env should be visible by default");
+        assert!(names.contains(&".gitignore".to_string()), ".gitignore should be visible by default");
+
+        // src should be visible
+        assert!(names.contains(&"src".to_string()), "src should be visible");
+
+        // Custom patterns: also hide .env
+        let sidebar2 = Sidebar::new_with_patterns(
+            Some(tmp.clone()),
+            vec![".git".to_string(), ".env".to_string()],
+        );
+        let names2: Vec<String> = sidebar2.entries.iter().map(|e| e.name.clone()).collect();
+
+        assert!(!names2.contains(&".git".to_string()), ".git still hidden with custom patterns");
+        assert!(!names2.contains(&".env".to_string()), ".env hidden when in ignored_patterns");
+        assert!(names2.contains(&".gitignore".to_string()), ".gitignore still visible");
+
+        // Cleanup
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn test_mark_tree_dirty() {
+        let mut sidebar = Sidebar::default();
+        // Build tree to clear dirty flag
+        sidebar.build_tree();
+        // tree_dirty should be false after build
+        // Mark dirty
+        sidebar.mark_tree_dirty();
+        // We can't inspect tree_dirty directly (private), but we can verify
+        // mark_tree_dirty doesn't panic and sidebar remains usable
+        let _ = sidebar.build_tree();
+    }
+
+    #[test]
+    fn test_set_ignored_patterns() {
+        let mut sidebar = Sidebar::default();
+        assert_eq!(sidebar.ignored_patterns, vec![".git".to_string()]);
+        sidebar.set_ignored_patterns(vec![".git".to_string(), "target".to_string()]);
+        assert_eq!(sidebar.ignored_patterns, vec![".git".to_string(), "target".to_string()]);
+    }
+
+    #[test]
+    fn test_auto_expand_first_level() {
+        use std::fs;
+
+        let tmp = std::env::temp_dir().join(format!("muda_expand_test_{}", std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis()));
+        fs::create_dir_all(&tmp).expect("create tmp dir");
+        fs::create_dir(tmp.join("alpha")).expect("create alpha");
+        fs::create_dir(tmp.join("beta")).expect("create beta");
+        fs::write(tmp.join("file.txt"), "").expect("create file");
+
+        let sidebar = Sidebar::new(Some(tmp.clone()));
+
+        // First-level dirs should be expanded
+        assert!(sidebar.is_expanded(&tmp.join("alpha")), "alpha should be auto-expanded");
+        assert!(sidebar.is_expanded(&tmp.join("beta")), "beta should be auto-expanded");
+        // File should not be in expanded_dirs (files can't be expanded)
+        assert!(!sidebar.is_expanded(&tmp.join("file.txt")));
+
+        let _ = fs::remove_dir_all(&tmp);
     }
 }
