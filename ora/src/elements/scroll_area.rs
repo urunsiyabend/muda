@@ -133,10 +133,18 @@ impl Element for ScrollArea {
             ctx.stop_propagation();
         });
 
-        // Push as parent so child hitboxes bubble scroll events to us
+        // Push as parent so child hitboxes bubble scroll events to us.
+        // Also push hitbox offset so child hitboxes align with visually-scrolled positions.
         cx.push_hitbox_parent(hitbox_id);
+        let scroll_y = self.scroll.get();
+        if scroll_y > 0.0 {
+            cx.push_hitbox_offset(0.0, -scroll_y);
+        }
         for child in &mut self.children {
             child.prepaint(cx);
+        }
+        if scroll_y > 0.0 {
+            cx.pop_hitbox_offset();
         }
         cx.pop_hitbox_parent();
     }

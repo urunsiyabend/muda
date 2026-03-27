@@ -233,6 +233,9 @@ pub struct PrepaintContext<'a> {
     pub(crate) event_handlers: EventHandlers,
     /// Stack of parent hitboxes for building parent relationships.
     pub(crate) hitbox_stack: Vec<HitboxId>,
+    /// Accumulated hitbox offset stack (for scroll areas).
+    /// Child hitbox bounds are shifted by the sum of all offsets on the stack.
+    pub(crate) hitbox_offset_stack: Vec<(f32, f32)>,
 }
 
 impl<'a> PrepaintContext<'a> {
@@ -250,6 +253,7 @@ impl<'a> PrepaintContext<'a> {
             focusable_elements: Vec::new(),
             event_handlers: EventHandlers::new(),
             hitbox_stack: Vec::new(),
+            hitbox_offset_stack: Vec::new(),
         }
     }
 
@@ -259,7 +263,14 @@ impl<'a> PrepaintContext<'a> {
         let id = HitboxId(self.next_hitbox_id);
         self.next_hitbox_id += 1;
 
-        let hitbox = Hitbox { id, bounds, opaque };
+        // Apply accumulated hitbox offsets (from scroll areas)
+        let mut adjusted = bounds;
+        for &(dx, dy) in &self.hitbox_offset_stack {
+            adjusted.origin.x += dx;
+            adjusted.origin.y += dy;
+        }
+
+        let hitbox = Hitbox { id, bounds: adjusted, opaque };
         self.hitboxes.push(hitbox);
 
         // Auto-register parent relationship if a parent is on the stack
@@ -337,6 +348,17 @@ impl<'a> PrepaintContext<'a> {
     /// Call after processing all children.
     pub fn pop_hitbox_parent(&mut self) {
         self.hitbox_stack.pop();
+    }
+
+    /// Push a hitbox offset — shifts all subsequently registered hitbox bounds by (dx, dy).
+    /// Used by ScrollArea to align hitboxes with visually-scrolled content.
+    pub fn push_hitbox_offset(&mut self, dx: f32, dy: f32) {
+        self.hitbox_offset_stack.push((dx, dy));
+    }
+
+    /// Pop a hitbox offset.
+    pub fn pop_hitbox_offset(&mut self) {
+        self.hitbox_offset_stack.pop();
     }
 
     /// Register a hitbox with parent relationship from the current stack.
@@ -518,17 +540,13 @@ impl<'a> PaintContext<'a> {
             clip_rect
         };
 
-        // Clamp to surface bounds to satisfy wgpu requirements
+        // Clamp to surface bounds to satisfy wgpu requirement: x+w <= sw, y+h <= sh, w>=1, h>=1
         let (sw, sh) = self.window_size;
-        let x = (effective.origin.x.round() as u32).min(sw);
-        let y = (effective.origin.y.round() as u32).min(sh);
-        let width = (effective.size.width.round() as u32).min(sw.saturating_sub(x));
-        let height = (effective.size.height.round() as u32).min(sh.saturating_sub(y));
-
-        // Ensure width/height are at least 1 if the rect is non-degenerate,
-        // otherwise wgpu will reject a zero-size scissor.
-        let width = width.max(1).min(sw.saturating_sub(x));
-        let height = height.max(1).min(sh.saturating_sub(y));
+        // Ensure x < sw and y < sh so there's room for at least 1 pixel
+        let x = (effective.origin.x.round().max(0.0) as u32).min(sw.saturating_sub(1));
+        let y = (effective.origin.y.round().max(0.0) as u32).min(sh.saturating_sub(1));
+        let width = (effective.size.width.round() as u32).clamp(1, sw.saturating_sub(x));
+        let height = (effective.size.height.round() as u32).clamp(1, sh.saturating_sub(y));
 
         self.clip_stack.push(effective);
         self.paint_commands.push(PaintCommand::SetScissor {
@@ -545,10 +563,10 @@ impl<'a> PaintContext<'a> {
             if let Some(previous) = self.clip_stack.last() {
                 // Restore previous scissor (already an intersection from push_clip)
                 let (sw, sh) = self.window_size;
-                let x = (previous.origin.x.round() as u32).min(sw);
-                let y = (previous.origin.y.round() as u32).min(sh);
-                let width = (previous.size.width.round() as u32).min(sw.saturating_sub(x)).max(1);
-                let height = (previous.size.height.round() as u32).min(sh.saturating_sub(y)).max(1);
+                let x = (previous.origin.x.round().max(0.0) as u32).min(sw.saturating_sub(1));
+                let y = (previous.origin.y.round().max(0.0) as u32).min(sh.saturating_sub(1));
+                let width = (previous.size.width.round() as u32).clamp(1, sw.saturating_sub(x));
+                let height = (previous.size.height.round() as u32).clamp(1, sh.saturating_sub(y));
 
                 self.paint_commands.push(PaintCommand::SetScissor {
                     x,
