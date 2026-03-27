@@ -51,6 +51,48 @@ pub fn parse_perf_flags() {
         if arg == "--no-layout-cache" {
             NO_LAYOUT_CACHE.store(true, Ordering::Relaxed);
         }
+        if arg == "--no-cache" {
+            // Umbrella flag: disables all caching subsystems for A/B comparison.
+            NO_GLYPH_CACHE.store(true, Ordering::Relaxed);
+            NO_LAYOUT_CACHE.store(true, Ordering::Relaxed);
+            log::info!("--no-cache: all caches disabled (glyph + layout)");
+        }
+    }
+}
+
+/// Frame degradation guard.
+///
+/// Tracks consecutive slow frames (>4ms) and enters degraded mode when 3+
+/// consecutive frames exceed budget. In degraded mode, transition animations
+/// are suppressed to reduce per-frame cost and allow the renderer to recover.
+/// Automatically exits degraded mode when a fast frame (<= 4ms) is observed.
+struct FrameDegradation {
+    /// Number of consecutive frames that exceeded the 4ms budget.
+    consecutive_slow: u32,
+    /// Whether the renderer is currently in degraded mode.
+    pub degraded: bool,
+}
+
+impl FrameDegradation {
+    fn new() -> Self {
+        Self { consecutive_slow: 0, degraded: false }
+    }
+
+    /// Update degradation state based on the most recent frame time.
+    ///
+    /// - If `frame_ms > 4.0` and 3+ consecutive slow frames have occurred,
+    ///   sets `degraded = true`.
+    /// - If `frame_ms <= 4.0`, resets the counter and clears `degraded`.
+    fn update(&mut self, frame_ms: f64) {
+        if frame_ms > 4.0 {
+            self.consecutive_slow += 1;
+            if self.consecutive_slow >= 3 {
+                self.degraded = true;
+            }
+        } else {
+            self.consecutive_slow = 0;
+            self.degraded = false;
+        }
     }
 }
 
@@ -128,6 +170,9 @@ pub struct OraApp {
     layout_misses: u64,
     /// Whether layout caching is enabled. False when --no-layout-cache is passed.
     layout_cache_enabled: bool,
+    /// Frame degradation guard. Tracks consecutive slow frames and suppresses
+    /// transition animations when 3+ frames exceed the 4ms budget.
+    frame_degradation: FrameDegradation,
 }
 
 impl OraApp {
@@ -163,6 +208,7 @@ impl OraApp {
             layout_hits: 0,
             layout_misses: 0,
             layout_cache_enabled: true,
+            frame_degradation: FrameDegradation::new(),
         }
     }
 
@@ -203,6 +249,7 @@ impl OraApp {
             layout_hits: 0,
             layout_misses: 0,
             layout_cache_enabled: true,
+            frame_degradation: FrameDegradation::new(),
         }
     }
 }
@@ -1139,9 +1186,13 @@ impl ApplicationHandler for OraApp {
                                 self.app_context.clear_dirty();
 
                                 // Frame timing display
+                                let t_gpu = frame_start.elapsed();
+                                let total_ms = t_gpu.as_secs_f64() * 1000.0;
+
+                                // Update frame degradation guard with this frame's total time.
+                                self.frame_degradation.update(total_ms);
+
                                 if SHOW_FPS.load(Ordering::Relaxed) {
-                                    let t_gpu = frame_start.elapsed();
-                                    let total_ms = t_gpu.as_secs_f64() * 1000.0;
                                     let view_ms = t_view_tree.as_secs_f64() * 1000.0;
                                     let layout_ms = (t_layout - t_view_tree).as_secs_f64() * 1000.0;
                                     let prepaint_ms = (t_prepaint - t_layout).as_secs_f64() * 1000.0;
@@ -1164,15 +1215,17 @@ impl ApplicationHandler for OraApp {
                                         self.fps_last_report = now;
                                     }
 
+                                    let degraded_tag = if self.frame_degradation.degraded { " [DEGRADED]" } else { "" };
+
                                     log::info!(
-                                        "FRAME {:.1}ms | view {:.1} layout {:.1} prepaint {:.1} paint {:.1} gpu {:.1} | glyph {}% layout {}% | {} cmds",
-                                        total_ms, view_ms, layout_ms, prepaint_ms, paint_ms, gpu_ms, glyph_hit_pct, layout_hit_pct, cmd_count
+                                        "FRAME {:.1}ms | view {:.1} layout {:.1} prepaint {:.1} paint {:.1} gpu {:.1} | glyph {}% layout {}% | {} cmds{}",
+                                        total_ms, view_ms, layout_ms, prepaint_ms, paint_ms, gpu_ms, glyph_hit_pct, layout_hit_pct, cmd_count, degraded_tag
                                     );
 
                                     gpu_state.window.set_title(
                                         &format!(
-                                            "Muda [{:.0}ms | view {:.0} layout {:.0} prepaint {:.0} paint {:.0} gpu {:.0} | glyph {}% layout {}% | {} cmds | {}fps]",
-                                            total_ms, view_ms, layout_ms, prepaint_ms, paint_ms, gpu_ms, glyph_hit_pct, layout_hit_pct, cmd_count, self.fps_display
+                                            "Muda [{:.0}ms | view {:.0} layout {:.0} prepaint {:.0} paint {:.0} gpu {:.0} | glyph {}% layout {}% | {} cmds | {}fps{}]",
+                                            total_ms, view_ms, layout_ms, prepaint_ms, paint_ms, gpu_ms, glyph_hit_pct, layout_hit_pct, cmd_count, self.fps_display, degraded_tag
                                         )
                                     );
                                 }
@@ -1230,10 +1283,14 @@ impl ApplicationHandler for OraApp {
         // Tick async executor
         while self.app_context.tick_executor() {}
 
-        // Check if transitions are still running (need continuous frames)
+        // Check if transitions are still running (need continuous frames).
+        // When degraded (3+ consecutive slow frames), suppress transition animation
+        // redraws to reduce per-frame cost and allow the renderer to recover.
+        // Dirty entity redraws are never suppressed — only animation-only frames.
         let has_active_animations = self.app_context.has_active_transitions();
+        let animations_suppressed = self.frame_degradation.degraded && has_active_animations && !self.app_context.has_dirty_entities();
 
-        if self.app_context.has_dirty_entities() || has_active_animations {
+        if self.app_context.has_dirty_entities() || (has_active_animations && !animations_suppressed) {
             // Need another frame immediately.
             // Dirty entities require full layout; active animations are paint-only.
             if self.app_context.has_dirty_entities() {
