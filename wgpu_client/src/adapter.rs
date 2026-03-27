@@ -424,6 +424,9 @@ fn convert_render_model(m: core_editor::view_model::RenderModel) -> RenderModel 
         // The adapter always sets this to 0.0; EditorRootView overwrites it
         // from the shared scroll offset cell.
         scroll_y_offset_px: 0.0,
+        // Focus state is managed by ora's event loop, not core_editor.
+        // EditorRootView overwrites this from the shared focus state cell.
+        editor_focused: true,
     }
 }
 
@@ -479,6 +482,8 @@ fn to_core_command(cmd: EditorCommand) -> Option<CoreEditorCommand> {
             CoreEditorCommand::ClickAt { line, col, extend_selection, click_count },
         DragTo { line, col, snap_mode } =>
             CoreEditorCommand::DragTo { line, col, snap_mode },
+        GutterClickAt { line } =>
+            CoreEditorCommand::GutterClickAt { line },
         // v2 commands — handled before to_core_command is called,
         // but listed here for exhaustiveness.
         SaveAs | OpenFile | New | CloseTab | SwitchTab(_) | SwitchTabPrev

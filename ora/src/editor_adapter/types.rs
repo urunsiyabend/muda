@@ -435,7 +435,7 @@ pub struct TabBarPresentation {
 ///
 /// This struct contains everything the UI needs to draw a frame,
 /// without any direct access to domain objects.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct RenderModel {
     /// The visible lines to render.
     pub visible_lines: Vec<LinePresentation>,
@@ -461,6 +461,11 @@ pub struct RenderModel {
     /// Views apply this as a negative vertical shift to the text content,
     /// producing smooth pixel-level scrolling between logical line boundaries.
     pub scroll_y_offset_px: f32,
+    /// Whether the editor window currently has OS-level focus.
+    ///
+    /// When `false`, selection backgrounds use a dimmed color to signal
+    /// that the editor is not the active application window.
+    pub editor_focused: bool,
 }
 
 impl RenderModel {
@@ -577,6 +582,8 @@ pub enum EditorCommand {
     /// line and col are 0-indexed document coordinates.
     /// Drag to a document position with snap mode (0=char, 1=word, 2=line).
     DragTo { line: usize, col: usize, snap_mode: u32 },
+    /// Click in the gutter to select an entire line.
+    GutterClickAt { line: usize },
 }
 
 /// Direction for cursor movement.

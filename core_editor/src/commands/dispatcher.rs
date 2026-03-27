@@ -152,6 +152,10 @@ impl CommandDispatcher {
                 self.handle_drag_to(ctx, line, col, snap_mode);
                 DispatchResult::Executed
             }
+            EditorCommand::GutterClickAt { line } => {
+                self.handle_gutter_click(ctx, line);
+                DispatchResult::Executed
+            }
 
             // === View ===
             EditorCommand::ToggleLineNumbers => {
@@ -499,6 +503,24 @@ impl CommandDispatcher {
                 ctx.view.move_caret_to(offset, true);
             }
         }
+        self.emit_selection_changed(ctx);
+    }
+
+    /// Handle gutter click: select entire line.
+    fn handle_gutter_click(&self, ctx: &mut CommandContext, line: usize) {
+        let max_line = ctx.document.len_lines().saturating_sub(1);
+        let line = line.min(max_line);
+        let line_start = self.position_to_offset(ctx, TextPosition::new(line, 0));
+        let line_end = if line + 1 < ctx.document.len_lines() {
+            self.position_to_offset(ctx, TextPosition::new(line + 1, 0))
+        } else {
+            ctx.document.len_chars()
+        };
+        // Set anchor to line start, head to line end
+        ctx.view.move_caret_to(line_start, false);
+        ctx.view.clear_selection();
+        ctx.view.begin_selection();
+        ctx.view.move_caret_to(line_end, true);
         self.emit_selection_changed(ctx);
     }
 

@@ -81,6 +81,9 @@ pub struct TextAreaView {
     /// Applied as a negative vertical shift to the text content layer,
     /// producing pixel-level smooth scrolling between logical line boundaries.
     scroll_y_offset_px: f32,
+    /// Whether the editor window has OS-level focus.
+    /// When false, selection backgrounds use a dimmed color.
+    editor_focused: bool,
 }
 
 impl TextAreaView {
@@ -93,6 +96,7 @@ impl TextAreaView {
             scroll_y: model.scroll_y,
             char_width: crate::rendering::measured_char_width(),
             scroll_y_offset_px: model.scroll_y_offset_px,
+            editor_focused: model.editor_focused,
         }
     }
 
@@ -105,6 +109,7 @@ impl TextAreaView {
             scroll_y: 0,
             char_width: crate::rendering::measured_char_width(),
             scroll_y_offset_px: 0.0,
+            editor_focused: true,
         }
     }
 
@@ -186,7 +191,11 @@ impl TextAreaView {
     /// Lines with no selection get an empty transparent row.
     fn render_selection_bg_layer(&self, cx: &mut ViewContext) -> AnyElement {
         let theme = cx.theme();
-        let selection_color = theme.color(ColorToken::Selection);
+        let selection_color = if self.editor_focused {
+            theme.color(ColorToken::Selection)
+        } else {
+            theme.color(ColorToken::SelectionInactive)
+        };
 
         let rows: Vec<AnyElement> = self
             .visible_lines

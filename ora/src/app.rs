@@ -13,6 +13,12 @@ use winit::event_loop::EventLoop;
 /// to set `RenderModel.scroll_y_offset_px` for sub-line visual scrolling.
 pub type SharedScrollOffset = Rc<Cell<f32>>;
 
+/// Shared editor focus state.
+///
+/// Written by the event loop on `WindowEvent::Focused`, read by `EditorRootView`
+/// to set `RenderModel.editor_focused` for selection dimming.
+pub type SharedFocusState = Rc<Cell<bool>>;
+
 /// Application builder for configuring and running the ora application.
 pub struct App {
     pub(crate) title: String,
@@ -97,6 +103,11 @@ pub fn run_with_editor(adapter: impl EditorDataSource + 'static) -> ! {
     let scroll_offset: SharedScrollOffset = Rc::new(Cell::new(0.0));
     let view_scroll_offset = scroll_offset.clone();
 
+    // Shared focus state: written by OraApp on WindowEvent::Focused,
+    // read by EditorRootView to dim selection when window is unfocused.
+    let focus_state: SharedFocusState = Rc::new(Cell::new(true));
+    let view_focus_state = focus_state.clone();
+
     let app = App::new()
         .title("Muda")
         .size(1280, 720)
@@ -104,11 +115,12 @@ pub fn run_with_editor(adapter: impl EditorDataSource + 'static) -> ! {
             let root_view = EditorRootView::new(
                 view_adapter,
                 view_scroll_offset,
+                view_focus_state,
                 &mut cx.as_view_context(),
             );
             cx.set_root_view(root_view);
         });
-    let mut ora_app = OraApp::new_with_editor(app, shared_adapter, scroll_offset);
+    let mut ora_app = OraApp::new_with_editor(app, shared_adapter, scroll_offset, focus_state);
     event_loop.run_app(&mut ora_app).unwrap();
     std::process::exit(0);
 }

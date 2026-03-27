@@ -70,6 +70,10 @@ pub struct OraApp {
     drag_start_pos: Point,
     /// Whether the 3px drag threshold has been met.
     drag_threshold_met: bool,
+    /// Whether the editor window currently has OS-level focus.
+    editor_has_focus: bool,
+    /// Shared focus state, read by EditorRootView for selection dimming.
+    shared_focus_state: Option<crate::app::SharedFocusState>,
 }
 
 impl OraApp {
@@ -95,6 +99,8 @@ impl OraApp {
             drag_snap_mode: 0,
             drag_start_pos: Point::new(0.0, 0.0),
             drag_threshold_met: false,
+            editor_has_focus: true,
+            shared_focus_state: None,
         }
     }
 
@@ -103,6 +109,7 @@ impl OraApp {
         app: App,
         adapter: SharedAdapter,
         scroll_offset: crate::app::SharedScrollOffset,
+        focus_state: crate::app::SharedFocusState,
     ) -> Self {
         Self {
             app_config: Some(app),
@@ -124,6 +131,8 @@ impl OraApp {
             drag_snap_mode: 0,
             drag_start_pos: Point::new(0.0, 0.0),
             drag_threshold_met: false,
+            editor_has_focus: true,
+            shared_focus_state: Some(focus_state),
         }
     }
 }
@@ -190,6 +199,45 @@ impl OraApp {
         let col_idx = scroll_x + col_raw;
 
         Some((line_idx, col_idx))
+    }
+
+    /// Convert a pixel position to a gutter line number.
+    ///
+    /// Returns `Some(line)` if the click is inside the gutter region,
+    /// `None` if outside.
+    fn pixel_to_gutter_line(&self, px: Point) -> Option<usize> {
+        let adapter = self.editor_adapter.as_ref()?;
+        let adapter_ref = adapter.borrow();
+
+        const LINE_HEIGHT: f32 = 21.0;
+        const TAB_BAR_H: f32 = 36.0;
+        const STATUS_BAR_H: f32 = 28.0;
+
+        let char_w = crate::rendering::measured_char_width();
+        let sidebar_px = adapter_ref.sidebar_width_px();
+        let gutter_chars = adapter_ref.gutter_width_chars();
+        let gutter_px = gutter_chars as f32 * char_w;
+
+        // Gutter occupies x from sidebar_px to sidebar_px + gutter_px
+        if px.x < sidebar_px || px.x >= sidebar_px + gutter_px {
+            return None;
+        }
+        if px.y < TAB_BAR_H {
+            return None;
+        }
+        let window_h = self.gpu_state.as_ref()
+            .map(|g| g.size.1 as f32)
+            .unwrap_or(600.0);
+        if px.y > window_h - STATUS_BAR_H {
+            return None;
+        }
+
+        let scroll_y = adapter_ref.scroll_y();
+        let scroll_y_offset_px = self.scroll_top_px - (scroll_y as f32 * LINE_HEIGHT);
+        let local_y = (px.y - TAB_BAR_H) + scroll_y_offset_px;
+        let line_in_viewport = (local_y / LINE_HEIGHT).floor().max(0.0) as usize;
+
+        Some(scroll_y + line_in_viewport)
     }
 
     /// Polls the adapter for a pending file operation and dispatches it.
@@ -595,6 +643,20 @@ impl ApplicationHandler for OraApp {
                                         self.drag_start_pos = self.cursor_position;
                                         self.drag_threshold_met = false;
                                     }
+                                } else if let Some(gutter_line) = self.pixel_to_gutter_line(self.cursor_position) {
+                                    // Gutter click: select entire line
+                                    if let Some(adapter) = &self.editor_adapter {
+                                        use crate::editor_adapter::EditorCommand;
+                                        adapter.borrow_mut().dispatch_command(
+                                            EditorCommand::GutterClickAt { line: gutter_line },
+                                        );
+                                        crate::elements::notify_caret_activity();
+                                        self.next_blink_instant = Some(Instant::now() + ACTIVITY_TIMEOUT + BLINK_RATE);
+                                        if let Some(gpu_state) = &self.gpu_state {
+                                            gpu_state.window.request_redraw();
+                                        }
+                                    }
+                                    self.text_area_drag = false;
                                 } else {
                                     self.text_area_drag = false;
                                 }
@@ -832,6 +894,14 @@ impl ApplicationHandler for OraApp {
                 // Clear all interaction state when window loses focus
                 if !focused {
                     self.app_context.interaction_state.clear_all();
+                }
+                self.editor_has_focus = focused;
+                if let Some(ref state) = self.shared_focus_state {
+                    state.set(focused);
+                }
+                // Redraw to update selection dimming
+                if let Some(gpu_state) = &self.gpu_state {
+                    gpu_state.window.request_redraw();
                 }
             }
             WindowEvent::RedrawRequested => {

@@ -32,6 +32,8 @@ pub struct EditorRootView {
     adapter: SharedAdapter,
     /// Shared smooth-scroll pixel offset from the event loop accumulator.
     scroll_offset: crate::app::SharedScrollOffset,
+    /// Shared focus state from the event loop (window focus tracking).
+    focus_state: crate::app::SharedFocusState,
     /// Persistent sidebar scroll state (survives across frames).
     sidebar_scroll: crate::elements::SharedScrollState,
     /// Persistent focus handles (created once, reused across frames).
@@ -49,11 +51,13 @@ impl EditorRootView {
     pub fn new(
         adapter: SharedAdapter,
         scroll_offset: crate::app::SharedScrollOffset,
+        focus_state: crate::app::SharedFocusState,
         cx: &mut ViewContext,
     ) -> Self {
         Self {
             adapter,
             scroll_offset,
+            focus_state,
             sidebar_scroll: crate::elements::scroll_state(),
             dialog_save_focus: cx.focus_handle(),
             dialog_dont_save_focus: cx.focus_handle(),
@@ -165,6 +169,7 @@ impl View for EditorRootView {
         const LINE_HEIGHT: f32 = 21.0;
         let scroll_top_px = self.scroll_offset.get();
         model.scroll_y_offset_px = scroll_top_px % LINE_HEIGHT;
+        model.editor_focused = self.focus_state.get();
 
         // Construct the AppLayout from fresh data and render it
         let layout = self.build_layout(&model);
