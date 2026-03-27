@@ -1107,19 +1107,21 @@ impl ApplicationHandler for OraApp {
                         let layout_outputs: Vec<crate::layout::LayoutOutput>;
                         let t_layout;
 
+                        // Always create LayoutContext and run request_layout so the
+                        // fresh element tree gets LayoutId assignments. Without this,
+                        // elements can't look up bounds during prepaint/paint.
+                        let mut layout_cx = LayoutContext::new(
+                            &mut self.app_context.entity_storage,
+                            window_size,
+                        );
+
+                        // Pass TextSystem for text measurement during layout
+                        layout_cx.set_text_system(&mut gpu_state.text_system as *mut _);
+
+                        element_tree.request_layout(&mut layout_cx);
+
                         if run_full_layout {
-                            // Full pipeline: request_layout + compute_flexbox
-                            let mut layout_cx = LayoutContext::new(
-                                &mut self.app_context.entity_storage,
-                                window_size,
-                            );
-
-                            // Pass TextSystem for text measurement during layout
-                            layout_cx.set_text_system(&mut gpu_state.text_system as *mut _);
-
-                            element_tree.request_layout(&mut layout_cx);
-
-                            // Compute layout using flexbox algorithm
+                            // Full pipeline: compute_flexbox on top of request_layout
                             layout_cx.compute();
                             layout_outputs = layout_cx.layout_outputs.clone();
 
@@ -1127,10 +1129,9 @@ impl ApplicationHandler for OraApp {
                             self.cached_layout_outputs = layout_outputs.clone();
                             self.layout_misses += 1;
                         } else {
-                            // Paint-only frame: reuse cached layout outputs.
-                            // We still call render() above to get a fresh element tree
-                            // (needed for prepaint hitboxes and paint), but skip the
-                            // expensive request_layout + compute_flexbox calls.
+                            // Paint-only frame: skip the expensive compute_flexbox.
+                            // request_layout already ran (LayoutIds assigned, intrinsic
+                            // sizes measured). Reuse cached flexbox results.
                             layout_outputs = self.cached_layout_outputs.clone();
                             self.layout_hits += 1;
                         }
