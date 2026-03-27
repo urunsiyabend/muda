@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-03-26)
 ## Current Position
 
 Phase: 14 — File Browser (In progress)
-Plan: 01 of 4 (complete)
-Status: In progress — Plan 14-01 done
-Last activity: 2026-03-27 — Completed 14-01-PLAN.md (sidebar filtering + state persistence)
+Plan: 02 of 4 (complete)
+Status: In progress — Plan 14-02 done
+Last activity: 2026-03-27 — Completed 14-02-PLAN.md (Open Folder dialog + sidebar chrome)
 
-Progress: [█████████████████████░░░░░░░░░░░░░░░] v2.0 Phase 14 in progress (21/~28 plans)
+Progress: [██████████████████████░░░░░░░░░░░░░░] v2.0 Phase 14 in progress (22/~28 plans)
 
 ## Performance Metrics
 
@@ -37,6 +37,14 @@ Progress: [█████████████████████░░
 - auto_expand_first_level called from both new_with_patterns() and set_base_directory()
 - AppState private struct; only load_workspace_path() is pub for main.rs
 - open_directory() in adapter injects ignored_patterns via Sidebar::new_with_patterns() — avoids changing core_editor::App API
+
+### Phase 14 Plan 02 Decisions
+
+- has_no_workspace() sentinel checks directory_name == "Files" (core_editor fallback) — avoids adding new boolean field
+- Sidebar header shows directory_name.to_uppercase(); falls back to "EXPLORER" when no workspace
+- Empty state Open Folder button uses existing Button element (secondary variant) + sidebar dispatch callback
+- Ctrl+Shift+O guard placed before Ctrl+O in character match (same pattern as Ctrl+Shift+S before Ctrl+S)
+- handle_folder_opened calls sidebar.show() to ensure sidebar becomes visible after picking folder
 
 ## Accumulated Context
 
@@ -100,9 +108,9 @@ Plan 04: FrameDegradation guard (3+ slow frames suppress animations), --no-cache
 ## Session Continuity
 
 Last session: 2026-03-27
-Stopped at: Completed 14-01-PLAN.md
+Stopped at: Completed 14-02-PLAN.md
 Resume file: None
-Next: Phase 14 Plan 02 — Filesystem Watcher
+Next: Phase 14 Plan 03 — Filesystem Watcher
 
 ---
 *State initialized: 2026-01-28*
