@@ -346,7 +346,13 @@ Plans:
   4. Using Open Folder dialog sets a new workspace root and refreshes the sidebar tree
   5. When a file is created, deleted, or renamed externally, the sidebar updates without requiring a restart
   6. Directories like target/, .git/, and node_modules/ are excluded from automatic expansion
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [ ] 14-01-PLAN.md -- Sidebar filtering fix + state.json + workspace persistence (Wave 1)
+- [ ] 14-02-PLAN.md -- Open Folder dialog + sidebar header + empty state (Wave 2)
+- [ ] 14-03-PLAN.md -- Filesystem watcher integration (Wave 3)
+- [ ] 14-04-PLAN.md -- External file change handling + verification checkpoint (Wave 4)
 
 ### Phase 15: Find / Replace
 **Goal**: Users can search for text within the active buffer, navigate matches, and replace occurrences — all without leaving the editor
