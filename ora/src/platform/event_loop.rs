@@ -500,7 +500,7 @@ impl ApplicationHandler for OraApp {
                             if let Some(adapter) = &self.editor_adapter {
                                 use crate::editor_adapter::EditorCommand;
                                 adapter.borrow_mut().dispatch_command(
-                                    EditorCommand::DragTo { line, col },
+                                    EditorCommand::DragTo { line, col, snap_mode: self.drag_snap_mode },
                                 );
                                 crate::elements::notify_caret_activity();
                                 self.next_blink_instant = Some(Instant::now() + ACTIVITY_TIMEOUT + BLINK_RATE);

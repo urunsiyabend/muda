@@ -148,8 +148,8 @@ impl CommandDispatcher {
                 self.handle_click_at(ctx, line, col, extend_selection, click_count);
                 DispatchResult::Executed
             }
-            EditorCommand::DragTo { line, col } => {
-                self.handle_drag_to(ctx, line, col);
+            EditorCommand::DragTo { line, col, snap_mode } => {
+                self.handle_drag_to(ctx, line, col, snap_mode);
                 DispatchResult::Executed
             }
 
@@ -458,52 +458,54 @@ impl CommandDispatcher {
         self.emit_selection_changed(ctx);
     }
 
-    fn handle_drag_to(&self, ctx: &mut CommandContext, line: usize, col: usize) {
+    fn handle_drag_to(&self, ctx: &mut CommandContext, line: usize, col: usize, snap_mode: u32) {
         let max_line = ctx.document.len_lines().saturating_sub(1);
         let line = line.min(max_line);
         let max_col = self.line_len(ctx, line);
         let col = col.min(max_col);
         let offset = self.position_to_offset(ctx, TextPosition::new(line, col));
 
-        ctx.view.move_caret_to(offset, true);
+        match snap_mode {
+            1 => {
+                // Word-snap: expand to word boundaries.
+                let (word_start, word_end) = ctx.document.buffer().word_boundary_at(offset);
+                let anchor = ctx.view.selection_anchor().unwrap_or(ctx.view.caret_offset());
+                // Extend toward the boundary furthest from anchor.
+                if offset >= anchor {
+                    ctx.view.move_caret_to(word_end, true);
+                } else {
+                    ctx.view.move_caret_to(word_start, true);
+                }
+            }
+            2 => {
+                // Line-snap: extend to line boundaries.
+                let anchor = ctx.view.selection_anchor().unwrap_or(ctx.view.caret_offset());
+                if offset >= anchor {
+                    // Dragging down/right: extend to end of line (or start of next line).
+                    let target = if line + 1 < ctx.document.len_lines() {
+                        self.position_to_offset(ctx, TextPosition::new(line + 1, 0))
+                    } else {
+                        ctx.document.len_chars()
+                    };
+                    ctx.view.move_caret_to(target, true);
+                } else {
+                    // Dragging up/left: extend to start of line.
+                    let line_start = self.position_to_offset(ctx, TextPosition::new(line, 0));
+                    ctx.view.move_caret_to(line_start, true);
+                }
+            }
+            _ => {
+                // Char mode: extend selection to exact offset.
+                ctx.view.move_caret_to(offset, true);
+            }
+        }
         self.emit_selection_changed(ctx);
     }
 
-    /// Find word boundaries around the given offset using VS Code-like rules:
-    /// alphanumeric+underscore vs punctuation vs whitespace.
+    /// Find word boundaries around the given offset using VS Code-like rules.
+    /// Delegates to `TextBuffer::word_boundary_at`.
     fn find_word_boundaries(&self, ctx: &CommandContext, offset: usize) -> (usize, usize) {
-        let total = ctx.document.len_chars();
-        if total == 0 {
-            return (0, 0);
-        }
-        let offset = offset.min(total.saturating_sub(1));
-
-        let ch = ctx.document.buffer().char_at(offset).unwrap_or(' ');
-        let class = char_class(ch);
-
-        // Scan left for word start.
-        let mut start = offset;
-        while start > 0 {
-            if let Some(prev) = ctx.document.buffer().char_at(start - 1) {
-                if char_class(prev) != class {
-                    break;
-                }
-            }
-            start -= 1;
-        }
-
-        // Scan right for word end.
-        let mut end = offset;
-        while end < total {
-            if let Some(next) = ctx.document.buffer().char_at(end) {
-                if char_class(next) != class {
-                    break;
-                }
-            }
-            end += 1;
-        }
-
-        (start, end)
+        ctx.document.buffer().word_boundary_at(offset)
     }
 
     // =========================================================================
@@ -896,26 +898,7 @@ impl Default for CommandDispatcher {
     }
 }
 
-/// Character class for word boundary detection (VS Code-like rules).
-#[derive(PartialEq, Eq)]
-enum CharClass {
-    /// Alphanumeric characters and underscore.
-    Word,
-    /// Whitespace (space, tab, newline).
-    Whitespace,
-    /// Everything else (punctuation, symbols).
-    Punctuation,
-}
-
-fn char_class(ch: char) -> CharClass {
-    if ch.is_alphanumeric() || ch == '_' {
-        CharClass::Word
-    } else if ch.is_whitespace() {
-        CharClass::Whitespace
-    } else {
-        CharClass::Punctuation
-    }
-}
+// Word boundary detection is now in TextBuffer::word_boundary_at.
 
 #[cfg(test)]
 impl CommandDispatcher {
@@ -1497,11 +1480,121 @@ mod tests {
         // extend_to. But extend_to on a collapsed selection should create a selection.
         // Let's verify by checking if DragTo produces a selection.
         dispatcher.dispatch(
-            EditorCommand::DragTo { line: 0, col: 8 },
+            EditorCommand::DragTo { line: 0, col: 8, snap_mode: 0 },
             &mut ctx,
         );
 
         assert!(ctx.view.has_selection());
         assert_eq!(ctx.view.selection_range(), Some((2, 8)));
+    }
+
+    #[test]
+    fn test_drag_to_word_snap_forward() {
+        // "hello world_test foo"
+        // Double-click on "world_test" at offset 6 selects the word [6..16].
+        // Then drag forward to col 18 (in "foo") should snap to word end of "foo" -> [6..20].
+        let text = "hello world_test foo";
+        let mut doc = Document::from_str(text, None);
+        let mut view = EditorView::new(doc.id());
+        let mut history = CommandHistory::new();
+        let mut event_bus = EventBus::new();
+        let mut dispatcher = CommandDispatcher::new();
+
+        let mut ctx = CommandContext {
+            view: &mut view,
+            document: &mut doc,
+            history: &mut history,
+            event_bus: &mut event_bus,
+        };
+
+        // Double-click at col 8 (inside "world_test")
+        dispatcher.dispatch(
+            EditorCommand::ClickAt { line: 0, col: 8, extend_selection: false, click_count: 2 },
+            &mut ctx,
+        );
+        assert_eq!(ctx.view.selection_range(), Some((6, 16)));
+
+        // Drag forward to col 18 with word-snap
+        dispatcher.dispatch(
+            EditorCommand::DragTo { line: 0, col: 18, snap_mode: 1 },
+            &mut ctx,
+        );
+        assert!(ctx.view.has_selection());
+        // Should snap to end of "foo" = offset 20
+        let range = ctx.view.selection_range().unwrap();
+        assert_eq!(range.1, 20);
+    }
+
+    #[test]
+    fn test_drag_to_word_snap_backward() {
+        // "hello world_test foo"
+        // Double-click on "world_test" at col 8 selects [6..16].
+        // Then drag backward to col 2 (in "hello") should snap to word start of "hello" -> [0..16].
+        let text = "hello world_test foo";
+        let mut doc = Document::from_str(text, None);
+        let mut view = EditorView::new(doc.id());
+        let mut history = CommandHistory::new();
+        let mut event_bus = EventBus::new();
+        let mut dispatcher = CommandDispatcher::new();
+
+        let mut ctx = CommandContext {
+            view: &mut view,
+            document: &mut doc,
+            history: &mut history,
+            event_bus: &mut event_bus,
+        };
+
+        // Double-click at col 8 (inside "world_test")
+        dispatcher.dispatch(
+            EditorCommand::ClickAt { line: 0, col: 8, extend_selection: false, click_count: 2 },
+            &mut ctx,
+        );
+
+        // Drag backward to col 2 with word-snap
+        dispatcher.dispatch(
+            EditorCommand::DragTo { line: 0, col: 2, snap_mode: 1 },
+            &mut ctx,
+        );
+        assert!(ctx.view.has_selection());
+        // Should snap to start of "hello" = offset 0
+        let range = ctx.view.selection_range().unwrap();
+        assert_eq!(range.0, 0);
+    }
+
+    #[test]
+    fn test_drag_to_line_snap() {
+        // "line one\nline two\nline three"
+        let text = "line one\nline two\nline three";
+        let mut doc = Document::from_str(text, None);
+        let mut view = EditorView::new(doc.id());
+        let mut history = CommandHistory::new();
+        let mut event_bus = EventBus::new();
+        let mut dispatcher = CommandDispatcher::new();
+
+        let mut ctx = CommandContext {
+            view: &mut view,
+            document: &mut doc,
+            history: &mut history,
+            event_bus: &mut event_bus,
+        };
+
+        // Triple-click on line 0 selects the entire line [0..9].
+        dispatcher.dispatch(
+            EditorCommand::ClickAt { line: 0, col: 3, extend_selection: false, click_count: 3 },
+            &mut ctx,
+        );
+        assert!(ctx.view.has_selection());
+
+        // Drag to line 1, col 5 with line-snap.
+        // Since dragging forward, should extend to start of line 2 (offset 18).
+        dispatcher.dispatch(
+            EditorCommand::DragTo { line: 1, col: 5, snap_mode: 2 },
+            &mut ctx,
+        );
+        assert!(ctx.view.has_selection());
+        let range = ctx.view.selection_range().unwrap();
+        // Line 0 start = 0, line 2 start = 18
+        assert_eq!(range.0, 0);
+        assert_eq!(range.1, 18);
     }
 }

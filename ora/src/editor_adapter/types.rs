@@ -575,7 +575,8 @@ pub enum EditorCommand {
     ClickAt { line: usize, col: usize, extend_selection: bool, click_count: u32 },
     /// Drag to a document position (from mouse move during drag).
     /// line and col are 0-indexed document coordinates.
-    DragTo { line: usize, col: usize },
+    /// Drag to a document position with snap mode (0=char, 1=word, 2=line).
+    DragTo { line: usize, col: usize, snap_mode: u32 },
 }
 
 /// Direction for cursor movement.
