@@ -49,13 +49,13 @@ Requirements for v2.0 Functional Editor milestone. Each maps to roadmap phases.
 
 ### Selection & Clipboard
 
-- [ ] **SEL-01**: User can click in text area to position cursor at that location (pixel-to-line/col mapping)
-- [ ] **SEL-02**: User can click and drag to select text ranges
-- [ ] **SEL-03**: User can select text with Shift+arrow, Shift+click, Ctrl+Shift+arrow
-- [ ] **SEL-04**: User can select all text with Ctrl+A
-- [ ] **SEL-05**: User can copy selection to OS clipboard with Ctrl+C (via arboard)
-- [ ] **SEL-06**: User can cut selection to OS clipboard with Ctrl+X
-- [ ] **SEL-07**: User can paste from OS clipboard with Ctrl+V
+- [x] **SEL-01**: User can click in text area to position cursor at that location (pixel-to-line/col mapping)
+- [x] **SEL-02**: User can click and drag to select text ranges
+- [x] **SEL-03**: User can select text with Shift+arrow, Shift+click, Ctrl+Shift+arrow
+- [x] **SEL-04**: User can select all text with Ctrl+A
+- [x] **SEL-05**: User can copy selection to OS clipboard with Ctrl+C (via arboard)
+- [x] **SEL-06**: User can cut selection to OS clipboard with Ctrl+X
+- [x] **SEL-07**: User can paste from OS clipboard with Ctrl+V
 
 ### Find & Replace
 
@@ -147,13 +147,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SIDE-04 | Phase 14 | Pending |
 | SIDE-05 | Phase 14 | Pending |
 | SIDE-06 | Phase 14 | Pending |
-| SEL-01 | Phase 13 | Pending |
-| SEL-02 | Phase 13 | Pending |
-| SEL-03 | Phase 13 | Pending |
-| SEL-04 | Phase 13 | Pending |
-| SEL-05 | Phase 13 | Pending |
-| SEL-06 | Phase 13 | Pending |
-| SEL-07 | Phase 13 | Pending |
+| SEL-01 | Phase 13 | Complete |
+| SEL-02 | Phase 13 | Complete |
+| SEL-03 | Phase 13 | Complete |
+| SEL-04 | Phase 13 | Complete |
+| SEL-05 | Phase 13 | Complete |
+| SEL-06 | Phase 13 | Complete |
+| SEL-07 | Phase 13 | Complete |
 | FIND-01 | Phase 15 | Pending |
 | FIND-02 | Phase 15 | Pending |
 | FIND-03 | Phase 15 | Pending |

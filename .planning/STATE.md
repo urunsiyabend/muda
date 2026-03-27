@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-03-26)
 
 **Core value:** A functional, performant code editor built on ora's GPU-accelerated UI framework.
-**Current focus:** v2.0 Functional Editor — Phase 13 in progress (Selection + Clipboard).
+**Current focus:** v2.0 Functional Editor — Phase 13 complete, next: Phase 14 (File Browser).
 
 ## Current Position
 
-Phase: 13 — Selection + Clipboard (in progress)
-Plan: 02 of 4 (complete)
-Status: In progress — Plans 01, 02, 03 complete; Plan 04 pending
-Last activity: 2026-03-27 — Completed 13-02-PLAN.md (drag selection + snap modes)
+Phase: 13 — Selection + Clipboard (complete)
+Plan: 04 of 4 (complete)
+Status: Phase 13 complete — all 4 plans done, verified by user
+Last activity: 2026-03-27 — Phase 13 verified and approved
 
-Progress: [█████████████████░░░░░░░░░░░░░░░░░░░] v2.0 Phase 13: 3 of 4 plans complete (15/~18 plans)
+Progress: [██████████████████░░░░░░░░░░░░░░░░░░] v2.0 Phase 13 complete (16/~22 plans)
 
 ## Performance Metrics
 
@@ -74,14 +74,16 @@ Plan 04 (gap closure): Dialog input suppression for CursorMoved/MouseInput/Mouse
 
 Plan 01: ClickAt/DragTo command pipeline, pixel_to_doc conversion with mid-character snap, word/line selection on double/triple-click, drag-to-select, 7 new tests
 Plan 02: Mouse drag with 3px threshold, word/line snap modes in DragTo, scroll-while-drag at viewport edges, TextBuffer::word_boundary_at, 10 new tests
+Plan 03: Full-line copy/cut with no selection, paste-above for line copies, auto-indent multi-line paste, clipboard_is_line_copy flag, 10 new tests
+Plan 04: Selection focus dimming (SelectionInactive), gutter click line select, I-beam cursor, tab close bug fix, human verification approved
 
 ## Session Continuity
 
 Last session: 2026-03-27
-Stopped at: Completed 13-02-PLAN.md (drag selection + snap modes)
+Stopped at: Phase 13 complete — all plans executed and verified
 Resume file: None
-Next: Phase 13 Plan 04 — Gap Closure / Polish
+Next: Phase 14 — File Browser
 
 ---
 *State initialized: 2026-01-28*
-*Last updated: 2026-03-26 after Phase 13 Plan 01 completion*
+*Last updated: 2026-03-27 after Phase 13 completion*

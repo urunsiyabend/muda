@@ -32,7 +32,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 10: Foundation Fixes** - Event-driven redraw, command audit, EditorDataSource redesign, selection rendering fix
 - [x] **Phase 11: Buffer Registry + Multi-Tab** - Central buffer deduplication, tab switching, Ctrl+W close, Ctrl+Tab cycle
 - [x] **Phase 12: File Operations** - Ctrl+O open, Ctrl+S save, Ctrl+Shift+S Save As, Ctrl+N new, async I/O
-- [ ] **Phase 13: Selection + Clipboard** - Click-to-position, drag selection, Shift+arrow, Ctrl+A, Ctrl+C/X/V
+- [x] **Phase 13: Selection + Clipboard** - Click-to-position, drag selection, Shift+arrow, Ctrl+A, Ctrl+C/X/V
 - [ ] **Phase 14: File Browser** - Real directory tree, click to open, expand/collapse state, file watcher
 - [ ] **Phase 15: Find / Replace** - Inline find bar, match highlighting, next/prev, replace one/all, Go to line
 - [ ] **Phase 16: Performance Refinement** - Incremental tree-sitter parsing, glyphon buffer caching, background parse thread
@@ -310,10 +310,10 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 13-01-PLAN.md -- ClickAt/DragTo commands + pixel-to-doc mapping + text area mouse handler (Wave 1)
-- [ ] 13-02-PLAN.md -- Mouse drag selection + word/line snap drag + scroll-while-drag (Wave 2)
-- [ ] 13-03-PLAN.md -- Full-line copy/cut, paste-above, auto-indent paste (Wave 2)
-- [ ] 13-04-PLAN.md -- Selection focus dimming + gutter click + verification checkpoint (Wave 3)
+- [x] 13-01-PLAN.md -- ClickAt/DragTo commands + pixel-to-doc mapping + text area mouse handler (Wave 1)
+- [x] 13-02-PLAN.md -- Mouse drag selection + word/line snap drag + scroll-while-drag (Wave 2)
+- [x] 13-03-PLAN.md -- Full-line copy/cut, paste-above, auto-indent paste (Wave 2)
+- [x] 13-04-PLAN.md -- Selection focus dimming + gutter click + verification checkpoint (Wave 3)
 
 ### Phase 14: File Browser
 **Goal**: Users can navigate the project directory tree in the sidebar and open files by clicking — the tree reflects real filesystem state
@@ -381,7 +381,7 @@ v2.0: 10 -> 11 -> 12 -> 13 (can follow 10) -> 14 (needs 11+12) -> 15 (needs 10+1
 | 10. Foundation Fixes | 4/4 | Complete | 2026-03-26 |
 | 11. Buffer Registry + Multi-Tab | 4/4 | Complete | 2026-03-26 |
 | 12. File Operations | 4/4 | Complete | 2026-03-26 |
-| 13. Selection + Clipboard | 0/4 | Planned | — |
+| 13. Selection + Clipboard | 4/4 | Complete | 2026-03-27 |
 | 14. File Browser | 0/TBD | Pending | — |
 | 15. Find / Replace | 0/TBD | Pending | — |
 | 16. Performance Refinement | 0/TBD | Pending | — |
