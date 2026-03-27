@@ -195,12 +195,14 @@ impl TextSystem {
         let key = GlyphCacheKey::new(text, font_size, line_height);
 
         if self.cache_enabled {
-            if let Some(buffer) = self.glyph_cache.pop(&key) {
-                // Cache hit: measure size from existing layout runs
+            if let Some(buffer) = self.glyph_cache.peek(&key) {
+                // Cache hit: clone the buffer (stays in cache for next caller)
+                // and measure size from its existing layout runs.
+                let cloned = buffer.clone();
                 let mut measured_width = 0.0f32;
                 let mut total_lines = 0;
 
-                for run in buffer.layout_runs() {
+                for run in cloned.layout_runs() {
                     measured_width = measured_width.max(run.line_w);
                     total_lines += 1;
                 }
@@ -212,12 +214,14 @@ impl TextSystem {
                 };
 
                 self.cache_hits += 1;
-                return (key, buffer, Size::new(measured_width, height));
+                return (key, cloned, Size::new(measured_width, height));
             }
         }
 
-        // Cache miss: shape fresh
+        // Cache miss: shape fresh and insert into cache
         let (buffer, size) = self.measure_text(text, font_size, line_height, max_width);
+        // Store a clone in cache; return the original
+        self.glyph_cache.put(key, buffer.clone());
         self.cache_misses += 1;
         (key, buffer, size)
     }
@@ -230,6 +234,8 @@ impl TextSystem {
         if !self.cache_enabled {
             return;
         }
+        // With peek+clone in measure_text_cached, entries persist in cache.
+        // This return path refreshes LRU recency for actively-used entries.
         for (key, buffer) in buffers {
             self.glyph_cache.put(key, buffer);
         }
@@ -385,13 +391,11 @@ impl TextSystem {
     /// The returned Vec is passed to return_buffers_to_cache() by the caller.
     pub fn drain_buffers_for_cache(&mut self) -> Vec<(GlyphCacheKey, Buffer)> {
         let mut returnable: Vec<(GlyphCacheKey, Buffer)> = Vec::new();
-
         // Drain single-layer pending buffers
         for entry in self.pending_buffers.drain(..) {
             if let Some(key) = entry.cache_key {
                 returnable.push((key, entry.buffer));
             }
-            // Entries with None key are dropped
         }
 
         // Drain all layer-specific pending buffers
