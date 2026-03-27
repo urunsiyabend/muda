@@ -134,8 +134,10 @@ impl Element for ScrollArea {
         });
 
         // Push as parent so child hitboxes bubble scroll events to us.
-        // Also push hitbox offset so child hitboxes align with visually-scrolled positions.
+        // Push hitbox offset so child hitboxes align with visually-scrolled positions.
+        // Push hitbox clip so off-viewport hitboxes don't steal events from other regions.
         cx.push_hitbox_parent(hitbox_id);
+        cx.push_hitbox_clip(bounds);
         let scroll_y = self.scroll.get();
         if scroll_y > 0.0 {
             cx.push_hitbox_offset(0.0, -scroll_y);
@@ -146,6 +148,7 @@ impl Element for ScrollArea {
         if scroll_y > 0.0 {
             cx.pop_hitbox_offset();
         }
+        cx.pop_hitbox_clip();
         cx.pop_hitbox_parent();
     }
 

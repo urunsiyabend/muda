@@ -236,6 +236,17 @@ pub struct PrepaintContext<'a> {
     /// Accumulated hitbox offset stack (for scroll areas).
     /// Child hitbox bounds are shifted by the sum of all offsets on the stack.
     pub(crate) hitbox_offset_stack: Vec<(f32, f32)>,
+    /// Clip rect stack for hitboxes. Hitboxes outside the top clip become non-opaque.
+    pub(crate) hitbox_clip_stack: Vec<Rect>,
+}
+
+/// Check if two rects overlap (have non-zero intersection).
+fn rects_overlap(a: &Rect, b: &Rect) -> bool {
+    let a_right = a.origin.x + a.size.width;
+    let a_bottom = a.origin.y + a.size.height;
+    let b_right = b.origin.x + b.size.width;
+    let b_bottom = b.origin.y + b.size.height;
+    a.origin.x < b_right && a_right > b.origin.x && a.origin.y < b_bottom && a_bottom > b.origin.y
 }
 
 impl<'a> PrepaintContext<'a> {
@@ -254,6 +265,7 @@ impl<'a> PrepaintContext<'a> {
             event_handlers: EventHandlers::new(),
             hitbox_stack: Vec::new(),
             hitbox_offset_stack: Vec::new(),
+            hitbox_clip_stack: Vec::new(),
         }
     }
 
@@ -270,7 +282,15 @@ impl<'a> PrepaintContext<'a> {
             adjusted.origin.y += dy;
         }
 
-        let hitbox = Hitbox { id, bounds: adjusted, opaque };
+        // If a hitbox clip is active, mark hitboxes outside the clip as non-opaque
+        // so they don't steal events from other regions (e.g., editor area).
+        let effective_opaque = if let Some(clip) = self.hitbox_clip_stack.last() {
+            opaque && rects_overlap(&adjusted, clip)
+        } else {
+            opaque
+        };
+
+        let hitbox = Hitbox { id, bounds: adjusted, opaque: effective_opaque };
         self.hitboxes.push(hitbox);
 
         // Auto-register parent relationship if a parent is on the stack
@@ -359,6 +379,17 @@ impl<'a> PrepaintContext<'a> {
     /// Pop a hitbox offset.
     pub fn pop_hitbox_offset(&mut self) {
         self.hitbox_offset_stack.pop();
+    }
+
+    /// Push a clip rect for hitboxes. Hitboxes registered outside this rect
+    /// become non-opaque (won't steal events from other regions).
+    pub fn push_hitbox_clip(&mut self, clip: Rect) {
+        self.hitbox_clip_stack.push(clip);
+    }
+
+    /// Pop a hitbox clip rect.
+    pub fn pop_hitbox_clip(&mut self) {
+        self.hitbox_clip_stack.pop();
     }
 
     /// Register a hitbox with parent relationship from the current stack.
