@@ -435,7 +435,7 @@ pub struct TabBarPresentation {
 ///
 /// This struct contains everything the UI needs to draw a frame,
 /// without any direct access to domain objects.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct RenderModel {
     /// The visible lines to render.
     pub visible_lines: Vec<LinePresentation>,

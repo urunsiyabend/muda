@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use wgpu::{Device, Queue, Surface, SurfaceConfiguration};
 use winit::window::Window;
-use crate::rendering::{RectangleRenderer, TextSystem};
+use crate::rendering::{GlyphCacheKey, RectangleRenderer, TextSystem};
 
 /// GPU state holding wgpu resources for rendering.
 pub struct GpuState {
@@ -136,7 +136,7 @@ impl GpuState {
         struct DrawGroup {
             scissor: Option<(u32, u32, u32, u32)>, // None = full viewport
             rect_instances: Vec<RectInstance>,
-            text_data: Vec<(glyphon::Buffer, f32, f32, crate::style::Rect, crate::style::Color)>,
+            text_data: Vec<(glyphon::Buffer, f32, f32, crate::style::Rect, crate::style::Color, Option<GlyphCacheKey>)>,
         }
 
         // Step 1: Group commands by LayerBoundary, then by scissor changes within each layer.
@@ -196,14 +196,14 @@ impl GpuState {
                     let group = layers.last_mut().unwrap().last_mut().unwrap();
                     group.rect_instances.push(RectInstance::from_legacy(*x + ox, *y + oy, *width, *height, *color, self.size));
                 }
-                PaintCommand::Text { buffer, left, top, bounds, color } => {
+                PaintCommand::Text { buffer, left, top, bounds, color, cache_key } => {
                     let (ox, oy) = offset_stack.last().copied().unwrap_or((0.0, 0.0));
                     let shifted_bounds = crate::style::Rect {
                         origin: crate::style::Point::new(bounds.origin.x + ox, bounds.origin.y + oy),
                         size: bounds.size,
                     };
                     let group = layers.last_mut().unwrap().last_mut().unwrap();
-                    group.text_data.push((buffer.clone(), *left + ox, *top + oy, shifted_bounds, *color));
+                    group.text_data.push((buffer.clone(), *left + ox, *top + oy, shifted_bounds, *color, *cache_key));
                 }
             }
         }
@@ -249,7 +249,7 @@ impl GpuState {
                     indices.push(None);
                 } else {
                     // Add text to this renderer
-                    for (buffer, left, top, bounds, color) in &group.text_data {
+                    for (buffer, left, top, bounds, color, cache_key) in &group.text_data {
                         self.text_system.add_text_to_layer(
                             text_renderer_idx,
                             buffer.clone(),
@@ -257,6 +257,7 @@ impl GpuState {
                             *top,
                             *bounds,
                             *color,
+                            *cache_key,
                         );
                     }
                     indices.push(Some(text_renderer_idx));
@@ -346,8 +347,9 @@ impl GpuState {
         self.queue.submit(std::iter::once(encoder.finish()));
         output.present();
 
-        // Step 9: Clear text system for next frame (trims atlas once, not per layer).
-        self.text_system.clear();
+        // Step 9: Buffers are drained by the caller (event_loop) via
+        // drain_buffers_for_cache() + return_buffers_to_cache() for LRU reuse.
+        // The caller is responsible for atlas trimming (drain_buffers_for_cache calls atlas.trim()).
 
         Ok(())
     }

@@ -7,7 +7,7 @@ use crate::events::MouseButton;
 use crate::style::*;
 use crate::theme::ColorToken;
 
-const TREE_ITEM_HEIGHT: f32 = 24.0;
+pub const TREE_ITEM_HEIGHT: f32 = 24.0;
 const INDENT_WIDTH: f32 = 16.0;
 const CHEVRON_WIDTH: f32 = 16.0;
 const ICON_WIDTH: f32 = 16.0;
