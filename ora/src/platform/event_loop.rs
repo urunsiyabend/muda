@@ -63,6 +63,13 @@ pub struct OraApp {
     /// True while the user is dragging in the text area (mouse pressed + moved).
     /// Used to dispatch DragTo commands on CursorMoved events.
     text_area_drag: bool,
+    /// Snap mode for drag selection: 0=char, 1=word-snap, 2=line-snap.
+    /// Set from click_count when drag begins.
+    drag_snap_mode: u32,
+    /// The pixel position where the drag started (for 3px threshold).
+    drag_start_pos: Point,
+    /// Whether the 3px drag threshold has been met.
+    drag_threshold_met: bool,
 }
 
 impl OraApp {
@@ -85,6 +92,9 @@ impl OraApp {
             last_click_pos: Point::new(0.0, 0.0),
             click_count: 0,
             text_area_drag: false,
+            drag_snap_mode: 0,
+            drag_start_pos: Point::new(0.0, 0.0),
+            drag_threshold_met: false,
         }
     }
 
@@ -111,6 +121,9 @@ impl OraApp {
             last_click_pos: Point::new(0.0, 0.0),
             click_count: 0,
             text_area_drag: false,
+            drag_snap_mode: 0,
+            drag_start_pos: Point::new(0.0, 0.0),
+            drag_threshold_met: false,
         }
     }
 }
@@ -441,16 +454,59 @@ impl ApplicationHandler for OraApp {
 
                 // Text area drag: if dragging, dispatch DragTo to extend selection.
                 if self.text_area_drag {
-                    if let Some((line, col)) = self.pixel_to_doc(point) {
-                        if let Some(adapter) = &self.editor_adapter {
-                            use crate::editor_adapter::EditorCommand;
-                            adapter.borrow_mut().dispatch_command(
-                                EditorCommand::DragTo { line, col },
-                            );
-                            crate::elements::notify_caret_activity();
-                            self.next_blink_instant = Some(Instant::now() + ACTIVITY_TIMEOUT + BLINK_RATE);
-                            let new_scroll_y = adapter.borrow().scroll_y();
-                            self.sync_scroll_from_core(new_scroll_y);
+                    // 3px drag threshold: don't start selecting until mouse moves enough.
+                    if !self.drag_threshold_met {
+                        let dx = point.x - self.drag_start_pos.x;
+                        let dy = point.y - self.drag_start_pos.y;
+                        let distance = (dx * dx + dy * dy).sqrt();
+                        if distance < 3.0 {
+                            // Threshold not met yet -- skip DragTo.
+                        } else {
+                            self.drag_threshold_met = true;
+                        }
+                    }
+
+                    if self.drag_threshold_met {
+                        // Scroll-while-drag: when cursor is near viewport edges,
+                        // scroll the document and then extend selection.
+                        const EDGE_PX: f32 = 20.0;
+                        const TAB_BAR_H: f32 = 36.0;
+                        const STATUS_BAR_H: f32 = 28.0;
+                        let window_h = self.gpu_state.as_ref()
+                            .map(|g| g.size.1 as f32)
+                            .unwrap_or(600.0);
+                        let text_top = TAB_BAR_H;
+                        let text_bottom = window_h - STATUS_BAR_H;
+
+                        if point.y < text_top + EDGE_PX && point.y >= text_top {
+                            // Near top edge: scroll up
+                            if let Some(adapter) = &self.editor_adapter {
+                                use crate::editor_adapter::EditorCommand as Cmd;
+                                adapter.borrow_mut().dispatch_command(Cmd::Scroll(-1));
+                                let new_scroll_y = adapter.borrow().scroll_y();
+                                self.sync_scroll_from_core(new_scroll_y);
+                            }
+                        } else if point.y > text_bottom - EDGE_PX && point.y <= text_bottom {
+                            // Near bottom edge: scroll down
+                            if let Some(adapter) = &self.editor_adapter {
+                                use crate::editor_adapter::EditorCommand as Cmd;
+                                adapter.borrow_mut().dispatch_command(Cmd::Scroll(1));
+                                let new_scroll_y = adapter.borrow().scroll_y();
+                                self.sync_scroll_from_core(new_scroll_y);
+                            }
+                        }
+
+                        if let Some((line, col)) = self.pixel_to_doc(point) {
+                            if let Some(adapter) = &self.editor_adapter {
+                                use crate::editor_adapter::EditorCommand;
+                                adapter.borrow_mut().dispatch_command(
+                                    EditorCommand::DragTo { line, col },
+                                );
+                                crate::elements::notify_caret_activity();
+                                self.next_blink_instant = Some(Instant::now() + ACTIVITY_TIMEOUT + BLINK_RATE);
+                                let new_scroll_y = adapter.borrow().scroll_y();
+                                self.sync_scroll_from_core(new_scroll_y);
+                            }
                         }
                     }
                 }
@@ -531,6 +587,13 @@ impl ApplicationHandler for OraApp {
                                         let new_scroll_y = adapter.borrow().scroll_y();
                                         self.sync_scroll_from_core(new_scroll_y);
                                         self.text_area_drag = true;
+                                        self.drag_snap_mode = match self.click_count {
+                                            2 => 1, // word-snap
+                                            3 => 2, // line-snap
+                                            _ => 0, // char
+                                        };
+                                        self.drag_start_pos = self.cursor_position;
+                                        self.drag_threshold_met = false;
                                     }
                                 } else {
                                     self.text_area_drag = false;
@@ -542,6 +605,8 @@ impl ApplicationHandler for OraApp {
                             self.app_context.interaction_state.clear_active();
                             self.app_context.interaction_state.release_mouse_capture();
                             self.text_area_drag = false;
+                            self.drag_snap_mode = 0;
+                            self.drag_threshold_met = false;
                             log::info!("Active state: Mouse button {:?} released", mouse_button);
 
                             let event = MouseUpEvent {
