@@ -33,6 +33,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 11: Buffer Registry + Multi-Tab** - Central buffer deduplication, tab switching, Ctrl+W close, Ctrl+Tab cycle
 - [x] **Phase 12: File Operations** - Ctrl+O open, Ctrl+S save, Ctrl+Shift+S Save As, Ctrl+N new, async I/O
 - [x] **Phase 13: Selection + Clipboard** - Click-to-position, drag selection, Shift+arrow, Ctrl+A, Ctrl+C/X/V
+- [ ] **Phase 13.1: Rendering Performance Optimization** - Element/layout caching, viewport virtualization, glyphon cache (INSERTED)
 - [ ] **Phase 14: File Browser** - Real directory tree, click to open, expand/collapse state, file watcher
 - [ ] **Phase 15: Find / Replace** - Inline find bar, match highlighting, next/prev, replace one/all, Go to line
 - [ ] **Phase 16: Performance Refinement** - Incremental tree-sitter parsing, glyphon buffer caching, background parse thread
@@ -315,6 +316,25 @@ Plans:
 - [x] 13-03-PLAN.md -- Full-line copy/cut, paste-above, auto-indent paste (Wave 2)
 - [x] 13-04-PLAN.md -- Selection focus dimming + gutter click + verification checkpoint (Wave 3)
 
+### Phase 13.1: Rendering Performance Optimization (INSERTED)
+**Goal**: Bring frame times under 4ms for typical editing scenarios (10 tabs, sidebar open) by eliminating per-frame waste in the view tree, layout, and text rendering pipeline
+**Depends on**: Phase 13
+**Requirements**: PERF-02 (glyphon cache, moved from Phase 16)
+**Success Criteria** (what must be TRUE):
+  1. Frame time stays under 4ms (release) with 10 files open and sidebar visible — measured via --show-fps
+  2. Layout phase scales linearly with visible element count, not total document/sidebar size
+  3. Scrolling through a file does not re-shape glyphon buffers for unchanged lines — cached buffers are reused
+  4. Sidebar with 500+ entries renders as fast as sidebar with 20 entries (viewport virtualization)
+  5. Hover transitions and caret blink do not trigger full element tree rebuild
+**Plans**: 4 plans
+**Research**: Zed GPUI source code and blog posts on element caching, layout diffing, retained rendering
+
+Plans:
+- [ ] 13.1-01-PLAN.md -- Glyphon buffer LRU cache + cache stats + --no-glyph-cache (Wave 1)
+- [ ] 13.1-02-PLAN.md -- Layout dirty flags + cached layout reuse + --no-layout-cache (Wave 1)
+- [ ] 13.1-03-PLAN.md -- Sidebar file tree viewport virtualization (Wave 1)
+- [ ] 13.1-04-PLAN.md -- Frame degradation guard + --no-cache + verification checkpoint (Wave 2)
+
 ### Phase 14: File Browser
 **Goal**: Users can navigate the project directory tree in the sidebar and open files by clicking — the tree reflects real filesystem state
 **Depends on**: Phase 11, Phase 12
@@ -357,7 +377,7 @@ Plans:
 
 **Execution Order:**
 v1.0: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 8.1 -> 9
-v2.0: 10 -> 11 -> 12 -> 13 (can follow 10) -> 14 (needs 11+12) -> 15 (needs 10+11) -> 16 (always last)
+v2.0: 10 -> 11 -> 12 -> 13 (can follow 10) -> 13.1 (perf, before more features) -> 14 (needs 11+12) -> 15 (needs 10+11) -> 16 (always last)
 
 ### v1.0 Progress (Complete)
 
@@ -382,6 +402,7 @@ v2.0: 10 -> 11 -> 12 -> 13 (can follow 10) -> 14 (needs 11+12) -> 15 (needs 10+1
 | 11. Buffer Registry + Multi-Tab | 4/4 | Complete | 2026-03-26 |
 | 12. File Operations | 4/4 | Complete | 2026-03-26 |
 | 13. Selection + Clipboard | 4/4 | Complete | 2026-03-27 |
+| 13.1. Rendering Performance | 0/4 | Planned | — |
 | 14. File Browser | 0/TBD | Pending | — |
 | 15. Find / Replace | 0/TBD | Pending | — |
 | 16. Performance Refinement | 0/TBD | Pending | — |
