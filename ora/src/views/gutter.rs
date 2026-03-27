@@ -20,7 +20,7 @@ use crate::context::ViewContext;
 use crate::editor_adapter::{GutterModel, LinePresentation};
 use crate::element::AnyElement;
 use crate::elements::{Div, TextElement};
-use crate::style::px;
+use crate::style::{pct, px};
 use crate::theme::ColorToken;
 use crate::view::View;
 
@@ -225,20 +225,32 @@ impl View for GutterView {
             .into();
 
         // Build gutter container.
-        // Width includes LEFT_PADDING + digits + RIGHT_PADDING + 1px border.
-        // We set the total width on the outer div and use padding to position
-        // the line numbers within that width. shrink(0.0) prevents the flex
-        // algorithm from compressing the gutter below its calculated width.
-        Div::new()
+        // Width includes LEFT_PADDING + digits + RIGHT_PADDING + 1px right border.
+        // Wrap it with a matching left divider so the gutter feels framed like
+        // the tab strip.
+        let gutter_body: AnyElement = Div::new()
             .flex_col()
             .w(px(width + 1.0)) // +1 for the right border
             .shrink(0.0)
             .overflow_hidden()
-            .bg(theme.color(ColorToken::BgPrimary))
+            .bg(theme.color(ColorToken::BgSecondary))
             .pl(LEFT_PADDING)
             .pr(RIGHT_PADDING)
             .border_right(1.0, theme.color(ColorToken::Border))
             .child(inner)
+            .into();
+
+        Div::new()
+            .flex_row()
+            .h(pct(100.0))
+            .shrink(0.0)
+            .child(
+                Div::new()
+                    .w(px(1.0))
+                    .h(pct(100.0))
+                    .bg(theme.color(ColorToken::Border)),
+            )
+            .child(gutter_body)
             .into()
     }
 }

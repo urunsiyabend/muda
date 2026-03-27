@@ -1,151 +1,141 @@
 use crate::style::Color;
 
-/// Gray scale palette - 11 steps from lightest to darkest
-/// Designed for comfortable dark mode with soft neutrals
+/// IDE-oriented slate palette tuned for dark chrome and bright editor text.
 pub fn gray_50() -> Color {
-    Color::rgb(0.98, 0.98, 0.98) // #FAFAFA
+    Color::rgb(0.97, 0.98, 0.99) // #F8FAFC
 }
 
 pub fn gray_100() -> Color {
-    Color::rgb(0.96, 0.96, 0.96) // #F5F5F5
+    Color::rgb(0.93, 0.95, 0.98) // #EDF2F9
 }
 
 pub fn gray_200() -> Color {
-    Color::rgb(0.93, 0.93, 0.93) // #EEEEEE
+    Color::rgb(0.86, 0.89, 0.94) // #DBE3EF
 }
 
 pub fn gray_300() -> Color {
-    Color::rgb(0.88, 0.88, 0.88) // #E0E0E0
+    Color::rgb(0.74, 0.78, 0.86) // #BCC7DB
 }
 
 pub fn gray_400() -> Color {
-    Color::rgb(0.74, 0.74, 0.74) // #BDBDBD
+    Color::rgb(0.58, 0.63, 0.74) // #94A1BC
 }
 
 pub fn gray_500() -> Color {
-    Color::rgb(0.62, 0.62, 0.62) // #9E9E9E
+    Color::rgb(0.43, 0.48, 0.58) // #6E7A94
 }
 
 pub fn gray_600() -> Color {
-    Color::rgb(0.46, 0.46, 0.46) // #757575
+    Color::rgb(0.31, 0.35, 0.44) // #50596F
 }
 
 pub fn gray_700() -> Color {
-    Color::rgb(0.38, 0.38, 0.38) // #616161
+    Color::rgb(0.18, 0.21, 0.28) // #2E3548
 }
 
 pub fn gray_800() -> Color {
-    Color::rgb(0.26, 0.26, 0.26) // #424242
+    Color::rgb(0.13, 0.15, 0.21) // #202634
 }
 
 pub fn gray_900() -> Color {
-    Color::rgb(0.13, 0.13, 0.13) // #212121
+    Color::rgb(0.09, 0.10, 0.15) // #171A26
 }
 
 pub fn gray_950() -> Color {
-    Color::rgb(0.07, 0.07, 0.07) // #121212
+    Color::rgb(0.06, 0.07, 0.10) // #10121A
 }
 
-/// Accent blue palette for primary actions and highlights
+/// Accent blues inspired by modern editor chrome and focus states.
 pub fn blue_400() -> Color {
-    Color::rgb(0.26, 0.67, 0.96) // #42ABF5 - lighter blue for dark mode hover
+    Color::rgb(0.47, 0.69, 1.0) // #78B0FF
 }
 
 pub fn blue_500() -> Color {
-    Color::rgb(0.13, 0.59, 0.95) // #2196F3 - primary blue
+    Color::rgb(0.32, 0.56, 1.0) // #528FFF
 }
 
 pub fn blue_600() -> Color {
-    Color::rgb(0.12, 0.53, 0.82) // #1E88E5 - darker blue for active states
+    Color::rgb(0.23, 0.46, 0.91) // #3A75E8
 }
 
 pub fn blue_700() -> Color {
-    Color::rgb(0.10, 0.46, 0.71) // #1976D2 - even darker for light mode active
+    Color::rgb(0.17, 0.37, 0.77) // #2C5FC4
 }
 
-/// Error/destructive red palette
 pub fn red_500() -> Color {
-    Color::rgb(0.96, 0.26, 0.21) // #F44336
+    Color::rgb(0.97, 0.42, 0.42) // #F76B6B
 }
 
 pub fn red_600() -> Color {
-    Color::rgb(0.90, 0.22, 0.21) // #E53935
+    Color::rgb(0.85, 0.28, 0.32) // #D94951
 }
 
-/// Success green palette
 pub fn green_500() -> Color {
-    Color::rgb(0.30, 0.69, 0.31) // #4CAF50
+    Color::rgb(0.38, 0.80, 0.56) // #61CC8F
 }
 
 pub fn green_600() -> Color {
-    Color::rgb(0.26, 0.63, 0.28) // #43A047
+    Color::rgb(0.24, 0.67, 0.45) // #3DAB73
 }
 
-/// Warning amber/yellow palette
 pub fn amber_500() -> Color {
-    Color::rgb(1.0, 0.71, 0.0) // #FFB500 - warning yellow/amber
+    Color::rgb(0.97, 0.75, 0.34) // #F7BF57
 }
 
 pub fn amber_600() -> Color {
-    Color::rgb(0.96, 0.62, 0.0) // #F59E00 - darker amber for light mode
+    Color::rgb(0.91, 0.63, 0.19) // #E8A132
 }
 
-/// Purple palette for syntax highlighting (keywords, macros)
 pub fn purple_300() -> Color {
-    Color::rgb(0.73, 0.55, 0.87) // #BA8BDE - lighter purple for macros
+    Color::rgb(0.86, 0.73, 0.98) // #DBBAFA
 }
 
 pub fn purple_400() -> Color {
-    Color::rgb(0.64, 0.42, 0.82) // #A36BD1 - keywords in dark mode
+    Color::rgb(0.78, 0.60, 0.95) // #C799F2
 }
 
 pub fn purple_500() -> Color {
-    Color::rgb(0.61, 0.32, 0.76) // #9C52C2 - keywords in light mode
+    Color::rgb(0.63, 0.44, 0.85) // #A171D8
 }
 
-/// Cyan palette for types
 pub fn cyan_400() -> Color {
-    Color::rgb(0.30, 0.82, 0.88) // #4DD1E0 - types in dark mode
+    Color::rgb(0.49, 0.83, 0.93) // #7DD4ED
 }
 
 pub fn cyan_500() -> Color {
-    Color::rgb(0.15, 0.71, 0.77) // #26B5C4 - types in light mode
+    Color::rgb(0.24, 0.66, 0.80) // #3EA8CC
 }
 
-/// Orange palette for numbers
 pub fn orange_400() -> Color {
-    Color::rgb(1.0, 0.60, 0.25) // #FF9940 - numbers in dark mode
+    Color::rgb(0.97, 0.72, 0.43) // #F8B86D
 }
 
 pub fn orange_500() -> Color {
-    Color::rgb(0.96, 0.49, 0.13) // #F57D21 - numbers in light mode
+    Color::rgb(0.90, 0.54, 0.24) // #E68A3D
 }
 
-/// Yellow palette for constants and attributes
 pub fn yellow_300() -> Color {
-    Color::rgb(1.0, 0.88, 0.40) // #FFE066 - attributes
+    Color::rgb(1.0, 0.90, 0.57) // #FFE591
 }
 
 pub fn yellow_400() -> Color {
-    Color::rgb(1.0, 0.79, 0.24) // #FFC93D - constants in dark mode
+    Color::rgb(0.99, 0.82, 0.43) // #FDD16D
 }
 
 pub fn yellow_500() -> Color {
-    Color::rgb(0.96, 0.70, 0.13) // #F5B221 - constants in light mode
+    Color::rgb(0.90, 0.69, 0.26) // #E5B043
 }
 
-/// Blue palette extension for selection and functions
 pub fn blue_200() -> Color {
-    Color::rgb(0.56, 0.79, 0.98) // #8FC9FA - selection in light mode
+    Color::rgb(0.71, 0.84, 1.0) // #B5D6FF
 }
 
 pub fn blue_900() -> Color {
-    Color::rgb(0.05, 0.22, 0.44) // #0D3870 - selection in dark mode
+    Color::rgb(0.13, 0.22, 0.39) // #213864
 }
 
-/// Green palette extension for strings
 pub fn green_400() -> Color {
-    Color::rgb(0.40, 0.78, 0.42) // #66C76B - strings in dark mode
+    Color::rgb(0.55, 0.87, 0.51) // #8CDD82
 }
 
 /// Enumeration of all available palette colors

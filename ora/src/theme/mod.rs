@@ -80,6 +80,8 @@ pub enum ColorToken {
     Selection,
     /// Current line highlight background
     CurrentLineBg,
+    /// Selection background when editor is unfocused (dimmed)
+    SelectionInactive,
 }
 
 /// Theme configuration for the application
@@ -120,8 +122,8 @@ impl Theme {
         match (self.mode, token) {
             // Dark mode mappings - UI tokens
             (ThemeMode::Dark, ColorToken::BgPrimary) => gray_900(),
-            (ThemeMode::Dark, ColorToken::BgSecondary) => gray_800(),
-            (ThemeMode::Dark, ColorToken::BgElevated) => gray_700(),
+            (ThemeMode::Dark, ColorToken::BgSecondary) => gray_950(),
+            (ThemeMode::Dark, ColorToken::BgElevated) => gray_800(),
             (ThemeMode::Dark, ColorToken::FgPrimary) => gray_50(),
             (ThemeMode::Dark, ColorToken::FgSecondary) => gray_300(),
             (ThemeMode::Dark, ColorToken::FgMuted) => gray_500(),
@@ -145,9 +147,9 @@ impl Theme {
             (ThemeMode::Dark, ColorToken::SyntaxMacro) => purple_300(),
 
             // Dark mode mappings - Editor-specific tokens
-            // Zed-level selection contrast: ~#264F80 (was blue_900 #0D3870, too dim)
-            (ThemeMode::Dark, ColorToken::Selection) => Color::rgb(0.15, 0.31, 0.50),
-            (ThemeMode::Dark, ColorToken::CurrentLineBg) => gray_800(),
+            (ThemeMode::Dark, ColorToken::Selection) => Color::rgb(0.17, 0.27, 0.45),
+            (ThemeMode::Dark, ColorToken::CurrentLineBg) => Color::rgb(0.12, 0.15, 0.22),
+            (ThemeMode::Dark, ColorToken::SelectionInactive) => Color::rgb(0.11, 0.18, 0.29),
 
             // Light mode mappings - UI tokens
             (ThemeMode::Light, ColorToken::BgPrimary) => gray_50(),
@@ -178,6 +180,7 @@ impl Theme {
             // Light mode mappings - Editor-specific tokens
             (ThemeMode::Light, ColorToken::Selection) => blue_200(),
             (ThemeMode::Light, ColorToken::CurrentLineBg) => gray_100(),
+            (ThemeMode::Light, ColorToken::SelectionInactive) => gray_200(),
         }
     }
 

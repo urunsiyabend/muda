@@ -151,11 +151,12 @@ impl View for StatusBarView {
             .w(pct(100.0))
             .h(px(STATUS_BAR_HEIGHT))
             .shrink(0.0)  // Don't shrink below fixed height
-            .bg(theme.color(ColorToken::BgSecondary))
+            .bg(theme.color(ColorToken::BgElevated))
             .px(STATUS_PADDING_H)
             .py(STATUS_PADDING_V)
             .align_center()
             .overflow_hidden()
+            .border(1.0, theme.color(ColorToken::Border))
             .child(content)
             .into()
     }
