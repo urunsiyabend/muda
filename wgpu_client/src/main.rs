@@ -21,13 +21,20 @@ fn main() {
 
     // Parse args and create editor
     let args: Vec<String> = env::args().collect();
-    let editor_app = if args.len() > 1 {
-        let path = Path::new(&args[1]);
+
+    // --show-fps: display FPS counter in window title
+    if args.iter().any(|a| a == "--show-fps") {
+        ora::enable_fps_counter();
+    }
+
+    let path_args: Vec<&String> = args.iter().skip(1).filter(|a| !a.starts_with("--")).collect();
+    let editor_app = if let Some(path_str) = path_args.first() {
+        let path = Path::new(path_str.as_str());
         if path.is_dir() {
-            CoreEditorAdapter::open_directory(&args[1])
+            CoreEditorAdapter::open_directory(path_str)
                 .unwrap_or_else(|_| CoreEditorAdapter::new())
         } else {
-            CoreEditorAdapter::open_file(&args[1])
+            CoreEditorAdapter::open_file(path_str)
                 .unwrap_or_else(|_| CoreEditorAdapter::new())
         }
     } else {

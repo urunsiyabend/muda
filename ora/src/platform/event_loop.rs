@@ -15,11 +15,20 @@ use crate::views::SharedAdapter;
 use crate::window::OraWindow;
 use std::rc::Rc;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow};
 use winit::window::{Window, WindowId};
+
+/// Global flag to enable FPS overlay. Set via `ora::enable_fps_counter()`.
+static SHOW_FPS: AtomicBool = AtomicBool::new(false);
+
+/// Enable the FPS counter (call before `run_with_editor`).
+pub fn enable_fps_counter() {
+    SHOW_FPS.store(true, Ordering::Relaxed);
+}
 
 /// Application handler driving the winit event loop.
 pub struct OraApp {
@@ -74,6 +83,12 @@ pub struct OraApp {
     editor_has_focus: bool,
     /// Shared focus state, read by EditorRootView for selection dimming.
     shared_focus_state: Option<crate::app::SharedFocusState>,
+    /// FPS tracking: frame count in current second.
+    fps_frame_count: u32,
+    /// FPS tracking: start of current measurement second.
+    fps_last_report: Instant,
+    /// FPS tracking: last computed FPS value.
+    fps_display: u32,
 }
 
 impl OraApp {
@@ -101,6 +116,9 @@ impl OraApp {
             drag_threshold_met: false,
             editor_has_focus: true,
             shared_focus_state: None,
+            fps_frame_count: 0,
+            fps_last_report: Instant::now(),
+            fps_display: 0,
         }
     }
 
@@ -133,6 +151,9 @@ impl OraApp {
             drag_threshold_met: false,
             editor_has_focus: true,
             shared_focus_state: Some(focus_state),
+            fps_frame_count: 0,
+            fps_last_report: Instant::now(),
+            fps_display: 0,
         }
     }
 }
@@ -977,6 +998,22 @@ impl ApplicationHandler for OraApp {
                             Ok(_) => {
                                 // Clear dirty entities after rendering
                                 self.app_context.clear_dirty();
+
+                                // FPS counter
+                                if SHOW_FPS.load(Ordering::Relaxed) {
+                                    self.fps_frame_count += 1;
+                                    let now = Instant::now();
+                                    let elapsed = now.duration_since(self.fps_last_report);
+                                    if elapsed.as_secs_f32() >= 1.0 {
+                                        self.fps_display = self.fps_frame_count;
+                                        self.fps_frame_count = 0;
+                                        self.fps_last_report = now;
+                                        // Update window title with FPS
+                                        gpu_state.window.set_title(
+                                            &format!("Muda [{}fps]", self.fps_display)
+                                        );
+                                    }
+                                }
                             }
                             Err(wgpu::SurfaceError::Lost) => {
                                 // Reconfigure the surface if lost
