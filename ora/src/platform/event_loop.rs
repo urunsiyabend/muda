@@ -25,9 +25,26 @@ use winit::window::{Window, WindowId};
 /// Global flag to enable FPS overlay. Set via `ora::enable_fps_counter()`.
 static SHOW_FPS: AtomicBool = AtomicBool::new(false);
 
+/// Global flag to disable the glyph buffer LRU cache (for A/B comparison).
+/// Set by parsing --no-glyph-cache from CLI args at startup.
+static NO_GLYPH_CACHE: AtomicBool = AtomicBool::new(false);
+
 /// Enable the FPS counter (call before `run_with_editor`).
 pub fn enable_fps_counter() {
     SHOW_FPS.store(true, Ordering::Relaxed);
+}
+
+/// Parse performance-related CLI flags from process args.
+/// Called once at startup before the event loop runs.
+pub fn parse_perf_flags() {
+    for arg in std::env::args() {
+        if arg == "--show-fps" {
+            SHOW_FPS.store(true, Ordering::Relaxed);
+        }
+        if arg == "--no-glyph-cache" {
+            NO_GLYPH_CACHE.store(true, Ordering::Relaxed);
+        }
+    }
 }
 
 /// Application handler driving the winit event loop.
@@ -416,8 +433,17 @@ impl ApplicationHandler for OraApp {
             .expect("Failed to create window");
         let window = Arc::new(window);
 
+        // Parse CLI performance flags (--show-fps, --no-glyph-cache).
+        parse_perf_flags();
+
         // Initialize GPU state
         let mut gpu_state = pollster::block_on(GpuState::new(window.clone()));
+
+        // Apply --no-glyph-cache flag if set
+        if NO_GLYPH_CACHE.load(Ordering::Relaxed) {
+            gpu_state.text_system.set_cache_enabled(false);
+            log::info!("Glyph buffer cache disabled via --no-glyph-cache");
+        }
 
         // Measure actual monospace character width for accurate caret positioning.
         // This must happen after GPU/font init so glyphon can shape real glyphs.
@@ -1003,6 +1029,12 @@ impl ApplicationHandler for OraApp {
                         let cmd_count = commands.len();
                         match gpu_state.render_frame(&commands) {
                             Ok(_) => {
+                                // Return shaped buffers to the glyph LRU cache for next frame reuse.
+                                // drain_buffers_for_cache() drains pending_buffers/layers and
+                                // calls atlas.trim(). return_buffers_to_cache() reinserts keyed buffers.
+                                let returned = gpu_state.text_system.drain_buffers_for_cache();
+                                gpu_state.text_system.return_buffers_to_cache(returned);
+
                                 // Clear dirty entities after rendering
                                 self.app_context.clear_dirty();
 
@@ -1015,6 +1047,7 @@ impl ApplicationHandler for OraApp {
                                     let prepaint_ms = (t_prepaint - t_layout).as_secs_f64() * 1000.0;
                                     let paint_ms = (t_paint - t_prepaint).as_secs_f64() * 1000.0;
                                     let gpu_ms = (t_gpu - t_paint).as_secs_f64() * 1000.0;
+                                    let glyph_hit_pct = (gpu_state.text_system.cache_hit_rate() * 100.0) as u32;
 
                                     self.fps_frame_count += 1;
                                     let now = Instant::now();
@@ -1026,14 +1059,14 @@ impl ApplicationHandler for OraApp {
                                     }
 
                                     log::info!(
-                                        "FRAME {:.1}ms | view {:.1} layout {:.1} prepaint {:.1} paint {:.1} gpu {:.1} | {} cmds",
-                                        total_ms, view_ms, layout_ms, prepaint_ms, paint_ms, gpu_ms, cmd_count
+                                        "FRAME {:.1}ms | view {:.1} layout {:.1} prepaint {:.1} paint {:.1} gpu {:.1} | glyph {}% | {} cmds",
+                                        total_ms, view_ms, layout_ms, prepaint_ms, paint_ms, gpu_ms, glyph_hit_pct, cmd_count
                                     );
 
                                     gpu_state.window.set_title(
                                         &format!(
-                                            "Muda [{:.0}ms | view {:.0} layout {:.0} prepaint {:.0} paint {:.0} gpu {:.0} | {} cmds | {}fps]",
-                                            total_ms, view_ms, layout_ms, prepaint_ms, paint_ms, gpu_ms, cmd_count, self.fps_display
+                                            "Muda [{:.0}ms | view {:.0} layout {:.0} prepaint {:.0} paint {:.0} gpu {:.0} | glyph {}% | {} cmds | {}fps]",
+                                            total_ms, view_ms, layout_ms, prepaint_ms, paint_ms, gpu_ms, glyph_hit_pct, cmd_count, self.fps_display
                                         )
                                     );
                                 }
