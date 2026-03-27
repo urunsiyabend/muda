@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-03-26)
 
 **Core value:** A functional, performant code editor built on ora's GPU-accelerated UI framework.
-**Current focus:** v2.0 Functional Editor — Phase 13.1 complete, ready for Phase 14.
+**Current focus:** v2.0 Functional Editor — Phase 13.1 complete, next: Phase 14 (File Browser).
 
 ## Current Position
 
-Phase: 13.1 — Rendering Performance Optimization (COMPLETE — all 3 plans done)
-Plan: 02 of 3 (complete — last remaining plan)
-Status: Phase 13.1 fully complete — glyph cache, layout cache, sidebar virtualization all done
-Last activity: 2026-03-27 — Completed 13.1-02-PLAN.md (layout dirty flag + cached layout reuse)
+Phase: 13.1 — Rendering Performance Optimization (COMPLETE)
+Plan: 04 of 4 (complete)
+Status: Phase 13.1 complete — all 4 plans done, verified 5/5 must-haves
+Last activity: 2026-03-27 — Phase 13.1 verified and approved
 
-Progress: [████████████████████░░░░░░░░░░░░░░░░] v2.0 Phase 13.1 all plans complete (20/~25 plans)
+Progress: [████████████████████░░░░░░░░░░░░░░░░] v2.0 Phase 13.1 complete (20/~25 plans)
 
 ## Performance Metrics
 
@@ -51,6 +51,7 @@ None.
   - Per-frame element tree rebuild + no layout caching + no viewport virtualization
   - Must fix before Phase 14 (File Browser) which will add more sidebar elements
   - Research: Zed GPUI source code, blog posts on retained rendering and element caching
+  - RESULT: avg 1.8ms frame time, max 3.5ms, 98% glyph cache, 59% layout cache
 
 ### Blockers/Concerns
 
@@ -82,19 +83,20 @@ Plan 02: Mouse drag with 3px threshold, word/line snap modes in DragTo, scroll-w
 Plan 03: Full-line copy/cut with no selection, paste-above for line copies, auto-indent multi-line paste, clipboard_is_line_copy flag, 10 new tests
 Plan 04: Selection focus dimming (SelectionInactive), gutter click line select, I-beam cursor, tab close bug fix, human verification approved
 
-## Phase 13.1 Summary (in progress)
+## Phase 13.1 Summary
 
-Plan 01: GlyphCacheKey struct + LRU glyph buffer cache in TextSystem (2048-cap), drain_buffers_for_cache replaces clear(), --no-glyph-cache flag, glyph hit % in --show-fps; SUMMARY.md created 2026-03-27
-Plan 02: needs_layout dirty flag on OraApp, cached_layout_outputs reuse on paint-only frames (hover/blink/scroll), --no-layout-cache flag, layout hit % in --show-fps; SUMMARY.md created 2026-03-27
-Plan 03: FileTreeView viewport virtualization — virtual_slice() with 20-row buffer zones, spacer divs, SharedScrollState drives sidebar scroll offset → FileTreeView; 5 new tests
+Plan 01: GlyphCacheKey + LRU glyph buffer cache (2048-cap, peek+clone), TextElement wired to measure_text_cached + paint_text_cached, --no-glyph-cache flag, glyph hit % in --show-fps (98% steady-state)
+Plan 02: needs_layout dirty flag, cached layout_outputs reuse (skip compute_flexbox on paint-only frames), request_layout always runs for LayoutId assignment, --no-layout-cache flag, layout hit % in --show-fps (59-63%)
+Plan 03: FileTreeView viewport virtualization — virtual_slice() with 20-row buffer zones, spacer divs, TREE_ITEM_HEIGHT pub const, SharedScrollState → sidebar → FileTreeView; 5 new tests
+Plan 04: FrameDegradation guard (3+ slow frames suppress animations), --no-cache umbrella flag, [DEGRADED] indicator, human verification passed (avg 1.8ms, max 3.5ms, 0 degraded)
 
 ## Session Continuity
 
-Last session: 2026-03-27T13:12:00Z
-Stopped at: Completed 13.1-02-PLAN.md (layout dirty flag + cached layout reuse)
+Last session: 2026-03-27
+Stopped at: Phase 13.1 complete — all plans executed and verified
 Resume file: None
-Next: Phase 14 — File Browser (all Phase 13.1 prerequisites complete: glyph cache, layout cache, sidebar virtualization)
+Next: Phase 14 — File Browser
 
 ---
 *State initialized: 2026-01-28*
-*Last updated: 2026-03-27 after Phase 13.1 Plan 02 completion (final 13.1 plan)*
+*Last updated: 2026-03-27 after Phase 13.1 completion*
