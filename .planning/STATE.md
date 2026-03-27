@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-03-26)
 ## Current Position
 
 Phase: 13 — Selection + Clipboard (in progress)
-Plan: 03 of 4 (complete)
-Status: In progress — Plans 01, 03 complete; Plan 02 pending
-Last activity: 2026-03-27 — Completed 13-03-PLAN.md (full-line copy/cut/paste with auto-indent)
+Plan: 02 of 4 (complete)
+Status: In progress — Plans 01, 02, 03 complete; Plan 04 pending
+Last activity: 2026-03-27 — Completed 13-02-PLAN.md (drag selection + snap modes)
 
-Progress: [██████████████░░░░░░░░░░░░░░░░░░░░░░] v2.0 Phase 13: 2 of 4 plans complete (14/~18 plans)
+Progress: [█████████████████░░░░░░░░░░░░░░░░░░░] v2.0 Phase 13: 3 of 4 plans complete (15/~18 plans)
 
 ## Performance Metrics
 
@@ -73,13 +73,14 @@ Plan 04 (gap closure): Dialog input suppression for CursorMoved/MouseInput/Mouse
 ## Phase 13 Summary
 
 Plan 01: ClickAt/DragTo command pipeline, pixel_to_doc conversion with mid-character snap, word/line selection on double/triple-click, drag-to-select, 7 new tests
+Plan 02: Mouse drag with 3px threshold, word/line snap modes in DragTo, scroll-while-drag at viewport edges, TextBuffer::word_boundary_at, 10 new tests
 
 ## Session Continuity
 
 Last session: 2026-03-27
-Stopped at: Completed 13-03-PLAN.md (full-line copy/cut/paste with auto-indent)
+Stopped at: Completed 13-02-PLAN.md (drag selection + snap modes)
 Resume file: None
-Next: Phase 13 Plan 02 — Drag Selection + Snap Modes
+Next: Phase 13 Plan 04 — Gap Closure / Polish
 
 ---
 *State initialized: 2026-01-28*
