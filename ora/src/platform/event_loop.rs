@@ -940,8 +940,11 @@ impl ApplicationHandler for OraApp {
                     // Log dirty state for debugging
                     log::trace!("Redraw: dirty={}", self.app_context.has_dirty_entities());
 
+                    let frame_start = Instant::now();
+
                     // Render the root view to get element tree
                     if let Some(mut element_tree) = self.ora_window.render(&mut self.app_context) {
+                        let t_view_tree = frame_start.elapsed();
                         let window_size = gpu_state.size;
 
                         // Phase 1: Request layout with text measurement
@@ -958,6 +961,7 @@ impl ApplicationHandler for OraApp {
                         // Compute layout using flexbox algorithm
                         layout_cx.compute();
                         let layout_outputs = layout_cx.layout_outputs.clone();
+                        let t_layout = frame_start.elapsed();
 
                         // Phase 2: Prepaint
                         let mut prepaint_cx = PrepaintContext::new(
@@ -977,6 +981,7 @@ impl ApplicationHandler for OraApp {
                         for focus_id in focusables {
                             self.app_context.focus_state.register_focusable(focus_id);
                         }
+                        let t_prepaint = frame_start.elapsed();
 
                         // Phase 3: Paint
                         // SAFETY: We use a raw pointer for app_context to avoid aliasing issues.
@@ -991,16 +996,26 @@ impl ApplicationHandler for OraApp {
                             &self.app_context.focus_state,
                         );
                         element_tree.paint(&mut paint_cx);
+                        let t_paint = frame_start.elapsed();
 
                         // Extract paint commands and render
                         let commands = paint_cx.take_commands();
+                        let cmd_count = commands.len();
                         match gpu_state.render_frame(&commands) {
                             Ok(_) => {
                                 // Clear dirty entities after rendering
                                 self.app_context.clear_dirty();
 
-                                // FPS counter
+                                // Frame timing display
                                 if SHOW_FPS.load(Ordering::Relaxed) {
+                                    let t_gpu = frame_start.elapsed();
+                                    let total_ms = t_gpu.as_secs_f64() * 1000.0;
+                                    let view_ms = t_view_tree.as_secs_f64() * 1000.0;
+                                    let layout_ms = (t_layout - t_view_tree).as_secs_f64() * 1000.0;
+                                    let prepaint_ms = (t_prepaint - t_layout).as_secs_f64() * 1000.0;
+                                    let paint_ms = (t_paint - t_prepaint).as_secs_f64() * 1000.0;
+                                    let gpu_ms = (t_gpu - t_paint).as_secs_f64() * 1000.0;
+
                                     self.fps_frame_count += 1;
                                     let now = Instant::now();
                                     let elapsed = now.duration_since(self.fps_last_report);
@@ -1008,11 +1023,14 @@ impl ApplicationHandler for OraApp {
                                         self.fps_display = self.fps_frame_count;
                                         self.fps_frame_count = 0;
                                         self.fps_last_report = now;
-                                        // Update window title with FPS
-                                        gpu_state.window.set_title(
-                                            &format!("Muda [{}fps]", self.fps_display)
-                                        );
                                     }
+
+                                    gpu_state.window.set_title(
+                                        &format!(
+                                            "Muda [{:.0}ms | view {:.0} layout {:.0} prepaint {:.0} paint {:.0} gpu {:.0} | {} cmds | {}fps]",
+                                            total_ms, view_ms, layout_ms, prepaint_ms, paint_ms, gpu_ms, cmd_count, self.fps_display
+                                        )
+                                    );
                                 }
                             }
                             Err(wgpu::SurfaceError::Lost) => {
