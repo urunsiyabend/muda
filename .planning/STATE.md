@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-03-26)
 
 ## Current Position
 
-Phase: 13.1 — Rendering Performance Optimization (COMPLETE)
-Plan: 04 of 4 (complete)
-Status: Phase 13.1 complete — all 4 plans done, verified 5/5 must-haves
-Last activity: 2026-03-27 — Phase 13.1 verified and approved
+Phase: 14 — File Browser (In progress)
+Plan: 01 of 4 (complete)
+Status: In progress — Plan 14-01 done
+Last activity: 2026-03-27 — Completed 14-01-PLAN.md (sidebar filtering + state persistence)
 
-Progress: [████████████████████░░░░░░░░░░░░░░░░] v2.0 Phase 13.1 complete (20/~25 plans)
+Progress: [█████████████████████░░░░░░░░░░░░░░░] v2.0 Phase 14 in progress (21/~28 plans)
 
 ## Performance Metrics
 
@@ -30,6 +30,13 @@ Progress: [████████████████████░░░
 - Field-level unsafe cast (individual fields, not whole struct) to avoid `invalid_reference_casting` deny lint in Rust — cast `*.pending_status_message` and `*.status_message_expiry` separately
 - status_message_expiry set at every pending_status_message assignment site (5 total) to guarantee 3s lifetime for all messages
 - about_to_wait uses `earliest_wake = min(blink_instant, message_expiry)` so event loop wakes exactly once at the sooner deadline
+
+### Phase 14 Plan 01 Decisions
+
+- ignored_patterns exact name match (p == name) — only .git hidden, .gitkeep/.gitignore visible
+- auto_expand_first_level called from both new_with_patterns() and set_base_directory()
+- AppState private struct; only load_workspace_path() is pub for main.rs
+- open_directory() in adapter injects ignored_patterns via Sidebar::new_with_patterns() — avoids changing core_editor::App API
 
 ## Accumulated Context
 
@@ -93,9 +100,9 @@ Plan 04: FrameDegradation guard (3+ slow frames suppress animations), --no-cache
 ## Session Continuity
 
 Last session: 2026-03-27
-Stopped at: Phase 13.1 complete — all plans executed and verified
+Stopped at: Completed 14-01-PLAN.md
 Resume file: None
-Next: Phase 14 — File Browser
+Next: Phase 14 Plan 02 — Filesystem Watcher
 
 ---
 *State initialized: 2026-01-28*
