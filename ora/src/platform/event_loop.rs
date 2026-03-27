@@ -470,6 +470,16 @@ impl ApplicationHandler for OraApp {
                 let point = Point::new(position.x as f32, position.y as f32);
                 self.cursor_position = point;
 
+                // Update cursor icon based on hover region
+                if let Some(gpu_state) = &self.gpu_state {
+                    let icon = if self.pixel_to_doc(point).is_some() {
+                        winit::window::CursorIcon::Text
+                    } else {
+                        winit::window::CursorIcon::Default
+                    };
+                    gpu_state.window.set_cursor(winit::window::Cursor::Icon(icon));
+                }
+
                 // Check for mouse capture - if captured, route to captured element
                 let hit_id = if let Some(capture) = self.app_context.interaction_state.mouse_capture() {
                     Some(capture.hitbox_id)
