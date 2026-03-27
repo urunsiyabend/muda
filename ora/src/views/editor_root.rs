@@ -118,6 +118,7 @@ impl EditorRootView {
                 CommandItem::new("palette:toggle-theme", "Toggle Theme"),
                 CommandItem::new("palette:toggle-sidebar", "Toggle Sidebar"),
                 CommandItem::new("palette:toggle-panel", "Toggle Panel"),
+                CommandItem::new("file.open-folder", "Open Folder").with_shortcut("Ctrl+Shift+O"),
             ],
             self.palette_focus.clone(),
         );

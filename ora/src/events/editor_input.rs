@@ -100,6 +100,7 @@ pub fn translate_editor_command(event: &KeyboardEvent, modifiers: Modifiers) -> 
             "s" | "S" => Some(EditorCommand::Save),
             "l" | "L" => Some(EditorCommand::ToggleLineNumbers),
             "w" | "W" => Some(EditorCommand::CloseTab),
+            "o" | "O" if shift => Some(EditorCommand::OpenFolder),
             "o" | "O" => Some(EditorCommand::OpenFile),
             "n" | "N" => Some(EditorCommand::New),
             "f" | "F" => Some(EditorCommand::Find),

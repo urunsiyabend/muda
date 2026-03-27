@@ -430,6 +430,32 @@ impl FileOpDataSource for CoreEditorAdapter {
     fn status_message_expiry(&self) -> Option<Instant> {
         self.status_message_expiry
     }
+
+    fn handle_folder_opened(&mut self, path: std::path::PathBuf) {
+        let canonical = match std::fs::canonicalize(&path) {
+            Ok(p) => p,
+            Err(e) => {
+                self.pending_status_message = Some(format!("Cannot open folder: {}", e));
+                self.status_message_expiry = Some(Instant::now() + std::time::Duration::from_secs(3));
+                self.app.needs_render = true;
+                return;
+            }
+        };
+
+        // Update sidebar with the new base directory (also calls auto_expand_first_level).
+        self.app.sidebar.set_base_directory(canonical.clone());
+        self.app.sidebar.show();
+
+        // Persist new workspace path.
+        self.workspace_path = Some(canonical.clone());
+        save_state(&AppState {
+            last_dir: self.last_dir.clone(),
+            workspace_path: self.workspace_path.clone(),
+            ignored_patterns: self.ignored_patterns.clone(),
+        });
+
+        self.app.needs_render = true;
+    }
 }
 
 impl Default for CoreEditorAdapter {
@@ -658,7 +684,7 @@ fn to_core_command(cmd: EditorCommand) -> Option<CoreEditorCommand> {
             CoreEditorCommand::GutterClickAt { line },
         // v2 commands — handled before to_core_command is called,
         // but listed here for exhaustiveness.
-        SaveAs | OpenFile | New | CloseTab | SwitchTab(_) | SwitchTabPrev
+        SaveAs | OpenFile | OpenFolder | New | CloseTab | SwitchTab(_) | SwitchTabPrev
         | Find | Replace | ReplaceAll | GoToLine | OpenSidebarFile(_)
         | ToggleSidebarDir(_) => return None,
     })
@@ -809,6 +835,13 @@ impl CommandDispatcher for CoreEditorAdapter {
                 // Ctrl+Shift+S: queue a Save As dialog for the event loop to handle.
                 if !self.dialog_open {
                     self.pending_file_op = Some(PendingFileOp::SaveAs);
+                }
+                return;
+            }
+            EditorCommand::OpenFolder => {
+                // Ctrl+Shift+O: queue an Open Folder dialog for the event loop to handle.
+                if !self.dialog_open {
+                    self.pending_file_op = Some(PendingFileOp::OpenFolder);
                 }
                 return;
             }

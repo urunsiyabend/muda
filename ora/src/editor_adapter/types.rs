@@ -23,6 +23,8 @@ pub enum PendingFileOp {
     SaveAs,
     /// Trigger a direct save (Ctrl+S with known path).
     Save,
+    /// Show a folder picker dialog (Ctrl+Shift+O).
+    OpenFolder,
 }
 
 // =============================================================================
@@ -535,6 +537,8 @@ pub enum EditorCommand {
     SaveAs,
     /// Open a file (Ctrl+O)
     OpenFile,
+    /// Open a folder as workspace root (Ctrl+Shift+O)
+    OpenFolder,
     /// New file (Ctrl+N)
     New,
 

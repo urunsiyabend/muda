@@ -151,6 +151,13 @@ pub trait FileOpDataSource {
     /// The event loop uses this to wake at the right moment and clear
     /// the message from the status bar without polling every frame.
     fn status_message_expiry(&self) -> Option<std::time::Instant>;
+
+    /// Called after the user picks a folder in the Open Folder dialog.
+    ///
+    /// The adapter should canonicalize the path, update the sidebar's
+    /// base directory, make the sidebar visible, update `workspace_path`,
+    /// persist state, and request a re-render.
+    fn handle_folder_opened(&mut self, path: PathBuf);
 }
 
 // =============================================================================

@@ -375,6 +375,7 @@ impl OraApp {
         match op {
             PendingFileOp::Open => self.spawn_open_dialog(),
             PendingFileOp::SaveAs => self.spawn_save_as_dialog(),
+            PendingFileOp::OpenFolder => self.spawn_open_folder_dialog(),
             PendingFileOp::Save => {
                 // If the active document has a path, save silently.
                 // Otherwise fall through to the Save As dialog.
@@ -487,6 +488,33 @@ impl OraApp {
             window.request_redraw();
         })
         // Detach the task — we don't need to await its completion.
+        .detach();
+    }
+
+    /// Spawns an async future that opens the native folder picker dialog.
+    ///
+    /// The future runs on the `LocalExecutor`. It opens `rfd::AsyncFileDialog::pick_folder`,
+    /// and on confirmation calls `handle_folder_opened` with the chosen path so the
+    /// adapter updates the sidebar's base directory, persists the workspace path, and
+    /// requests a re-render.
+    fn spawn_open_folder_dialog(&mut self) {
+        let adapter = Rc::clone(self.editor_adapter.as_ref().unwrap());
+        adapter.borrow_mut().set_dialog_open(true);
+        let window = self.gpu_state.as_ref().unwrap().window.clone();
+
+        self.app_context.spawn(async move {
+            let handle = rfd::AsyncFileDialog::new()
+                .set_title("Open Folder")
+                .pick_folder()
+                .await;
+
+            if let Some(handle) = handle {
+                let path = handle.path().to_path_buf();
+                adapter.borrow_mut().handle_folder_opened(path);
+            }
+            adapter.borrow_mut().set_dialog_open(false);
+            window.request_redraw();
+        })
         .detach();
     }
 }
