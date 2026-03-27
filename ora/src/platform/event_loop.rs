@@ -1312,6 +1312,19 @@ impl ApplicationHandler for OraApp {
         // Tick async executor
         while self.app_context.tick_executor() {}
 
+        // Poll filesystem watcher for sidebar refresh (non-blocking, zero overhead when idle).
+        let watcher_had_events = if let Some(adapter) = &self.editor_adapter {
+            adapter.borrow_mut().poll_watcher_events()
+        } else {
+            false
+        };
+        if watcher_had_events {
+            self.needs_layout = true;
+            if let Some(gpu_state) = &self.gpu_state {
+                gpu_state.window.request_redraw();
+            }
+        }
+
         // Check if transitions are still running (need continuous frames).
         // When degraded (3+ consecutive slow frames), suppress transition animation
         // redraws to reduce per-frame cost and allow the renderer to recover.
