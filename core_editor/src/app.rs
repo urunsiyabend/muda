@@ -800,7 +800,7 @@ impl App {
                 view,
                 self.pending_action.as_ref(),
                 self.pending_error.as_ref(),
-                &self.sidebar,
+                &mut self.sidebar,
                 self.focus,
                 viewport_height,
                 status_message,
@@ -808,7 +808,7 @@ impl App {
             ),
             _ => {
                 // Even without a document, we might want to show the sidebar
-                ViewModelBuilder::build_sidebar_only(&self.sidebar, self.focus, viewport_height)
+                ViewModelBuilder::build_sidebar_only(&mut self.sidebar, self.focus, viewport_height)
             }
         };
 

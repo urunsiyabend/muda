@@ -56,6 +56,11 @@ pub struct Sidebar {
     pub scroll_offset: usize,
     /// Cached viewport height for scroll calculations.
     viewport_height: usize,
+    /// Cached file tree — rebuilt only when sidebar state changes,
+    /// not on every frame. Avoids filesystem reads in the render path.
+    tree_cache: Vec<crate::view_model::FileTreeNode>,
+    /// Whether the tree cache needs rebuilding.
+    tree_dirty: bool,
 }
 
 impl Default for Sidebar {
@@ -68,6 +73,8 @@ impl Default for Sidebar {
             selected_index: 0,
             scroll_offset: 0,
             viewport_height: 20,
+            tree_cache: Vec::new(),
+            tree_dirty: true,
         }
     }
 }
@@ -83,6 +90,8 @@ impl Sidebar {
             selected_index: 0,
             scroll_offset: 0,
             viewport_height: 20,
+            tree_cache: Vec::new(),
+            tree_dirty: true,
         };
         sidebar.refresh_entries();
         sidebar
@@ -99,6 +108,7 @@ impl Sidebar {
         if self.selected_index >= self.entries.len() {
             self.selected_index = self.entries.len().saturating_sub(1);
         }
+        self.tree_dirty = true;
     }
 
     /// Read a directory and return sorted entries (dirs first, then alpha).
@@ -139,6 +149,7 @@ impl Sidebar {
         } else {
             self.expanded_dirs.insert(path.clone());
         }
+        self.tree_dirty = true;
     }
 
     /// Returns whether a directory is expanded.
@@ -146,13 +157,17 @@ impl Sidebar {
         self.expanded_dirs.contains(path)
     }
 
-    /// Builds a recursive file tree from the base directory,
-    /// expanding directories that are in `expanded_dirs`.
-    pub fn build_tree(&self) -> Vec<crate::view_model::FileTreeNode> {
-        let Some(ref base_dir) = self.base_directory else {
-            return Vec::new();
-        };
-        self.build_tree_recursive(base_dir)
+    /// Returns the cached file tree, rebuilding only if dirty.
+    /// This avoids filesystem reads on every frame.
+    pub fn build_tree(&mut self) -> Vec<crate::view_model::FileTreeNode> {
+        if self.tree_dirty {
+            self.tree_cache = match self.base_directory {
+                Some(ref base_dir) => self.build_tree_recursive(base_dir),
+                None => Vec::new(),
+            };
+            self.tree_dirty = false;
+        }
+        self.tree_cache.clone()
     }
 
     /// Recursively builds tree nodes for a directory.

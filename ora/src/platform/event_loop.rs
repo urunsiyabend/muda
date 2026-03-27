@@ -1025,6 +1025,11 @@ impl ApplicationHandler for OraApp {
                                         self.fps_last_report = now;
                                     }
 
+                                    log::info!(
+                                        "FRAME {:.1}ms | view {:.1} layout {:.1} prepaint {:.1} paint {:.1} gpu {:.1} | {} cmds",
+                                        total_ms, view_ms, layout_ms, prepaint_ms, paint_ms, gpu_ms, cmd_count
+                                    );
+
                                     gpu_state.window.set_title(
                                         &format!(
                                             "Muda [{:.0}ms | view {:.0} layout {:.0} prepaint {:.0} paint {:.0} gpu {:.0} | {} cmds | {}fps]",
