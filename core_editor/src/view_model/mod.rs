@@ -318,11 +318,16 @@ pub struct TabPresentation {
     pub is_active: bool,
     /// Whether the document has unsaved changes.
     pub is_dirty: bool,
+    /// Whether the underlying file has been deleted externally.
+    ///
+    /// Set by the adapter when the filesystem watcher reports the file is gone.
+    /// The tab continues to show (with indicator) so the user can save a copy.
+    pub is_deleted: bool,
 }
 
 impl TabPresentation {
     pub fn new(view_id: u64, title: String, is_active: bool, is_dirty: bool) -> Self {
-        Self { view_id, title, is_active, is_dirty }
+        Self { view_id, title, is_active, is_dirty, is_deleted: false }
     }
 }
 

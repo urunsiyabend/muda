@@ -1319,6 +1319,10 @@ impl ApplicationHandler for OraApp {
             false
         };
         if watcher_had_events {
+            // Process external changes to open buffers (auto-reload, deleted indicator, prompt).
+            if let Some(adapter) = &self.editor_adapter {
+                adapter.borrow_mut().handle_external_file_changes();
+            }
             self.needs_layout = true;
             if let Some(gpu_state) = &self.gpu_state {
                 gpu_state.window.request_redraw();

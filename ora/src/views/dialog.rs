@@ -317,37 +317,138 @@ impl DialogView {
             .align_center()
             .child(dialog_box)
     }
+
+    /// Renders the external modification prompt dialog box.
+    ///
+    /// Shows the file name and informs the user that the file was modified externally.
+    /// Offers "Reload" and "Keep" buttons (buttons are rendered but not yet wired — see
+    /// STATE.md known issue: dialog button handlers not connected).
+    fn render_external_modification_dialog(&self, file_name: &str, cx: &mut ViewContext) -> Div {
+        let theme = cx.theme();
+
+        let content_height = 80.0;
+        let dialog_height = TITLE_BAR_HEIGHT + content_height + DIALOG_PADDING + BUTTON_HEIGHT + DIALOG_PADDING;
+
+        Div::new()
+            .w(px(DIALOG_WIDTH))
+            .h(px(dialog_height))
+            .flex_col()
+            .bg(theme.color(ColorToken::BgPrimary))
+            .border_radius(DIALOG_BORDER_RADIUS)
+            .shadow(6.0, 6.0, 20.0, 0.0, Color::rgba(0.0, 0.0, 0.0, 0.4))
+            // Title bar
+            .child(
+                Div::new()
+                    .w(pct(100.0))
+                    .h(px(TITLE_BAR_HEIGHT))
+                    .flex_row()
+                    .child(
+                        Div::new()
+                            .w(px(WARNING_ACCENT_WIDTH))
+                            .h(pct(100.0))
+                            .bg(theme.color(ColorToken::Warning))
+                    )
+                    .child(
+                        Div::new()
+                            .grow(1.0)
+                            .h(pct(100.0))
+                            .flex_row()
+                            .align_center()
+                            .px(12.0)
+                            .bg(theme.color(ColorToken::BgElevated))
+                            .child(
+                                TextElement::new("File Modified Externally")
+                                    .size(TITLE_FONT_SIZE)
+                                    .color(theme.color(ColorToken::FgPrimary))
+                            )
+                    )
+            )
+            // Content
+            .child(
+                Div::new()
+                    .grow(1.0)
+                    .flex_col()
+                    .p(DIALOG_PADDING)
+                    .gap(8.0)
+                    .child(
+                        TextElement::new(format!("\"{}\" was modified by another program.", file_name))
+                            .size(CONTENT_FONT_SIZE)
+                            .color(theme.color(ColorToken::FgPrimary))
+                    )
+                    .child(
+                        TextElement::new("Reload to see the external changes, or keep your edits.")
+                            .size(CONTENT_FONT_SIZE)
+                            .color(theme.color(ColorToken::FgSecondary))
+                    )
+            )
+            // Button row
+            .child(
+                Div::new()
+                    .w(pct(100.0))
+                    .h(px(BUTTON_HEIGHT + DIALOG_PADDING * 2.0))
+                    .flex_row()
+                    .justify_end()
+                    .align_center()
+                    .gap(BUTTON_SPACING)
+                    .px(DIALOG_PADDING)
+                    .bg(theme.color(ColorToken::BgPrimary))
+                    .child(
+                        button("Reload")
+                            .primary()
+                            .focusable(self.save_focus.clone())
+                            .transition_id(DIALOG_SAVE_TRANSITION_ID)
+                    )
+                    .child(
+                        button("Keep My Edits")
+                            .secondary()
+                            .focusable(self.dont_save_focus.clone())
+                            .transition_id(DIALOG_DONT_SAVE_TRANSITION_ID)
+                    )
+            )
+    }
 }
 
 impl View for DialogView {
     fn render(&self, cx: &mut ViewContext) -> AnyElement {
-        // If no dialog to show, return empty element
-        let DialogPresentation::UnsavedChangesConfirmation {
-            action_description,
-            unsaved_documents,
-        } = &self.presentation else {
-            // DialogPresentation::None - return invisible placeholder
-            return Div::new()
-                .w(px(0.0))
-                .h(px(0.0))
-                .into();
-        };
-
-        // Build the dialog using Stack for z-layering
-        // Layer 0 (bottom): Backdrop
-        // Layer 1 (top): Centered dialog box
-        stack()
-            .w(pct(100.0))
-            .h(pct(100.0))
-            // Layer 0: Semi-transparent backdrop
-            .child(self.render_backdrop(cx))
-            // Layer 1: Dialog box (in centering container)
-            .child(
-                self.render_centering_container(
-                    self.render_dialog_box(action_description, unsaved_documents, cx)
-                )
-            )
-            .into()
+        match &self.presentation {
+            DialogPresentation::None => {
+                // No dialog — return invisible placeholder
+                Div::new()
+                    .w(px(0.0))
+                    .h(px(0.0))
+                    .into()
+            }
+            DialogPresentation::UnsavedChangesConfirmation {
+                action_description,
+                unsaved_documents,
+            } => {
+                // Build the dialog using Stack for z-layering
+                // Layer 0 (bottom): Backdrop
+                // Layer 1 (top): Centered dialog box
+                stack()
+                    .w(pct(100.0))
+                    .h(pct(100.0))
+                    .child(self.render_backdrop(cx))
+                    .child(
+                        self.render_centering_container(
+                            self.render_dialog_box(action_description, unsaved_documents, cx)
+                        )
+                    )
+                    .into()
+            }
+            DialogPresentation::ExternalModificationPrompt { file_name } => {
+                stack()
+                    .w(pct(100.0))
+                    .h(pct(100.0))
+                    .child(self.render_backdrop(cx))
+                    .child(
+                        self.render_centering_container(
+                            self.render_external_modification_dialog(file_name, cx)
+                        )
+                    )
+                    .into()
+            }
+        }
     }
 }
 

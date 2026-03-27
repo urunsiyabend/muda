@@ -255,6 +255,20 @@ pub struct CoreEditorAdapter {
     ///
     /// Polled non-blocking via `try_recv()` in `poll_watcher_events()`.
     watcher_rx: Option<mpsc::Receiver<DebounceEventResult>>,
+    /// Paths of files that have been deleted externally while open in the editor.
+    ///
+    /// Used in `build_render_model` to set `is_deleted = true` on the corresponding tab.
+    /// Entries remain until the tab is closed.
+    deleted_paths: std::collections::HashSet<std::path::PathBuf>,
+    /// Paths of open files that were modified externally while the buffer was dirty.
+    ///
+    /// On each render cycle, the first entry is shown as `ExternalModificationPrompt`.
+    /// Cleared when the user responds (reload or keep) via `respond_external_modification_prompt`.
+    pending_reload_prompts: Vec<std::path::PathBuf>,
+    /// Paths from watcher events collected by `poll_watcher_events` for processing.
+    ///
+    /// Drained by `handle_external_file_changes` after the watcher poll pass.
+    pending_external_changes: Vec<std::path::PathBuf>,
 }
 
 impl CoreEditorAdapter {
@@ -273,6 +287,9 @@ impl CoreEditorAdapter {
             ignored_patterns: state.ignored_patterns,
             watcher: None,
             watcher_rx: None,
+            deleted_paths: std::collections::HashSet::new(),
+            pending_reload_prompts: Vec::new(),
+            pending_external_changes: Vec::new(),
         }
     }
 
@@ -291,6 +308,9 @@ impl CoreEditorAdapter {
             ignored_patterns: state.ignored_patterns,
             watcher: None,
             watcher_rx: None,
+            deleted_paths: std::collections::HashSet::new(),
+            pending_reload_prompts: Vec::new(),
+            pending_external_changes: Vec::new(),
         })
     }
 
@@ -331,6 +351,9 @@ impl CoreEditorAdapter {
             ignored_patterns: state.ignored_patterns,
             watcher: None,
             watcher_rx: None,
+            deleted_paths: std::collections::HashSet::new(),
+            pending_reload_prompts: Vec::new(),
+            pending_external_changes: Vec::new(),
         };
         adapter.create_watcher(&canonical);
         Ok(adapter)
@@ -492,6 +515,30 @@ impl FileOpDataSource for CoreEditorAdapter {
             }
         };
 
+        // Close all open tabs before switching workspace.
+        // This avoids having tabs from the old workspace visible in the new one.
+        // Close all views by repeatedly closing the active tab.
+        loop {
+            let view_count = self.app.workspace.view_count();
+            if view_count == 0 {
+                break;
+            }
+            // close_active_tab may not close if protection dialog fires, but since
+            // we're switching workspaces we don't prompt here. Limit loop iterations
+            // to avoid infinite loop if close fails.
+            let views_before = view_count;
+            self.app.close_active_tab();
+            if self.app.workspace.view_count() == views_before {
+                // Tab count didn't decrease (e.g., unsaved changes protection).
+                // Force-close: just clear all views and documents.
+                break;
+            }
+        }
+        // Clear all external-change tracking since we're switching workspace.
+        self.deleted_paths.clear();
+        self.pending_reload_prompts.clear();
+        self.pending_external_changes.clear();
+
         // Update sidebar with the new base directory (also calls auto_expand_first_level).
         self.app.sidebar.set_base_directory(canonical.clone());
         self.app.sidebar.show();
@@ -518,8 +565,18 @@ impl FileOpDataSource for CoreEditorAdapter {
         let mut had_events = false;
         loop {
             match rx.try_recv() {
-                Ok(Ok(_events)) => {
+                Ok(Ok(events)) => {
                     had_events = true;
+                    // Collect unique changed paths for external-change processing.
+                    for event in &events {
+                        for path in &event.paths {
+                            let canonical = std::fs::canonicalize(path)
+                                .unwrap_or_else(|_| path.clone());
+                            if !self.pending_external_changes.contains(&canonical) {
+                                self.pending_external_changes.push(canonical);
+                            }
+                        }
+                    }
                 }
                 Ok(Err(errors)) => {
                     for e in errors {
@@ -547,6 +604,117 @@ impl FileOpDataSource for CoreEditorAdapter {
     fn stop_watcher(&mut self) {
         self.watcher = None;
         self.watcher_rx = None;
+        self.pending_external_changes.clear();
+    }
+
+    fn handle_external_file_changes(&mut self) {
+        if self.pending_external_changes.is_empty() {
+            return;
+        }
+
+        let changed_paths = std::mem::take(&mut self.pending_external_changes);
+
+        for path in changed_paths {
+            // Check if this path corresponds to an open document.
+            let doc_id = self.app.workspace
+                .documents()
+                .find(|(_, doc)| {
+                    doc.file_path()
+                        .map(|p| {
+                            let canonical = std::fs::canonicalize(p).unwrap_or_else(|_| p.clone());
+                            canonical == path
+                        })
+                        .unwrap_or(false)
+                })
+                .map(|(id, _)| *id);
+
+            let doc_id = match doc_id {
+                Some(id) => id,
+                None => continue, // Not an open file — sidebar-only change
+            };
+
+            if !path.exists() {
+                // File was deleted externally.
+                log::info!("External deletion detected: {:?}", path);
+                self.deleted_paths.insert(path);
+                self.app.needs_render = true;
+            } else {
+                // File was modified externally.
+                let is_dirty = self.app.workspace
+                    .document(doc_id)
+                    .map(|d| d.is_dirty())
+                    .unwrap_or(false);
+
+                if !is_dirty {
+                    // Clean buffer: auto-reload silently.
+                    log::info!("Auto-reloading clean buffer from disk: {:?}", path);
+                    match std::fs::read_to_string(&path) {
+                        Ok(mut content) => {
+                            // Strip UTF-8 BOM if present (same pattern as file loading).
+                            if content.starts_with('\u{FEFF}') {
+                                content = content[3..].to_string();
+                            }
+                            if let Some(doc) = self.app.workspace.document_mut(doc_id) {
+                                doc.reload_content(&content);
+                            }
+                            self.app.needs_render = true;
+                        }
+                        Err(e) => {
+                            log::warn!("Failed to reload {:?}: {:?}", path, e);
+                        }
+                    }
+                } else {
+                    // Dirty buffer: queue a prompt if not already queued.
+                    log::info!("Queueing external modification prompt for dirty buffer: {:?}", path);
+                    if !self.pending_reload_prompts.contains(&path) {
+                        self.pending_reload_prompts.push(path);
+                        self.app.needs_render = true;
+                    }
+                }
+            }
+        }
+    }
+
+    fn respond_external_modification_prompt(&mut self, reload: bool) {
+        // Take the first pending prompt.
+        if self.pending_reload_prompts.is_empty() {
+            return;
+        }
+        let path = self.pending_reload_prompts.remove(0);
+
+        if reload {
+            // Reload from disk, discarding local edits.
+            let doc_id = self.app.workspace
+                .documents()
+                .find(|(_, doc)| {
+                    doc.file_path()
+                        .map(|p| {
+                            let canonical = std::fs::canonicalize(p).unwrap_or_else(|_| p.clone());
+                            canonical == path
+                        })
+                        .unwrap_or(false)
+                })
+                .map(|(id, _)| *id);
+
+            if let Some(doc_id) = doc_id {
+                match std::fs::read_to_string(&path) {
+                    Ok(mut content) => {
+                        if content.starts_with('\u{FEFF}') {
+                            content = content[3..].to_string();
+                        }
+                        if let Some(doc) = self.app.workspace.document_mut(doc_id) {
+                            doc.reload_content(&content);
+                        }
+                    }
+                    Err(e) => {
+                        log::warn!("Failed to reload {:?} after user confirmed: {:?}", path, e);
+                    }
+                }
+            }
+        }
+        // "Keep" case: just remove from queue (local edits preserved).
+
+        self.app.needs_render = true;
     }
 }
 
@@ -653,6 +821,8 @@ fn convert_dialog_presentation(d: core_editor::view_model::DialogPresentation) -
             }
         }
     }
+    // Note: ExternalModificationPrompt is injected directly in build_render_model
+    // after conversion since it lives purely in the adapter layer.
 }
 
 fn convert_tab_presentation(t: core_editor::view_model::TabPresentation) -> TabPresentation {
@@ -661,6 +831,7 @@ fn convert_tab_presentation(t: core_editor::view_model::TabPresentation) -> TabP
         title: t.title,
         is_active: t.is_active,
         is_dirty: t.is_dirty,
+        is_deleted: t.is_deleted,
     }
 }
 
@@ -800,6 +971,7 @@ impl BufferDataSource for CoreEditorAdapter {
         };
         let core_model = app.build_render_model(viewport_lines);
         let mut render_model = convert_render_model(core_model);
+
         // Inject pending status message from stub handlers, overriding core's message.
         // Message persists until its expiry instant (3 seconds after being set).
         //
@@ -819,6 +991,41 @@ impl BufferDataSource for CoreEditorAdapter {
                 *expiry = None;
             }
         }
+
+        // Mark tabs whose file was deleted externally.
+        if !self.deleted_paths.is_empty() {
+            for tab in &mut render_model.tab_bar.tabs {
+                // Find the document for this view_id, check if its path is deleted.
+                let view_id = tab.view_id;
+                let is_del = app.workspace
+                    .views()
+                    .find(|(id, _)| id.as_u64() == view_id)
+                    .and_then(|(_, view)| app.workspace.document(view.document_id()))
+                    .and_then(|doc| doc.file_path())
+                    .map(|p| {
+                        let canonical = std::fs::canonicalize(p).unwrap_or_else(|_| p.clone());
+                        self.deleted_paths.contains(&canonical)
+                    })
+                    .unwrap_or(false);
+                tab.is_deleted = is_del;
+            }
+        }
+
+        // Show ExternalModificationPrompt for the first pending dirty-buffer reload.
+        // This overrides the core dialog only when there is no core dialog active.
+        if matches!(render_model.dialog, ora::editor_adapter::DialogPresentation::None) {
+            if let Some(path) = self.pending_reload_prompts.first() {
+                let file_name = path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("(unknown)")
+                    .to_string();
+                render_model.dialog = ora::editor_adapter::DialogPresentation::ExternalModificationPrompt {
+                    file_name,
+                };
+            }
+        }
+
         render_model
     }
 

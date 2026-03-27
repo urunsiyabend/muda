@@ -334,6 +334,17 @@ impl Document {
         Ok(())
     }
 
+    /// Reloads the document content from the given string without marking it dirty.
+    ///
+    /// Used by the adapter's external-change handler to silently reload clean buffers
+    /// when the underlying file is modified externally. After this call, `is_dirty()`
+    /// returns `false` and the buffer reflects the new content.
+    pub fn reload_content(&mut self, new_content: &str) {
+        self.buffer = TextBuffer::from_str(new_content);
+        self.metadata.dirty = false;
+        self.update_syntax();
+    }
+
     // =========================================================================
     // Convenience methods delegating to TextBuffer
     // =========================================================================

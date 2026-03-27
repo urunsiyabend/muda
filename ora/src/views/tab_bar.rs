@@ -82,7 +82,8 @@ impl View for TabBarView {
 
             let mut t = tab(&tab_data.title)
                 .active(tab_data.is_active)
-                .dirty(tab_data.is_dirty);
+                .dirty(tab_data.is_dirty)
+                .deleted(tab_data.is_deleted);
 
             // Wire click handler: dispatch SwitchTab(view_id)
             if let Some(d) = dispatch.clone() {
@@ -104,17 +105,32 @@ impl View for TabBarView {
             tab_elements.push(t.into());
         }
 
-        // Build the tab bar container (explicit height and width for consistent alignment)
-        Div::new()
+        // Match the gutter framing model so the left divider sits on the same
+        // pixel column as the gutter's left divider.
+        let tab_bar_body: AnyElement = Div::new()
             .flex_row()
-            .w(pct(100.0))  // Full width of parent container
             .h(px(TAB_BAR_HEIGHT))
+            .grow(1.0)
             .shrink(0.0)  // Don't shrink below fixed height
             .align_center()
             .bg(theme.color(ColorToken::BgSecondary))
             .border(1.0, theme.color(ColorToken::Border))
             .gap(TAB_GAP)
             .children(tab_elements)
+            .into();
+
+        Div::new()
+            .flex_row()
+            .w(pct(100.0))
+            .h(px(TAB_BAR_HEIGHT))
+            .shrink(0.0)
+            .child(
+                Div::new()
+                    .w(px(1.0))
+                    .h(pct(100.0))
+                    .bg(theme.color(ColorToken::Border)),
+            )
+            .child(tab_bar_body)
             .into()
     }
 }

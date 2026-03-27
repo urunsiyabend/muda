@@ -16,6 +16,11 @@ pub struct Tab {
     label: String,
     is_active: bool,
     is_dirty: bool,
+    /// Whether the underlying file was deleted externally.
+    ///
+    /// When `true`, the tab title is rendered with a muted/red-ish color to
+    /// indicate the file no longer exists on disk.
+    is_deleted: bool,
     show_close: bool,
     on_click: Option<Rc<dyn Fn() + 'static>>,
     on_close: Option<Rc<dyn Fn() + 'static>>,
@@ -30,6 +35,7 @@ pub fn tab(label: impl Into<String>) -> Tab {
         label: label.into(),
         is_active: false,
         is_dirty: false,
+        is_deleted: false,
         show_close: true,
         on_click: None,
         on_close: None,
@@ -48,6 +54,15 @@ impl Tab {
     /// Show or hide the dirty indicator (dot before label)
     pub fn dirty(mut self, dirty: bool) -> Self {
         self.is_dirty = dirty;
+        self
+    }
+
+    /// Mark tab as deleted (file no longer exists on disk).
+    ///
+    /// When `true`, the tab title renders with a muted/warning color and a
+    /// "(deleted)" suffix to inform the user that the file is gone.
+    pub fn deleted(mut self, deleted: bool) -> Self {
+        self.is_deleted = deleted;
         self
     }
 
@@ -99,14 +114,19 @@ impl Element for Tab {
 
         let layout_id = cx.request_layout(&style);
 
-        // Build label text — prepend dot if dirty
-        let label_text = if self.is_dirty {
-            format!("• {}", self.label)
+        // Build label text.
+        // Deleted takes precedence over dirty for the suffix/prefix display.
+        let label_text = if self.is_deleted {
+            format!("{} (deleted)", self.label)
+        } else if self.is_dirty {
+            format!("* {}", self.label)
         } else {
             self.label.clone()
         };
 
-        let mut label_element = TextElement::new(label_text).size(TAB_FONT_SIZE).color(Color::white());
+        let mut label_element = TextElement::new(label_text)
+            .size(TAB_FONT_SIZE)
+            .color(Color::white());
         let (label_layout_id, label_state) = label_element.request_layout(cx);
         cx.add_child(layout_id, label_layout_id);
         self.label_element = Some(label_element);
@@ -155,23 +175,18 @@ impl Element for Tab {
             None
         };
 
-        // Register tab body hitbox first (lower index).
-        // hit_test iterates in REVERSE order, so the LAST registered opaque hitbox wins.
-        // The close button is registered after the tab body, giving it a higher index
-        // and priority in hit_test when the cursor is over the close button area.
         let hitbox_id = cx.register_hitbox(bounds, true);
         state.hitbox_id = Some(hitbox_id);
 
-        // Register close button hitbox AFTER tab body (higher index = wins in hit_test).
-        // Must be opaque so hit_test can find it.
         if let Some(cb) = close_bounds {
             let close_hitbox_id = cx.register_hitbox(cb, true);
             state.close_hitbox_id = Some(close_hitbox_id);
 
-            // Wire on_close to close button mouse down
             if let Some(on_close) = self.on_close.clone() {
                 cx.on_mouse_down(close_hitbox_id, move |event, ctx| {
-                    if ctx.phase() != crate::events::dispatch::DispatchPhase::Bubble { return; }
+                    if ctx.phase() != crate::events::dispatch::DispatchPhase::Bubble {
+                        return;
+                    }
                     if matches!(event.button, MouseButton::Left | MouseButton::Middle) {
                         on_close();
                     }
@@ -179,11 +194,12 @@ impl Element for Tab {
             }
         }
 
-        // Wire on_click to tab body mouse down (left click = switch, middle = close)
         let on_click = self.on_click.clone();
         let on_close_for_middle = self.on_close.clone();
         cx.on_mouse_down(hitbox_id, move |event, ctx| {
-            if ctx.phase() != crate::events::dispatch::DispatchPhase::Bubble { return; }
+            if ctx.phase() != crate::events::dispatch::DispatchPhase::Bubble {
+                return;
+            }
             match event.button {
                 MouseButton::Left => {
                     if let Some(handler) = &on_click {
@@ -199,12 +215,10 @@ impl Element for Tab {
             }
         });
 
-        // Prepaint child text elements
         if let Some(label_el) = &mut self.label_element {
             label_el.prepaint(&mut state.label_state, cx);
         }
-        if let (Some(close_el), Some(close_st)) =
-            (&mut self.close_element, &mut state.close_state)
+        if let (Some(close_el), Some(close_st)) = (&mut self.close_element, &mut state.close_state)
         {
             close_el.prepaint(close_st, cx);
         }
@@ -213,11 +227,9 @@ impl Element for Tab {
     fn paint(&mut self, state: &mut Self::RequestLayoutState, cx: &mut PaintContext) {
         let bounds = cx.bounds(state.layout_id);
 
-        // Determine interaction state before borrowing theme
         let is_hovered = state.hitbox_id.map(|id| cx.is_hovered(id)).unwrap_or(false);
         let close_hovered = state.close_hitbox_id.map(|id| cx.is_hovered(id)).unwrap_or(false);
 
-        // Extract all needed colors from theme up front (before mutable borrows)
         let bg_color = if self.is_active {
             cx.theme().color(ColorToken::BgPrimary)
         } else if is_hovered {
@@ -226,7 +238,10 @@ impl Element for Tab {
             cx.theme().color(ColorToken::BgSecondary)
         };
 
-        let text_color = if self.is_active {
+        let text_color = if self.is_deleted {
+            // Deleted files show with a muted warning tone to indicate the file is gone.
+            cx.theme().color(ColorToken::Warning)
+        } else if self.is_active {
             cx.theme().color(ColorToken::FgPrimary)
         } else {
             cx.theme().color(ColorToken::FgSecondary)
@@ -235,32 +250,35 @@ impl Element for Tab {
         let accent_color = cx.theme().color(ColorToken::Accent);
         let muted_color = cx.theme().color(ColorToken::FgMuted);
         let fg_primary = cx.theme().color(ColorToken::FgPrimary);
+        let border_color = cx.theme().color(ColorToken::Border);
 
-        // Build background style
         let mut bg_style = Style::default();
         bg_style.background = Background::Solid(bg_color);
+        bg_style.border.widths = Edges {
+            top: 0.0,
+            right: 1.0,
+            bottom: 0.0,
+            left: 0.0,
+        };
+        bg_style.border.color = border_color;
 
-        // Active tab has a 2px bottom accent border
         if self.is_active {
             bg_style.border.widths = Edges {
                 top: 0.0,
-                right: 0.0,
+                right: 1.0,
                 bottom: 2.0,
                 left: 0.0,
             };
             bg_style.border.color = accent_color;
         }
 
-        // Paint tab background
         cx.paint_styled_rect(&bg_style, &bounds);
 
-        // Paint label text
         if let Some(label_el) = &mut self.label_element {
             label_el.set_color(text_color);
             label_el.paint(&mut state.label_state, cx);
         }
 
-        // Paint close button "x"
         if self.show_close {
             let close_color = if close_hovered { fg_primary } else { muted_color };
 

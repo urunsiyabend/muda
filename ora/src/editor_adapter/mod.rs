@@ -177,6 +177,28 @@ pub trait FileOpDataSource {
     /// Drops the debouncer (which stops the background thread) and clears
     /// the receiver. Called when the workspace is closed.
     fn stop_watcher(&mut self);
+
+    /// Process pending external file changes collected by `poll_watcher_events`.
+    ///
+    /// For each path that changed:
+    /// - If the file was **deleted**: marks the buffer's tab with `is_deleted = true`
+    ///   so the user can see the indicator and save a copy if desired.
+    /// - If the file was **modified** and the buffer is **clean**: silently reloads
+    ///   the file content from disk.
+    /// - If the file was **modified** and the buffer is **dirty**: queues a prompt
+    ///   shown as `DialogPresentation::ExternalModificationPrompt`.
+    ///
+    /// Called by the event loop after `poll_watcher_events` returns `true`.
+    fn handle_external_file_changes(&mut self);
+
+    /// Respond to the ExternalModificationPrompt dialog.
+    ///
+    /// `reload = true`: discard local edits, reload from disk.
+    /// `reload = false`: keep local edits, ignore the external change.
+    ///
+    /// This dismisses the current prompt and proceeds to the next queued one
+    /// if any, or clears the dialog.
+    fn respond_external_modification_prompt(&mut self, reload: bool);
 }
 
 // =============================================================================
