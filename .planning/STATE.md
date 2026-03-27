@@ -84,7 +84,7 @@ Plan 04: Selection focus dimming (SelectionInactive), gutter click line select, 
 
 ## Phase 13.1 Summary (in progress)
 
-Plan 01: GlyphCacheKey struct + LRU glyph buffer cache in TextSystem (LRU eviction, 1024-entry capacity)
+Plan 01: GlyphCacheKey struct + LRU glyph buffer cache in TextSystem (2048-cap), drain_buffers_for_cache replaces clear(), --no-glyph-cache flag, glyph hit % in --show-fps; SUMMARY.md created 2026-03-27
 Plan 02: (see 13.1-02 plan)
 Plan 03: FileTreeView viewport virtualization — virtual_slice() with 20-row buffer zones, spacer divs, SharedScrollState drives sidebar scroll offset → FileTreeView; 5 new tests
 
