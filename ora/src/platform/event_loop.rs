@@ -29,6 +29,10 @@ static SHOW_FPS: AtomicBool = AtomicBool::new(false);
 /// Set by parsing --no-glyph-cache from CLI args at startup.
 static NO_GLYPH_CACHE: AtomicBool = AtomicBool::new(false);
 
+/// Global flag to disable the layout dirty-flag cache (for A/B comparison).
+/// Set by parsing --no-layout-cache from CLI args at startup.
+static NO_LAYOUT_CACHE: AtomicBool = AtomicBool::new(false);
+
 /// Enable the FPS counter (call before `run_with_editor`).
 pub fn enable_fps_counter() {
     SHOW_FPS.store(true, Ordering::Relaxed);
@@ -43,6 +47,9 @@ pub fn parse_perf_flags() {
         }
         if arg == "--no-glyph-cache" {
             NO_GLYPH_CACHE.store(true, Ordering::Relaxed);
+        }
+        if arg == "--no-layout-cache" {
+            NO_LAYOUT_CACHE.store(true, Ordering::Relaxed);
         }
     }
 }
@@ -106,6 +113,21 @@ pub struct OraApp {
     fps_last_report: Instant,
     /// FPS tracking: last computed FPS value.
     fps_display: u32,
+    /// Layout dirty flag. When true, the full layout pipeline runs this frame
+    /// (request_layout + compute). When false, cached_layout_outputs are reused.
+    /// Defaults to true. Reset to false after each frame. Set to true for any
+    /// event that changes element sizes or positions (resize, keyboard, tab switch).
+    /// Set to false (or left false) for paint-only events (hover, blink, scroll).
+    needs_layout: bool,
+    /// Cached layout_outputs from the last full layout pass. Reused when
+    /// needs_layout is false and layout_cache_enabled is true.
+    cached_layout_outputs: Vec<crate::layout::LayoutOutput>,
+    /// Number of frames where layout was skipped (cache hit).
+    layout_hits: u64,
+    /// Number of frames where full layout was computed (cache miss).
+    layout_misses: u64,
+    /// Whether layout caching is enabled. False when --no-layout-cache is passed.
+    layout_cache_enabled: bool,
 }
 
 impl OraApp {
@@ -136,6 +158,11 @@ impl OraApp {
             fps_frame_count: 0,
             fps_last_report: Instant::now(),
             fps_display: 0,
+            needs_layout: true,
+            cached_layout_outputs: Vec::new(),
+            layout_hits: 0,
+            layout_misses: 0,
+            layout_cache_enabled: true,
         }
     }
 
@@ -171,6 +198,11 @@ impl OraApp {
             fps_frame_count: 0,
             fps_last_report: Instant::now(),
             fps_display: 0,
+            needs_layout: true,
+            cached_layout_outputs: Vec::new(),
+            layout_hits: 0,
+            layout_misses: 0,
+            layout_cache_enabled: true,
         }
     }
 }
@@ -445,6 +477,12 @@ impl ApplicationHandler for OraApp {
             log::info!("Glyph buffer cache disabled via --no-glyph-cache");
         }
 
+        // Apply --no-layout-cache flag if set
+        if NO_LAYOUT_CACHE.load(Ordering::Relaxed) {
+            self.layout_cache_enabled = false;
+            log::info!("Layout dirty-flag cache disabled via --no-layout-cache");
+        }
+
         // Measure actual monospace character width for accurate caret positioning.
         // This must happen after GPU/font init so glyphon can shape real glyphs.
         {
@@ -495,6 +533,8 @@ impl ApplicationHandler for OraApp {
                     let lines = lines.max(1);
                     adapter.borrow_mut().resize_viewport(200, lines);
                 }
+                // Window size changed — element sizes will change, full layout required.
+                self.needs_layout = true;
             }
             WindowEvent::CloseRequested => {
                 event_loop.exit();
@@ -616,7 +656,15 @@ impl ApplicationHandler for OraApp {
                     }
                 }
 
-                // Request redraw to update hover state visuals
+                // Request redraw to update hover state visuals.
+                // Hover changes are paint-only: element bounds don't change.
+                // needs_layout stays false unless drag dispatched a layout-dirty command.
+                if self.text_area_drag && self.drag_threshold_met {
+                    // DragTo dispatched above changes selection, which is paint-only too.
+                    // Layout is not needed for selection rendering (overlay rects).
+                    // needs_layout remains unchanged (false unless already set true).
+                }
+                // Do NOT set needs_layout = true here; hover/drag redraws are paint-only.
                 if let Some(gpu_state) = &self.gpu_state {
                     gpu_state.window.request_redraw();
                 }
@@ -737,6 +785,9 @@ impl ApplicationHandler for OraApp {
                         }
                     }
 
+                    // Mouse clicks can trigger tab switches, UI state changes, or command
+                    // dispatch — mark layout dirty to be safe.
+                    self.needs_layout = true;
                     // Request redraw to update active state visuals
                     if let Some(gpu_state) = &self.gpu_state {
                         gpu_state.window.request_redraw();
@@ -825,6 +876,8 @@ impl ApplicationHandler for OraApp {
                 }
                 } // end if !consumed
 
+                // Scroll changes which lines are visible but does not change element
+                // sizes or positions — it is paint-only. Do NOT set needs_layout = true.
                 if let Some(gpu_state) = &self.gpu_state {
                     gpu_state.window.request_redraw();
                 }
@@ -851,6 +904,8 @@ impl ApplicationHandler for OraApp {
                             let new_focused = self.app_context.focus_state.focused_id();
                             log::info!("Focus changed: {:?} -> {:?}", prev_focused, new_focused);
 
+                            // Tab focus change can alter visible focus indicators — mark layout dirty.
+                            self.needs_layout = true;
                             // Request redraw to show new focus state
                             if let Some(gpu_state) = &self.gpu_state {
                                 gpu_state.window.request_redraw();
@@ -870,6 +925,8 @@ impl ApplicationHandler for OraApp {
                                 self.app_context.set_theme(new_theme);
                                 log::info!("Theme toggled to: {:?}", new_mode);
 
+                                // Theme change alters all element colors — full layout required.
+                                self.needs_layout = true;
                                 // Request redraw to show new theme
                                 if let Some(gpu_state) = &self.gpu_state {
                                     gpu_state.window.request_redraw();
@@ -886,6 +943,8 @@ impl ApplicationHandler for OraApp {
                                 };
 
                                 if action_matched {
+                                    // Actions (tab switch, file ops, command palette) change layout.
+                                    self.needs_layout = true;
                                     if let Some(gpu_state) = &self.gpu_state {
                                         gpu_state.window.request_redraw();
                                     }
@@ -902,6 +961,8 @@ impl ApplicationHandler for OraApp {
                                         let new_scroll_y = adapter.borrow().scroll_y();
                                         self.sync_scroll_from_core(new_scroll_y);
                                         log::debug!("Editor command dispatched via adapter");
+                                        // Keyboard input modifies buffer content — layout required.
+                                        self.needs_layout = true;
                                         if let Some(gpu_state) = &self.gpu_state {
                                             gpu_state.window.request_redraw();
                                         }
@@ -921,6 +982,8 @@ impl ApplicationHandler for OraApp {
                             };
 
                             if action_matched {
+                                // Actions (tab switch, file ops, command palette) change layout.
+                                self.needs_layout = true;
                                 if let Some(gpu_state) = &self.gpu_state {
                                     gpu_state.window.request_redraw();
                                 }
@@ -937,6 +1000,8 @@ impl ApplicationHandler for OraApp {
                                     let new_scroll_y = adapter.borrow().scroll_y();
                                     self.sync_scroll_from_core(new_scroll_y);
                                     log::debug!("Editor command dispatched via adapter");
+                                    // Keyboard input modifies buffer content — layout required.
+                                    self.needs_layout = true;
                                     if let Some(gpu_state) = &self.gpu_state {
                                         gpu_state.window.request_redraw();
                                     }
@@ -956,6 +1021,8 @@ impl ApplicationHandler for OraApp {
                 if let Some(ref state) = self.shared_focus_state {
                     state.set(focused);
                 }
+                // Focus change affects selection dimming style — mark layout dirty.
+                self.needs_layout = true;
                 // Redraw to update selection dimming
                 if let Some(gpu_state) = &self.gpu_state {
                     gpu_state.window.request_redraw();
@@ -963,8 +1030,24 @@ impl ApplicationHandler for OraApp {
             }
             WindowEvent::RedrawRequested => {
                 if let Some(gpu_state) = &mut self.gpu_state {
-                    // Log dirty state for debugging
-                    log::trace!("Redraw: dirty={}", self.app_context.has_dirty_entities());
+                    // Determine whether to run full layout or reuse cached layout_outputs.
+                    // Conservative rule: when in doubt, mark needs_layout = true.
+                    // A false cache hit produces visual bugs; a missed cache is just a normal frame.
+                    let run_full_layout = self.needs_layout
+                        || !self.layout_cache_enabled
+                        || self.cached_layout_outputs.is_empty();
+
+                    log::trace!(
+                        "Redraw: dirty={}, needs_layout={}, cache_enabled={}, run_full={}",
+                        self.app_context.has_dirty_entities(),
+                        self.needs_layout,
+                        self.layout_cache_enabled,
+                        run_full_layout
+                    );
+
+                    // Reset needs_layout for next frame — any event that requires layout
+                    // will set it to true again before the next RedrawRequested.
+                    self.needs_layout = false;
 
                     let frame_start = Instant::now();
 
@@ -973,21 +1056,38 @@ impl ApplicationHandler for OraApp {
                         let t_view_tree = frame_start.elapsed();
                         let window_size = gpu_state.size;
 
-                        // Phase 1: Request layout with text measurement
-                        let mut layout_cx = LayoutContext::new(
-                            &mut self.app_context.entity_storage,
-                            window_size,
-                        );
+                        // Phase 1: Layout (full or cached)
+                        let layout_outputs: Vec<crate::layout::LayoutOutput>;
+                        let t_layout;
 
-                        // Pass TextSystem for text measurement during layout
-                        layout_cx.set_text_system(&mut gpu_state.text_system as *mut _);
+                        if run_full_layout {
+                            // Full pipeline: request_layout + compute_flexbox
+                            let mut layout_cx = LayoutContext::new(
+                                &mut self.app_context.entity_storage,
+                                window_size,
+                            );
 
-                        element_tree.request_layout(&mut layout_cx);
+                            // Pass TextSystem for text measurement during layout
+                            layout_cx.set_text_system(&mut gpu_state.text_system as *mut _);
 
-                        // Compute layout using flexbox algorithm
-                        layout_cx.compute();
-                        let layout_outputs = layout_cx.layout_outputs.clone();
-                        let t_layout = frame_start.elapsed();
+                            element_tree.request_layout(&mut layout_cx);
+
+                            // Compute layout using flexbox algorithm
+                            layout_cx.compute();
+                            layout_outputs = layout_cx.layout_outputs.clone();
+
+                            // Cache for next paint-only frames
+                            self.cached_layout_outputs = layout_outputs.clone();
+                            self.layout_misses += 1;
+                        } else {
+                            // Paint-only frame: reuse cached layout outputs.
+                            // We still call render() above to get a fresh element tree
+                            // (needed for prepaint hitboxes and paint), but skip the
+                            // expensive request_layout + compute_flexbox calls.
+                            layout_outputs = self.cached_layout_outputs.clone();
+                            self.layout_hits += 1;
+                        }
+                        t_layout = frame_start.elapsed();
 
                         // Phase 2: Prepaint
                         let mut prepaint_cx = PrepaintContext::new(
@@ -1048,6 +1148,12 @@ impl ApplicationHandler for OraApp {
                                     let paint_ms = (t_paint - t_prepaint).as_secs_f64() * 1000.0;
                                     let gpu_ms = (t_gpu - t_paint).as_secs_f64() * 1000.0;
                                     let glyph_hit_pct = (gpu_state.text_system.cache_hit_rate() * 100.0) as u32;
+                                    let total_layout_frames = self.layout_hits + self.layout_misses;
+                                    let layout_hit_pct = if total_layout_frames > 0 {
+                                        ((self.layout_hits as f64 / total_layout_frames as f64) * 100.0) as u32
+                                    } else {
+                                        0
+                                    };
 
                                     self.fps_frame_count += 1;
                                     let now = Instant::now();
@@ -1059,14 +1165,14 @@ impl ApplicationHandler for OraApp {
                                     }
 
                                     log::info!(
-                                        "FRAME {:.1}ms | view {:.1} layout {:.1} prepaint {:.1} paint {:.1} gpu {:.1} | glyph {}% | {} cmds",
-                                        total_ms, view_ms, layout_ms, prepaint_ms, paint_ms, gpu_ms, glyph_hit_pct, cmd_count
+                                        "FRAME {:.1}ms | view {:.1} layout {:.1} prepaint {:.1} paint {:.1} gpu {:.1} | glyph {}% layout {}% | {} cmds",
+                                        total_ms, view_ms, layout_ms, prepaint_ms, paint_ms, gpu_ms, glyph_hit_pct, layout_hit_pct, cmd_count
                                     );
 
                                     gpu_state.window.set_title(
                                         &format!(
-                                            "Muda [{:.0}ms | view {:.0} layout {:.0} prepaint {:.0} paint {:.0} gpu {:.0} | glyph {}% | {} cmds | {}fps]",
-                                            total_ms, view_ms, layout_ms, prepaint_ms, paint_ms, gpu_ms, glyph_hit_pct, cmd_count, self.fps_display
+                                            "Muda [{:.0}ms | view {:.0} layout {:.0} prepaint {:.0} paint {:.0} gpu {:.0} | glyph {}% layout {}% | {} cmds | {}fps]",
+                                            total_ms, view_ms, layout_ms, prepaint_ms, paint_ms, gpu_ms, glyph_hit_pct, layout_hit_pct, cmd_count, self.fps_display
                                         )
                                     );
                                 }
@@ -1109,8 +1215,11 @@ impl ApplicationHandler for OraApp {
         // After processing any event, tick the async executor
         while self.app_context.tick_executor() {}
 
-        // Check for dirty entities and request redraw if needed
+        // Check for dirty entities and request redraw if needed.
+        // Dirty entities indicate data model changes (file load, tab switch, etc.)
+        // that require full layout recomputation — not just a paint.
         if self.app_context.has_dirty_entities() {
+            self.needs_layout = true;
             if let Some(gpu_state) = &self.gpu_state {
                 gpu_state.window.request_redraw();
             }
@@ -1125,7 +1234,12 @@ impl ApplicationHandler for OraApp {
         let has_active_animations = self.app_context.has_active_transitions();
 
         if self.app_context.has_dirty_entities() || has_active_animations {
-            // Need another frame immediately
+            // Need another frame immediately.
+            // Dirty entities require full layout; active animations are paint-only.
+            if self.app_context.has_dirty_entities() {
+                self.needs_layout = true;
+            }
+            // Transitions (hover, color animation) are paint-only — needs_layout stays false.
             event_loop.set_control_flow(ControlFlow::Poll);
             if let Some(gpu_state) = &self.gpu_state {
                 gpu_state.window.request_redraw();
