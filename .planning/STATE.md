@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-03-26)
 ## Current Position
 
 Phase: 14 — File Browser (In progress)
-Plan: 02 of 4 (complete)
-Status: In progress — Plan 14-02 done
-Last activity: 2026-03-27 — Completed 14-02-PLAN.md (Open Folder dialog + sidebar chrome)
+Plan: 03 of 4 (complete)
+Status: In progress — Plan 14-03 done
+Last activity: 2026-03-27 — Completed 14-03-PLAN.md (Filesystem watcher for live sidebar refresh)
 
 Progress: [██████████████████████░░░░░░░░░░░░░░] v2.0 Phase 14 in progress (22/~28 plans)
 
@@ -45,6 +45,13 @@ Progress: [██████████████████████░
 - Empty state Open Folder button uses existing Button element (secondary variant) + sidebar dispatch callback
 - Ctrl+Shift+O guard placed before Ctrl+O in character match (same pattern as Ctrl+Shift+S before Ctrl+S)
 - handle_folder_opened calls sidebar.show() to ensure sidebar becomes visible after picking folder
+
+### Phase 14 Plan 03 Decisions
+
+- notify::RecursiveMode accessed via notify_debouncer_full::notify::RecursiveMode — no direct notify dep needed
+- debouncer.watch() directly (not debouncer.watcher().watch()) — watcher() is deprecated in 0.7
+- poll_watcher_events placed BEFORE dirty-entity check in about_to_wait so watcher events get full layout pass
+- Drop-then-recreate pattern for watcher restart: self.watcher=None before new Debouncer
 
 ## Accumulated Context
 
@@ -89,6 +96,7 @@ None.
 Plan 01: rfd 0.15 + dirs 5 deps, untitled naming, PendingFileOp queue, dialog_open guard, Ctrl+N, Ctrl+S queues SaveAs
 Plan 02: Ctrl+O native dialog, background file reading, UTF-8 validation, BOM strip, Buffer Registry dedup, FileOpDataSource sub-trait, poll_pending_file_ops
 Plan 03: Ctrl+S silent save / Save As dialog (rfd save_file), handle_file_saved callback, last-dir persisted to state.json, open+save dialogs pre-populate directory
+
 Plan 04 (gap closure): Dialog input suppression for CursorMoved/MouseInput/MouseWheel/KeyboardInput; 3-second timed status messages with Instant expiry; about_to_wait earliest-wake scheduling
 
 ## Phase 13 Summary
@@ -105,12 +113,18 @@ Plan 02: needs_layout dirty flag, cached layout_outputs reuse (skip compute_flex
 Plan 03: FileTreeView viewport virtualization — virtual_slice() with 20-row buffer zones, spacer divs, TREE_ITEM_HEIGHT pub const, SharedScrollState → sidebar → FileTreeView; 5 new tests
 Plan 04: FrameDegradation guard (3+ slow frames suppress animations), --no-cache umbrella flag, [DEGRADED] indicator, human verification passed (avg 1.8ms, max 3.5ms, 0 degraded)
 
+## Phase 14 Summary (in progress)
+
+Plan 01: ignored_patterns exact-match filter (.git hidden, dotfiles visible), state.json extended with workspace_path + ignored_patterns, startup workspace restore, auto_expand_first_level, mark_tree_dirty() public
+Plan 02: Open Folder dialog via Ctrl+Shift+O + rfd pick_folder, sidebar header shows workspace name, empty state with Open Folder button, handle_folder_opened() + sidebar.show()
+Plan 03: notify-debouncer-full 0.7 watcher in CoreEditorAdapter, poll_watcher_events/start_watcher/stop_watcher on FileOpDataSource trait, 300ms debounce, polling in about_to_wait, live sidebar refresh
+
 ## Session Continuity
 
 Last session: 2026-03-27
-Stopped at: Completed 14-02-PLAN.md
+Stopped at: Completed 14-03-PLAN.md
 Resume file: None
-Next: Phase 14 Plan 03 — Filesystem Watcher
+Next: Phase 14 Plan 04 — File Browser Completion
 
 ---
 *State initialized: 2026-01-28*
