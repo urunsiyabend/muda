@@ -330,10 +330,10 @@ Plans:
 **Research**: Zed GPUI source code and blog posts on element caching, layout diffing, retained rendering
 
 Plans:
-- [ ] 13.1-01-PLAN.md -- Glyphon buffer LRU cache + cache stats + --no-glyph-cache (Wave 1)
-- [ ] 13.1-02-PLAN.md -- Layout dirty flags + cached layout reuse + --no-layout-cache (Wave 1)
-- [ ] 13.1-03-PLAN.md -- Sidebar file tree viewport virtualization (Wave 1)
-- [ ] 13.1-04-PLAN.md -- Frame degradation guard + --no-cache + verification checkpoint (Wave 2)
+- [x] 13.1-01-PLAN.md -- Glyphon buffer LRU cache + cache stats + --no-glyph-cache (Wave 1)
+- [x] 13.1-02-PLAN.md -- Layout dirty flags + cached layout reuse + --no-layout-cache (Wave 1)
+- [x] 13.1-03-PLAN.md -- Sidebar file tree viewport virtualization (Wave 1)
+- [x] 13.1-04-PLAN.md -- Frame degradation guard + --no-cache + verification checkpoint (Wave 2)
 
 ### Phase 14: File Browser
 **Goal**: Users can navigate the project directory tree in the sidebar and open files by clicking — the tree reflects real filesystem state
@@ -402,7 +402,7 @@ v2.0: 10 -> 11 -> 12 -> 13 (can follow 10) -> 13.1 (perf, before more features) 
 | 11. Buffer Registry + Multi-Tab | 4/4 | Complete | 2026-03-26 |
 | 12. File Operations | 4/4 | Complete | 2026-03-26 |
 | 13. Selection + Clipboard | 4/4 | Complete | 2026-03-27 |
-| 13.1. Rendering Performance | 0/4 | Planned | — |
+| 13.1. Rendering Performance | 4/4 | Complete | 2026-03-27 |
 | 14. File Browser | 0/TBD | Pending | — |
 | 15. Find / Replace | 0/TBD | Pending | — |
 | 16. Performance Refinement | 0/TBD | Pending | — |

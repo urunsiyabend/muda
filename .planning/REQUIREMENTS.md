@@ -71,7 +71,7 @@ Requirements for v2.0 Functional Editor milestone. Each maps to roadmap phases.
 ### Performance
 
 - [ ] **PERF-01**: Incremental tree-sitter parsing — `parser.parse(content, Some(old_tree))` reuses previous parse tree
-- [ ] **PERF-02**: Glyphon Buffer objects cached by (text, font_size, line_height) with LRU eviction
+- [x] **PERF-02**: Glyphon Buffer objects cached by (text, font_size, line_height) with LRU eviction
 - [ ] **PERF-03**: Tree-sitter parsing runs on background thread for files >100KB
 
 ## Future Requirements (Post-v2)
@@ -163,7 +163,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FIND-07 | Phase 15 | Pending |
 | FIND-08 | Phase 15 | Pending |
 | PERF-01 | Phase 16 | Pending |
-| PERF-02 | Phase 16 | Pending |
+| PERF-02 | Phase 13.1 | Complete |
 | PERF-03 | Phase 16 | Pending |
 
 **Coverage:**
