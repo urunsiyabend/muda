@@ -5,6 +5,7 @@ use crate::events::interaction::InteractionState;
 use crate::events::mouse::{Hitbox, HitboxId, MouseDownEvent, MouseMoveEvent, MouseUpEvent};
 use crate::events::dispatch::EventHandlers;
 use crate::layout::{compute_flexbox, AvailableSpace, LayoutInput, LayoutOutput};
+use crate::rendering::text::GlyphCacheKey;
 use crate::style::units::{Rect, Size};
 use crate::style::{Color, Style};
 use crate::theme::Theme;
@@ -31,12 +32,15 @@ pub enum PaintCommand {
         style: Style,
     },
     /// Draw text at the given position with the specified style.
+    /// `cache_key` is Some when the buffer was obtained via measure_text_cached()
+    /// and should be returned to the LRU cache after rendering.
     Text {
         buffer: glyphon::Buffer,
         left: f32,
         top: f32,
         bounds: Rect,
         color: Color,
+        cache_key: Option<GlyphCacheKey>,
     },
     /// Set scissor rectangle for clipping
     SetScissor {
@@ -127,6 +131,28 @@ impl<'a> LayoutContext<'a> {
             let buffer = glyphon::Buffer::new(&mut font_system, metrics);
 
             (buffer, Size::new(width, height))
+        }
+    }
+
+    /// Cache-aware text measurement. Returns (GlyphCacheKey, Buffer, Size).
+    /// The GlyphCacheKey should be passed to paint_text_cached() so the buffer
+    /// is returned to the LRU cache after the frame renders.
+    pub fn measure_text_cached(
+        &mut self,
+        text: &str,
+        font_size: f32,
+        line_height: f32,
+        max_width: Option<f32>,
+    ) -> (GlyphCacheKey, glyphon::Buffer, Size<f32>) {
+        if let Some(text_system_ptr) = self.text_system {
+            unsafe {
+                (*text_system_ptr).measure_text_cached(text, font_size, line_height, max_width)
+            }
+        } else {
+            // Fallback: shape fresh and produce a dummy key
+            let (buffer, size) = self.measure_text(text, font_size, line_height, max_width);
+            let key = GlyphCacheKey::new(text, font_size, line_height);
+            (key, buffer, size)
         }
     }
 
@@ -412,6 +438,28 @@ impl<'a> PaintContext<'a> {
             top: bounds.origin.y,
             bounds: *bounds,
             color: *color,
+            cache_key: None,
+        });
+    }
+
+    /// Add a cached text rendering command.
+    /// Use when the buffer came from LayoutContext::measure_text_cached().
+    /// The cache_key is stored so the buffer can be returned to the LRU cache
+    /// after render_frame() completes.
+    pub fn paint_text_cached(
+        &mut self,
+        buffer: glyphon::Buffer,
+        color: &Color,
+        bounds: &Rect,
+        cache_key: GlyphCacheKey,
+    ) {
+        self.paint_commands.push(PaintCommand::Text {
+            buffer,
+            left: bounds.origin.x,
+            top: bounds.origin.y,
+            bounds: *bounds,
+            color: *color,
+            cache_key: Some(cache_key),
         });
     }
 
