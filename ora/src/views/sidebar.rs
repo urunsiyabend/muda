@@ -185,12 +185,28 @@ impl SidebarView {
         self.width = width.clamp(220.0, 560.0);
     }
 
+    /// Returns `true` when no workspace folder has been opened yet.
+    ///
+    /// `directory_name` is "Files" (the core_editor fallback) when no base
+    /// directory is configured, so we use that as the sentinel.
+    fn has_no_workspace(&self) -> bool {
+        self.presentation.directory_name.is_empty()
+            || self.presentation.directory_name == "Files"
+    }
+
     /// Renders the sidebar header with title and toggle button.
     fn render_header(&self, cx: &mut ViewContext) -> Div {
         let theme = cx.theme();
 
+        // Show workspace folder name in header, or "EXPLORER" when no folder is open.
+        let header_label = if self.has_no_workspace() {
+            "EXPLORER".to_string()
+        } else {
+            self.presentation.directory_name.to_uppercase()
+        };
+
         // Title text
-        let title = TextElement::new("EXPLORER")
+        let title = TextElement::new(header_label)
             .size(TITLE_FONT_SIZE)
             .color(theme.color(ColorToken::FgMuted));
 
@@ -230,15 +246,42 @@ impl SidebarView {
         if self.file_tree.is_empty() {
             let bg = cx.theme().color(ColorToken::BgSecondary);
             let fg = cx.theme().color(ColorToken::FgMuted);
-            return Div::new()
+            let fg_primary = cx.theme().color(ColorToken::FgPrimary);
+
+            let mut content = Div::new()
                 .flex_col()
                 .grow(1.0)
                 .p(ENTRY_PADDING_H)
-                .bg(bg)
-                .child(TextElement::new("No folder open")
-                    .size(ENTRY_FONT_SIZE)
-                    .color(fg))
-                .into();
+                .bg(bg);
+
+            // When a workspace is configured but the tree is empty (e.g., empty dir),
+            // show a neutral placeholder. When no workspace at all, guide the user.
+            if self.has_no_workspace() {
+                let dispatch = self.dispatch.clone();
+                let open_folder_btn = crate::elements::button("Open Folder")
+                    .secondary()
+                    .on_click(move || {
+                        if let Some(ref d) = dispatch {
+                            d(EditorCommand::OpenFolder);
+                        }
+                    });
+
+                content = content
+                    .child(TextElement::new("No folder open")
+                        .size(ENTRY_FONT_SIZE)
+                        .color(fg))
+                    .child(TextElement::new("Open a folder to view its files.")
+                        .size(ENTRY_FONT_SIZE - 1.0)
+                        .color(fg))
+                    .child(open_folder_btn);
+            } else {
+                content = content
+                    .child(TextElement::new("No files")
+                        .size(ENTRY_FONT_SIZE)
+                        .color(fg_primary));
+            }
+
+            return content.into();
         }
 
         let bg = cx.theme().color(ColorToken::BgSecondary);
