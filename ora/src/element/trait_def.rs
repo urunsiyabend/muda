@@ -5,6 +5,7 @@ use crate::events::interaction::InteractionState;
 use crate::events::mouse::{Hitbox, HitboxId, MouseDownEvent, MouseMoveEvent, MouseUpEvent};
 use crate::events::dispatch::EventHandlers;
 use crate::layout::{compute_flexbox, AvailableSpace, LayoutInput, LayoutOutput};
+use crate::rendering::text::GlyphCacheKey;
 use crate::style::units::{Rect, Size};
 use crate::style::{Color, Style};
 use crate::theme::Theme;
@@ -31,12 +32,15 @@ pub enum PaintCommand {
         style: Style,
     },
     /// Draw text at the given position with the specified style.
+    /// `cache_key` is Some when the buffer was obtained via measure_text_cached()
+    /// and should be returned to the LRU cache after rendering.
     Text {
         buffer: glyphon::Buffer,
         left: f32,
         top: f32,
         bounds: Rect,
         color: Color,
+        cache_key: Option<GlyphCacheKey>,
     },
     /// Set scissor rectangle for clipping
     SetScissor {
@@ -50,6 +54,10 @@ pub enum PaintCommand {
     /// Marks a boundary between z-layers (e.g., between Stack children).
     /// The renderer flushes rects and text at each boundary to maintain correct z-ordering.
     LayerBoundary,
+    /// Push a paint offset — shifts all subsequent paint commands by (dx, dy).
+    PushOffset { dx: f32, dy: f32 },
+    /// Pop a paint offset, restoring the previous offset.
+    PopOffset,
 }
 
 /// Context for computing layout requirements.
@@ -123,6 +131,28 @@ impl<'a> LayoutContext<'a> {
             let buffer = glyphon::Buffer::new(&mut font_system, metrics);
 
             (buffer, Size::new(width, height))
+        }
+    }
+
+    /// Cache-aware text measurement. Returns (GlyphCacheKey, Buffer, Size).
+    /// The GlyphCacheKey should be passed to paint_text_cached() so the buffer
+    /// is returned to the LRU cache after the frame renders.
+    pub fn measure_text_cached(
+        &mut self,
+        text: &str,
+        font_size: f32,
+        line_height: f32,
+        max_width: Option<f32>,
+    ) -> (GlyphCacheKey, glyphon::Buffer, Size<f32>) {
+        if let Some(text_system_ptr) = self.text_system {
+            unsafe {
+                (*text_system_ptr).measure_text_cached(text, font_size, line_height, max_width)
+            }
+        } else {
+            // Fallback: shape fresh and produce a dummy key
+            let (buffer, size) = self.measure_text(text, font_size, line_height, max_width);
+            let key = GlyphCacheKey::new(text, font_size, line_height);
+            (key, buffer, size)
         }
     }
 
@@ -232,6 +262,11 @@ impl<'a> PrepaintContext<'a> {
         let hitbox = Hitbox { id, bounds, opaque };
         self.hitboxes.push(hitbox);
 
+        // Auto-register parent relationship if a parent is on the stack
+        if let Some(&parent) = self.hitbox_stack.last() {
+            self.event_handlers.register_parent(id, parent);
+        }
+
         id
     }
 
@@ -281,6 +316,15 @@ impl<'a> PrepaintContext<'a> {
         handler: impl FnMut(&MouseMoveEvent, &crate::events::dispatch::EventContext) + 'static,
     ) {
         self.event_handlers.register_mouse_move(hitbox_id, Box::new(handler));
+    }
+
+    /// Register a mouse scroll handler for a hitbox.
+    pub fn on_mouse_scroll(
+        &mut self,
+        hitbox_id: HitboxId,
+        handler: impl FnMut(&crate::events::mouse::MouseScrollEvent, &crate::events::dispatch::EventContext) + 'static,
+    ) {
+        self.event_handlers.register_mouse_scroll(hitbox_id, Box::new(handler));
     }
 
     /// Push a parent hitbox onto the stack.
@@ -333,6 +377,7 @@ pub struct PaintContext<'a> {
     pub(crate) window_size: (u32, u32),
     pub(crate) layout_outputs: &'a [LayoutOutput],
     pub(crate) clip_stack: Vec<Rect>,
+    pub(crate) offset_stack: Vec<(f32, f32)>,
     pub(crate) interaction_state: &'a InteractionState,
     pub(crate) focus_state: &'a FocusState,
 }
@@ -353,6 +398,7 @@ impl<'a> PaintContext<'a> {
             window_size,
             layout_outputs,
             clip_stack: Vec::new(),
+            offset_stack: Vec::new(),
             interaction_state,
             focus_state,
         }
@@ -392,6 +438,28 @@ impl<'a> PaintContext<'a> {
             top: bounds.origin.y,
             bounds: *bounds,
             color: *color,
+            cache_key: None,
+        });
+    }
+
+    /// Add a cached text rendering command.
+    /// Use when the buffer came from LayoutContext::measure_text_cached().
+    /// The cache_key is stored so the buffer can be returned to the LRU cache
+    /// after render_frame() completes.
+    pub fn paint_text_cached(
+        &mut self,
+        buffer: glyphon::Buffer,
+        color: &Color,
+        bounds: &Rect,
+        cache_key: GlyphCacheKey,
+    ) {
+        self.paint_commands.push(PaintCommand::Text {
+            buffer,
+            left: bounds.origin.x,
+            top: bounds.origin.y,
+            bounds: *bounds,
+            color: *color,
+            cache_key: Some(cache_key),
         });
     }
 
@@ -439,15 +507,30 @@ impl<'a> PaintContext<'a> {
         self.focus_state.focused_id() == Some(focus_id) && self.focus_state.is_keyboard_focused()
     }
 
-    /// Push a clipping rectangle onto the stack
+    /// Push a clipping rectangle onto the stack.
+    /// If there is already a clip on the stack, the effective scissor is the
+    /// intersection of the new rect and the current clip (nested clipping).
     pub fn push_clip(&mut self, clip_rect: Rect) {
-        // Round scissor coordinates to nearest integer (RESEARCH.md Pitfall 3)
-        let x = clip_rect.origin.x.round() as u32;
-        let y = clip_rect.origin.y.round() as u32;
-        let width = clip_rect.size.width.round() as u32;
-        let height = clip_rect.size.height.round() as u32;
+        // Compute effective clip: intersection with current top-of-stack (if any)
+        let effective = if let Some(current) = self.clip_stack.last() {
+            current.intersect(&clip_rect)
+        } else {
+            clip_rect
+        };
 
-        self.clip_stack.push(clip_rect);
+        // Clamp to surface bounds to satisfy wgpu requirements
+        let (sw, sh) = self.window_size;
+        let x = (effective.origin.x.round() as u32).min(sw);
+        let y = (effective.origin.y.round() as u32).min(sh);
+        let width = (effective.size.width.round() as u32).min(sw.saturating_sub(x));
+        let height = (effective.size.height.round() as u32).min(sh.saturating_sub(y));
+
+        // Ensure width/height are at least 1 if the rect is non-degenerate,
+        // otherwise wgpu will reject a zero-size scissor.
+        let width = width.max(1).min(sw.saturating_sub(x));
+        let height = height.max(1).min(sh.saturating_sub(y));
+
+        self.clip_stack.push(effective);
         self.paint_commands.push(PaintCommand::SetScissor {
             x,
             y,
@@ -460,11 +543,12 @@ impl<'a> PaintContext<'a> {
     pub fn pop_clip(&mut self) {
         if self.clip_stack.pop().is_some() {
             if let Some(previous) = self.clip_stack.last() {
-                // Restore previous scissor
-                let x = previous.origin.x.round() as u32;
-                let y = previous.origin.y.round() as u32;
-                let width = previous.size.width.round() as u32;
-                let height = previous.size.height.round() as u32;
+                // Restore previous scissor (already an intersection from push_clip)
+                let (sw, sh) = self.window_size;
+                let x = (previous.origin.x.round() as u32).min(sw);
+                let y = (previous.origin.y.round() as u32).min(sh);
+                let width = (previous.size.width.round() as u32).min(sw.saturating_sub(x)).max(1);
+                let height = (previous.size.height.round() as u32).min(sh.saturating_sub(y)).max(1);
 
                 self.paint_commands.push(PaintCommand::SetScissor {
                     x,
@@ -477,6 +561,19 @@ impl<'a> PaintContext<'a> {
                 self.paint_commands.push(PaintCommand::ResetScissor);
             }
         }
+    }
+
+    /// Push a paint offset — shifts all subsequent paint commands by (dx, dy).
+    /// Used by ScrollArea to scroll content without affecting layout.
+    pub fn push_offset(&mut self, dx: f32, dy: f32) {
+        self.offset_stack.push((dx, dy));
+        self.paint_commands.push(PaintCommand::PushOffset { dx, dy });
+    }
+
+    /// Pop a paint offset.
+    pub fn pop_offset(&mut self) {
+        self.offset_stack.pop();
+        self.paint_commands.push(PaintCommand::PopOffset);
     }
 
     /// Get or advance the background-color transition for the given element.

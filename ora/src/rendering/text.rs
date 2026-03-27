@@ -3,7 +3,33 @@ use glyphon::{
     Attrs, Buffer, Cache, Color as GlyphonColor, Family, FontSystem, Metrics, Resolution, Shaping,
     SwashCache, TextArea, TextAtlas, TextBounds, TextRenderer, Viewport,
 };
+use lru::LruCache;
+use std::hash::{Hash, Hasher};
+use std::num::NonZeroUsize;
 use wgpu::{Device, MultisampleState, Queue, RenderPass};
+
+/// Cache key for a shaped glyph buffer.
+/// Encodes text content (as a hash), font size, and line height.
+/// Two lines with identical text/size/height share the same shaped Buffer.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct GlyphCacheKey {
+    pub text_hash: u64,
+    pub font_size_bits: u32,
+    pub line_height_bits: u32,
+}
+
+impl GlyphCacheKey {
+    pub fn new(text: &str, font_size: f32, line_height: f32) -> Self {
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        text.hash(&mut hasher);
+        let text_hash = hasher.finish();
+        Self {
+            text_hash,
+            font_size_bits: font_size.to_bits(),
+            line_height_bits: line_height.to_bits(),
+        }
+    }
+}
 
 /// Text entry for batch rendering
 struct TextEntry {
@@ -12,6 +38,7 @@ struct TextEntry {
     top: f32,
     bounds: TextBounds,
     default_color: GlyphonColor,
+    cache_key: Option<GlyphCacheKey>,
 }
 
 /// TextSystem wraps glyphon for framework-owned text rendering.
@@ -35,6 +62,11 @@ pub struct TextSystem {
     // Multi-layer support
     layer_renderers: Vec<TextRenderer>,
     pending_layers: Vec<Vec<TextEntry>>,
+    // Glyph buffer LRU cache
+    glyph_cache: LruCache<GlyphCacheKey, Buffer>,
+    cache_hits: u64,
+    cache_misses: u64,
+    cache_enabled: bool,
 }
 
 impl TextSystem {
@@ -59,6 +91,9 @@ impl TextSystem {
         // Create viewport
         let viewport = Viewport::new(device, &cache);
 
+        // Capacity: 2048 shaped Buffers. Each Buffer is ~1-2 KB, so total ~2-4 MB.
+        let glyph_cache = LruCache::new(NonZeroUsize::new(2048).unwrap());
+
         Self {
             font_system,
             swash_cache,
@@ -69,6 +104,10 @@ impl TextSystem {
             pending_buffers: Vec::new(),
             layer_renderers: Vec::new(),
             pending_layers: Vec::new(),
+            glyph_cache,
+            cache_hits: 0,
+            cache_misses: 0,
+            cache_enabled: true,
         }
     }
 
@@ -135,6 +174,96 @@ impl TextSystem {
         (buffer, Size::new(max_width, height))
     }
 
+    /// Cache-aware text measurement.
+    ///
+    /// Computes a GlyphCacheKey from (text, font_size, line_height). If the key exists
+    /// in the LRU cache, pops and returns the pre-shaped Buffer (avoiding set_text +
+    /// shape_until_scroll). On miss, falls back to measure_text() and shapes fresh.
+    ///
+    /// The Buffer is POPPED (removed) from the cache because it is moved into
+    /// PaintCommand::Text. It is returned to the cache via return_buffers_to_cache()
+    /// after the frame's render_frame() completes.
+    ///
+    /// Returns (GlyphCacheKey, Buffer, Size<f32>).
+    pub fn measure_text_cached(
+        &mut self,
+        text: &str,
+        font_size: f32,
+        line_height: f32,
+        max_width: Option<f32>,
+    ) -> (GlyphCacheKey, Buffer, Size<f32>) {
+        let key = GlyphCacheKey::new(text, font_size, line_height);
+
+        if self.cache_enabled {
+            if let Some(buffer) = self.glyph_cache.peek(&key) {
+                // Cache hit: clone the buffer (stays in cache for next caller)
+                // and measure size from its existing layout runs.
+                let cloned = buffer.clone();
+                let mut measured_width = 0.0f32;
+                let mut total_lines = 0;
+
+                for run in cloned.layout_runs() {
+                    measured_width = measured_width.max(run.line_w);
+                    total_lines += 1;
+                }
+
+                let height = if total_lines > 0 {
+                    total_lines as f32 * line_height
+                } else {
+                    line_height
+                };
+
+                self.cache_hits += 1;
+                return (key, cloned, Size::new(measured_width, height));
+            }
+        }
+
+        // Cache miss: shape fresh and insert into cache
+        let (buffer, size) = self.measure_text(text, font_size, line_height, max_width);
+        // Store a clone in cache; return the original
+        self.glyph_cache.put(key, buffer.clone());
+        self.cache_misses += 1;
+        (key, buffer, size)
+    }
+
+    /// Return shaped Buffers to the LRU cache after a frame's render completes.
+    ///
+    /// Buffers are extracted from TextSystem before clear() and fed back here.
+    /// Only called when cache_enabled is true.
+    pub fn return_buffers_to_cache(&mut self, buffers: Vec<(GlyphCacheKey, Buffer)>) {
+        if !self.cache_enabled {
+            return;
+        }
+        // With peek+clone in measure_text_cached, entries persist in cache.
+        // This return path refreshes LRU recency for actively-used entries.
+        for (key, buffer) in buffers {
+            self.glyph_cache.put(key, buffer);
+        }
+    }
+
+    /// Return the glyph cache hit rate as a value in [0.0, 1.0].
+    /// Returns 0.0 if no measure_text_cached() calls have been made yet.
+    pub fn cache_hit_rate(&self) -> f64 {
+        let total = self.cache_hits + self.cache_misses;
+        if total == 0 {
+            0.0
+        } else {
+            self.cache_hits as f64 / total as f64
+        }
+    }
+
+    /// Enable or disable the glyph buffer cache.
+    /// When disabled, measure_text_cached() always shapes fresh (hits are 0%).
+    pub fn set_cache_enabled(&mut self, enabled: bool) {
+        self.cache_enabled = enabled;
+    }
+
+    /// Reset hit/miss counters. Call at start of each measurement window if desired.
+    pub fn reset_cache_stats(&mut self) {
+        self.cache_hits = 0;
+        self.cache_misses = 0;
+    }
+
     /// Add a text area for batch rendering.
     ///
     /// The buffer should be the same Buffer returned from measure_text() to ensure
@@ -146,6 +275,7 @@ impl TextSystem {
         top: f32,
         clip_bounds: crate::style::Rect, // From scissor/parent bounds
         color: Color,
+        cache_key: Option<GlyphCacheKey>,
     ) {
         // Convert Color (0.0..1.0 floats) to glyphon::Color (0..255 u8)
         let glyphon_color = GlyphonColor::rgba(
@@ -170,6 +300,7 @@ impl TextSystem {
             top,
             bounds,
             default_color: glyphon_color,
+            cache_key,
         });
     }
 
@@ -251,6 +382,35 @@ impl TextSystem {
         self.atlas.trim(); // Free unused atlas space
     }
 
+    /// Drain all pending buffers (single-layer and all layers) and collect
+    /// those tagged with a cache_key for return to the LRU cache.
+    ///
+    /// This replaces the clear() call at end-of-frame. After draining,
+    /// pending_buffers and pending_layers are empty. atlas.trim() is called.
+    ///
+    /// The returned Vec is passed to return_buffers_to_cache() by the caller.
+    pub fn drain_buffers_for_cache(&mut self) -> Vec<(GlyphCacheKey, Buffer)> {
+        let mut returnable: Vec<(GlyphCacheKey, Buffer)> = Vec::new();
+        // Drain single-layer pending buffers
+        for entry in self.pending_buffers.drain(..) {
+            if let Some(key) = entry.cache_key {
+                returnable.push((key, entry.buffer));
+            }
+        }
+
+        // Drain all layer-specific pending buffers
+        for layer in &mut self.pending_layers {
+            for entry in layer.drain(..) {
+                if let Some(key) = entry.cache_key {
+                    returnable.push((key, entry.buffer));
+                }
+            }
+        }
+
+        self.atlas.trim();
+        returnable
+    }
+
     /// Get mutable access to the FontSystem for advanced text operations.
     pub fn font_system_mut(&mut self) -> &mut FontSystem {
         &mut self.font_system
@@ -289,6 +449,7 @@ impl TextSystem {
         top: f32,
         clip_bounds: crate::style::Rect,
         color: Color,
+        cache_key: Option<GlyphCacheKey>,
     ) {
         let glyphon_color = GlyphonColor::rgba(
             (color.r * 255.0) as u8,
@@ -309,6 +470,7 @@ impl TextSystem {
                 top,
                 bounds,
                 default_color: glyphon_color,
+                cache_key,
             });
         }
     }

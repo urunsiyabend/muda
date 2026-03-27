@@ -9,7 +9,8 @@ use std::rc::Rc;
 
 use crate::context::ViewContext;
 use crate::editor_adapter::{
-    EditorDataSource, FileTreeNode, FileTreePresentation, RenderModel, SidebarPresentation,
+    EditorCommand, EditorDataSource, FileTreeNode, FileTreePresentation, RenderModel,
+    SidebarPresentation,
 };
 use crate::element::AnyElement;
 use crate::events::FocusHandle;
@@ -31,6 +32,10 @@ pub struct EditorRootView {
     adapter: SharedAdapter,
     /// Shared smooth-scroll pixel offset from the event loop accumulator.
     scroll_offset: crate::app::SharedScrollOffset,
+    /// Shared focus state from the event loop (window focus tracking).
+    focus_state: crate::app::SharedFocusState,
+    /// Persistent sidebar scroll state (survives across frames).
+    sidebar_scroll: crate::elements::SharedScrollState,
     /// Persistent focus handles (created once, reused across frames).
     dialog_save_focus: FocusHandle,
     dialog_dont_save_focus: FocusHandle,
@@ -46,11 +51,14 @@ impl EditorRootView {
     pub fn new(
         adapter: SharedAdapter,
         scroll_offset: crate::app::SharedScrollOffset,
+        focus_state: crate::app::SharedFocusState,
         cx: &mut ViewContext,
     ) -> Self {
         Self {
             adapter,
             scroll_offset,
+            focus_state,
+            sidebar_scroll: crate::elements::scroll_state(),
             dialog_save_focus: cx.focus_handle(),
             dialog_dont_save_focus: cx.focus_handle(),
             dialog_cancel_focus: cx.focus_handle(),
@@ -58,46 +66,45 @@ impl EditorRootView {
         }
     }
 
-    /// Build a FileTreePresentation from the sidebar's flat entry list.
-    ///
-    /// core_editor provides a flat list of file/directory entries via
-    /// SidebarPresentation. We convert these into FileTreeNode roots so
-    /// the FileTreeView in SidebarView can render a proper file explorer.
+    /// Build a FileTreePresentation from the sidebar's recursive tree.
     fn build_file_tree(sidebar: &SidebarPresentation) -> FileTreePresentation {
-        if !sidebar.visible || sidebar.entries.is_empty() {
+        if !sidebar.visible || sidebar.tree.is_empty() {
             return FileTreePresentation::default();
         }
 
-        let roots: Vec<FileTreeNode> = sidebar
-            .entries
-            .iter()
-            .map(|entry| {
-                if entry.is_dir {
-                    FileTreeNode::dir(&entry.name, false, vec![])
-                } else {
-                    let ext = std::path::Path::new(&entry.name)
-                        .extension()
-                        .and_then(|s| s.to_str())
-                        .unwrap_or("")
-                        .to_string();
-                    FileTreeNode::file(&entry.name, ext)
-                }
-            })
-            .collect();
-
-        let selected_index = sidebar.entries.iter().position(|e| e.is_selected);
-
         FileTreePresentation {
-            roots,
-            selected_index,
+            roots: sidebar.tree.clone(),
+            // Don't highlight any entry by default — keyboard selection
+            // is a TUI concept, not relevant for mouse-driven tree view
+            selected_index: None,
         }
     }
 
     /// Build the AppLayout from a fresh RenderModel.
     fn build_layout(&self, model: &RenderModel) -> AppLayout {
+        // Build shared dispatch closure for click handlers (tabs, sidebar, etc.).
+        let adapter_for_dispatch = self.adapter.clone();
+        let dispatch: Rc<dyn Fn(EditorCommand)> = Rc::new(move |cmd: EditorCommand| {
+            adapter_for_dispatch.borrow_mut().dispatch_command(cmd);
+        });
+
+        // Get window height from viewport_lines (reverse the event loop calculation)
+        const LINE_HEIGHT: f32 = 21.0;
+        const TAB_BAR_H: f32 = 36.0;
+        const STATUS_BAR_H: f32 = 28.0;
+        let viewport_lines = {
+            let adapter = self.adapter.borrow();
+            adapter.viewport_lines()
+        };
+        let window_h = (viewport_lines as f32 * LINE_HEIGHT) + TAB_BAR_H + STATUS_BAR_H;
+
         let file_tree = Self::build_file_tree(&model.sidebar);
-        let sidebar = SidebarView::new(model.sidebar.clone(), file_tree);
-        let tab_bar = TabBarView::new(model.tab_bar.clone());
+        let sidebar = SidebarView::new(model.sidebar.clone(), file_tree)
+            .with_dispatch(dispatch.clone())
+            .with_scroll_state(self.sidebar_scroll.clone())
+            .with_content_height(window_h);
+
+        let tab_bar = TabBarView::new(model.tab_bar.clone()).with_dispatch(dispatch.clone());
         let gutter = GutterView::new_with_scroll_offset(
             model.gutter.clone(),
             model.visible_lines.clone(),
@@ -162,6 +169,7 @@ impl View for EditorRootView {
         const LINE_HEIGHT: f32 = 21.0;
         let scroll_top_px = self.scroll_offset.get();
         model.scroll_y_offset_px = scroll_top_px % LINE_HEIGHT;
+        model.editor_focused = self.focus_state.get();
 
         // Construct the AppLayout from fresh data and render it
         let layout = self.build_layout(&model);

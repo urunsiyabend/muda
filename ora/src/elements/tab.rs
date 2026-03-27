@@ -1,8 +1,10 @@
 use crate::element::{Element, LayoutContext, LayoutId, PaintContext, PrepaintContext};
 use crate::elements::text::{TextElement, TextState};
 use crate::events::mouse::HitboxId;
+use crate::events::MouseButton;
 use crate::style::*;
 use crate::theme::ColorToken;
+use std::rc::Rc;
 
 const TAB_HEIGHT: f32 = 36.0;
 const TAB_PADDING_H: f32 = 12.0;
@@ -15,8 +17,8 @@ pub struct Tab {
     is_active: bool,
     is_dirty: bool,
     show_close: bool,
-    on_click: Option<Box<dyn Fn() + 'static>>,
-    on_close: Option<Box<dyn Fn() + 'static>>,
+    on_click: Option<Rc<dyn Fn() + 'static>>,
+    on_close: Option<Rc<dyn Fn() + 'static>>,
     // Internal text elements (created during request_layout)
     label_element: Option<TextElement>,
     close_element: Option<TextElement>,
@@ -57,13 +59,13 @@ impl Tab {
 
     /// Attach a click handler for tab selection
     pub fn on_click(mut self, handler: impl Fn() + 'static) -> Self {
-        self.on_click = Some(Box::new(handler));
+        self.on_click = Some(Rc::new(handler));
         self
     }
 
     /// Attach a handler for the close button
     pub fn on_close(mut self, handler: impl Fn() + 'static) -> Self {
-        self.on_close = Some(Box::new(handler));
+        self.on_close = Some(Rc::new(handler));
         self
     }
 }
@@ -137,13 +139,9 @@ impl Element for Tab {
     fn prepaint(&mut self, state: &mut Self::RequestLayoutState, cx: &mut PrepaintContext) {
         let bounds = cx.bounds(state.layout_id);
 
-        // Opaque hitbox for entire tab
-        let hitbox_id = cx.register_hitbox(bounds, true);
-        state.hitbox_id = Some(hitbox_id);
-
-        // Separate hitbox for close button (right side)
-        if self.show_close {
-            let close_bounds = Rect {
+        // Compute close button bounds (right side) before registering hitboxes
+        let close_bounds = if self.show_close {
+            Some(Rect {
                 origin: Point {
                     x: bounds.origin.x + bounds.size.width - CLOSE_BUTTON_SIZE - TAB_PADDING_H,
                     y: bounds.origin.y + (TAB_HEIGHT - CLOSE_BUTTON_SIZE) / 2.0,
@@ -152,10 +150,54 @@ impl Element for Tab {
                     width: CLOSE_BUTTON_SIZE,
                     height: CLOSE_BUTTON_SIZE,
                 },
-            };
-            let close_hitbox_id = cx.register_hitbox(close_bounds, false);
+            })
+        } else {
+            None
+        };
+
+        // Register tab body hitbox first (lower index).
+        // hit_test iterates in REVERSE order, so the LAST registered opaque hitbox wins.
+        // The close button is registered after the tab body, giving it a higher index
+        // and priority in hit_test when the cursor is over the close button area.
+        let hitbox_id = cx.register_hitbox(bounds, true);
+        state.hitbox_id = Some(hitbox_id);
+
+        // Register close button hitbox AFTER tab body (higher index = wins in hit_test).
+        // Must be opaque so hit_test can find it.
+        if let Some(cb) = close_bounds {
+            let close_hitbox_id = cx.register_hitbox(cb, true);
             state.close_hitbox_id = Some(close_hitbox_id);
+
+            // Wire on_close to close button mouse down
+            if let Some(on_close) = self.on_close.clone() {
+                cx.on_mouse_down(close_hitbox_id, move |event, ctx| {
+                    if ctx.phase() != crate::events::dispatch::DispatchPhase::Bubble { return; }
+                    if matches!(event.button, MouseButton::Left | MouseButton::Middle) {
+                        on_close();
+                    }
+                });
+            }
         }
+
+        // Wire on_click to tab body mouse down (left click = switch, middle = close)
+        let on_click = self.on_click.clone();
+        let on_close_for_middle = self.on_close.clone();
+        cx.on_mouse_down(hitbox_id, move |event, ctx| {
+            if ctx.phase() != crate::events::dispatch::DispatchPhase::Bubble { return; }
+            match event.button {
+                MouseButton::Left => {
+                    if let Some(handler) = &on_click {
+                        handler();
+                    }
+                }
+                MouseButton::Middle => {
+                    if let Some(handler) = &on_close_for_middle {
+                        handler();
+                    }
+                }
+                _ => {}
+            }
+        });
 
         // Prepaint child text elements
         if let Some(label_el) = &mut self.label_element {
@@ -253,5 +295,14 @@ mod tests {
         assert!(t.is_active);
         assert!(t.is_dirty);
         assert_eq!(t.label, "Test");
+    }
+
+    #[test]
+    fn test_tab_callbacks() {
+        let clicked = std::cell::Cell::new(false);
+        let t = tab("test.rs").on_click(move || {
+            clicked.set(true);
+        });
+        assert!(t.on_click.is_some());
     }
 }

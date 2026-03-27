@@ -248,6 +248,60 @@ impl TextBuffer {
     pub fn rope(&self) -> &Rope {
         &self.rope
     }
+
+    /// Returns the (start, end) offsets of the word boundary around `offset`.
+    ///
+    /// Uses VS Code-like character classification:
+    /// - alphanumeric + underscore = word
+    /// - whitespace = whitespace
+    /// - everything else = punctuation
+    ///
+    /// The returned range is a half-open interval `[start, end)` spanning a
+    /// maximal run of same-class characters containing `offset`.
+    pub fn word_boundary_at(&self, offset: usize) -> (usize, usize) {
+        let total = self.len_chars();
+        if total == 0 {
+            return (0, 0);
+        }
+        let offset = offset.min(total.saturating_sub(1));
+        let ch = self.char_at(offset).unwrap_or(' ');
+        let class = word_char_class(ch);
+
+        // Scan left for word start.
+        let mut start = offset;
+        while start > 0 {
+            if let Some(prev) = self.char_at(start - 1) {
+                if word_char_class(prev) != class {
+                    break;
+                }
+            }
+            start -= 1;
+        }
+
+        // Scan right for word end.
+        let mut end = offset;
+        while end < total {
+            if let Some(next) = self.char_at(end) {
+                if word_char_class(next) != class {
+                    break;
+                }
+            }
+            end += 1;
+        }
+
+        (start, end)
+    }
+}
+
+/// Character classification for word boundary detection (VS Code rules).
+fn word_char_class(ch: char) -> u8 {
+    if ch.is_alphanumeric() || ch == '_' {
+        0 // word
+    } else if ch.is_whitespace() {
+        2 // whitespace
+    } else {
+        1 // punctuation
+    }
 }
 
 impl Default for TextBuffer {
@@ -362,5 +416,54 @@ mod tests {
         assert_eq!(buf.revision(), 2);
         buf.delete(TextRange::new(0, 1));
         assert_eq!(buf.revision(), 3);
+    }
+
+    // === word_boundary_at tests ===
+
+    #[test]
+    fn test_word_boundary_at_word_chars() {
+        let buf = TextBuffer::from_str("hello world");
+        // Inside "hello" (offset 2 = 'l')
+        assert_eq!(buf.word_boundary_at(2), (0, 5));
+        // Inside "world" (offset 8 = 'r')
+        assert_eq!(buf.word_boundary_at(8), (6, 11));
+    }
+
+    #[test]
+    fn test_word_boundary_at_whitespace() {
+        let buf = TextBuffer::from_str("hello world");
+        // On the space (offset 5)
+        assert_eq!(buf.word_boundary_at(5), (5, 6));
+    }
+
+    #[test]
+    fn test_word_boundary_at_punctuation() {
+        let buf = TextBuffer::from_str("foo::bar");
+        // On first ':' (offset 3)
+        assert_eq!(buf.word_boundary_at(3), (3, 5));
+        // "foo" (offset 1)
+        assert_eq!(buf.word_boundary_at(1), (0, 3));
+        // "bar" (offset 6)
+        assert_eq!(buf.word_boundary_at(6), (5, 8));
+    }
+
+    #[test]
+    fn test_word_boundary_at_underscore() {
+        let buf = TextBuffer::from_str("foo_bar baz");
+        // Underscore is a word char, so "foo_bar" is one word
+        assert_eq!(buf.word_boundary_at(3), (0, 7));
+    }
+
+    #[test]
+    fn test_word_boundary_at_empty_buffer() {
+        let buf = TextBuffer::new();
+        assert_eq!(buf.word_boundary_at(0), (0, 0));
+    }
+
+    #[test]
+    fn test_word_boundary_at_end_of_buffer() {
+        let buf = TextBuffer::from_str("hello");
+        // Past end clamps to last char
+        assert_eq!(buf.word_boundary_at(100), (0, 5));
     }
 }

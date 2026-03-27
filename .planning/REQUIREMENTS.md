@@ -1,139 +1,106 @@
-# Requirements: ora UI Framework
+# Requirements: muda v2.0 Functional Editor
 
-**Defined:** 2026-01-28
-**Core Value:** A single, authoritative UI toolkit that eliminates duplicated styling, enforces consistent design tokens, and provides a scalable GPUI-like component model for the entire GPU client.
+**Defined:** 2026-03-26
+**Core Value:** A functional, performant code editor built on ora's GPU-accelerated UI framework — real file operations, multi-tab editing, selection, clipboard, find/replace, and Zed-level rendering performance.
 
-## v1 Requirements
+## v1.0 Requirements (Validated)
 
-Requirements for initial release. Each maps to roadmap phases.
+All v1.0 ora UI framework requirements shipped and validated. See `.planning/MILESTONES.md` for full list.
 
-### Core Framework
+Summary: 59 requirements across Core Framework, View System, Element System, Layout, Rendering, Events, Design System, Transitions, Component Migration (Chrome, Text Editing, Advanced UI, Widgets), and Integration — all complete.
 
-- [x] **CORE-01**: ora crate provides `ora::run(app)` entry point that owns the winit event loop and application lifecycle
-- [x] **CORE-02**: Single window creation with wgpu surface setup, resize handling, and vsync
-- [x] **CORE-03**: Entity/Model reactive state system — state lives in `Model<T>`, views observe models and re-render on change
-- [x] **CORE-04**: Effect queue system — `cx.notify()` and `cx.emit()` queue effects, flushed after update completes (prevents reentrancy)
-- [x] **CORE-05**: Context types provide scoped access to application state (`AppContext`, `ViewContext`, `WindowContext`)
+## v2.0 Requirements
 
-### View System
+Requirements for v2.0 Functional Editor milestone. Each maps to roadmap phases.
 
-- [x] **VIEW-01**: `View` trait with `render(&mut self, cx: &mut ViewContext) -> impl Element` method
-- [x] **VIEW-02**: Framework manages element tree lifecycle — reconstructs tree on state change, diffs for efficient re-rendering
-- [x] **VIEW-03**: Views can observe `Model<T>` entities and automatically re-render when observed state changes
-- [x] **VIEW-04**: Views can subscribe to typed events emitted by entities
+### Foundation & Bug Fixes
 
-### Element System
+- [x] **FIX-01**: Event loop uses event-driven redraw — no unconditional `request_redraw()`, idle GPU work eliminated
+- [x] **FIX-02**: Selection rendering works correctly — Shift+arrow no longer causes text to disappear
+- [x] **FIX-03**: All v2 EditorCommand variants defined at once (SwitchTab, CloseTab, OpenFile, SaveAs, New, Find, Replace, ReplaceAll, GoToLine)
+- [x] **FIX-04**: EditorDataSource trait split into focused sub-traits covering all v2 methods (workspace, search, file operations)
+- [x] **FIX-05**: Caret blink timer drives redraw in `about_to_wait()` instead of continuous rendering
 
-- [x] **ELEM-01**: `Element` trait with three-phase lifecycle: `request_layout()`, `prepaint()`, `paint()`
-- [x] **ELEM-02**: Styled `Div` primitive — GPU-rendered rectangle with background, border, padding, margin, border-radius
-- [x] **ELEM-03**: Styled `Text` primitive — `Text::new("hello").size(14)` API, framework manages glyphon internally
-- [x] **ELEM-04**: Elements can have children (composable tree structure)
-- [x] **ELEM-05**: Tailwind-style builder API — `div().flex().gap(4).bg(color).padding(8)` fluent syntax
-- [~] **ELEM-06**: Automatic scissor clipping — framework manages clip rects per element, children cannot render outside parent bounds (API infrastructure implemented: PaintContext push_clip/pop_clip, PaintCommand SetScissor/ResetScissor; GPU execution and Div integration deferred)
+### Buffer Registry & Multi-Tab
 
-### Layout
+- [ ] **TAB-01**: Buffer Registry (`HashMap<PathBuf, DocumentId>`) deduplicates files — opening same path reuses existing buffer
+- [ ] **TAB-02**: User can click a tab to switch active buffer with scroll/cursor state preserved per tab
+- [ ] **TAB-03**: User can close a tab with Ctrl+W — dirty buffers trigger save-before-close dialog
+- [ ] **TAB-04**: User can cycle through open tabs with Ctrl+Tab / Ctrl+Shift+Tab
+- [ ] **TAB-05**: Tab dirty indicator reflects actual buffer modified state
 
-- [x] **LAYOUT-01**: Simple stack/flex layout engine — row and column containers with basic alignment (start, center, end, stretch)
-- [x] **LAYOUT-02**: Gap support — spacing between children in row/column containers
-- [x] **LAYOUT-03**: Flex-grow and flex-shrink — proportional space distribution among children
-- [x] **LAYOUT-04**: Fixed and percentage sizing — elements can specify width/height as fixed pixels or percentage of parent
-- [x] **LAYOUT-05**: Padding and margin — per-element spacing that affects layout calculations
+### File Operations
 
-### Rendering
+- [x] **FILE-01**: User can open a file via Ctrl+O with native OS file picker (rfd)
+- [x] **FILE-02**: User can save the active file via Ctrl+S (silently if path known, Save As dialog if untitled)
+- [x] **FILE-03**: User can Save As via Ctrl+Shift+S to choose a new file path
+- [x] **FILE-04**: User can create a new untitled buffer via Ctrl+N
+- [x] **FILE-05**: File I/O uses async wrapper at wgpu_client dispatch layer — UI thread never blocks on disk
+- [x] **FILE-06**: Non-UTF-8 files show user-facing error message; UTF-8 BOM stripped on load
 
-- [x] **REND-01**: ora owns wgpu Instance, Device, Queue, Surface — creates and manages GPU resources
-- [x] **REND-02**: Three-phase rendering pipeline — layout computation, prepaint (hitbox registration), paint (scene construction)
-- [x] **REND-03**: Text rendering via wrapped glyphon — single FontSystem, TextAtlas, SwashCache managed by framework
-- [x] **REND-04**: Single-batch text rendering — all text from all views collected and rendered in one glyphon prepare/render pass
-- [x] **REND-05**: Draw call batching — all rectangles batched into minimal draw calls using instanced rendering
-- [x] **REND-06**: Render pass structure — UI backgrounds, editor content, UI text, overlays as ordered phases
-- [x] **REND-07**: Overlay z-ordering — overlays (command palette, dialog, toast) correctly occlude lower-layer content including text via layered multi-pass rendering
+### Sidebar File Browser
 
-### Events
+- [ ] **SIDE-01**: Sidebar reads real directory tree via `std::fs::read_dir` (replaces mock data)
+- [ ] **SIDE-02**: User can click a file in sidebar to open it in editor (routes through Buffer Registry)
+- [ ] **SIDE-03**: Folder expand/collapse state persisted in view (not re-collapsed each frame)
+- [ ] **SIDE-04**: User can open a folder via dialog to set workspace root
+- [ ] **SIDE-05**: File watcher (`notify`) updates sidebar when external changes occur
+- [ ] **SIDE-06**: Common directories excluded from expansion (target/, .git/, node_modules/)
 
-- [x] **EVT-01**: Mouse event routing — hit testing against element tree, dispatch click/hover/scroll to correct element
-- [x] **EVT-02**: Keyboard event system — platform-agnostic key translation, action registry for shortcuts
-- [x] **EVT-03**: Focus management — focus stack with enter/exit callbacks, keyboard events routed to focused element
-- [x] **EVT-04**: Two-phase event dispatch — capture (root→target) then bubble (target→root), with stop_propagation
-- [x] **EVT-05**: Automatic hover/active state tracking — framework tracks mouse position, elements query `is_hovered`, `is_active`
+### Selection & Clipboard
 
-### Design System
+- [x] **SEL-01**: User can click in text area to position cursor at that location (pixel-to-line/col mapping)
+- [x] **SEL-02**: User can click and drag to select text ranges
+- [x] **SEL-03**: User can select text with Shift+arrow, Shift+click, Ctrl+Shift+arrow
+- [x] **SEL-04**: User can select all text with Ctrl+A
+- [x] **SEL-05**: User can copy selection to OS clipboard with Ctrl+C (via arboard)
+- [x] **SEL-06**: User can cut selection to OS clipboard with Ctrl+X
+- [x] **SEL-07**: User can paste from OS clipboard with Ctrl+V
 
-- [x] **DS-01**: Consolidated color token system — semantic roles (BgPrimary, FgSecondary, AccentPrimary, etc.) as single source of truth
-- [x] **DS-02**: Spacing token system — named spacing values (xs=4, sm=8, md=12, lg=16, xl=24) enforced through API
-- [x] **DS-03**: Typography scale — semantic text sizes (body=14, small=12, code=14, heading=18) with line height multipliers
-- [x] **DS-04**: Theme system — dark and light palettes, switchable at runtime via token palette swap
-- [~] **DS-05**: All design tokens defined in ora crate — no tokens in wgpu_client, single import for all styling (ora tokens complete; wgpu_client migration deferred to Phase 9)
+### Find & Replace
 
-### Transitions
+- [ ] **FIND-01**: User can open find bar with Ctrl+F — inline overlay at top of editor area
+- [ ] **FIND-02**: All matches highlighted in text area with match count "N of M" displayed
+- [ ] **FIND-03**: User can navigate matches with next/prev (Enter/Shift+Enter or arrow buttons)
+- [ ] **FIND-04**: User can toggle case-sensitive, whole-word, and regex search modes
+- [ ] **FIND-05**: User can open replace row with Ctrl+H — Replace One and Replace All buttons
+- [ ] **FIND-06**: Replace All executes as single Transaction for one-step undo
+- [ ] **FIND-07**: User can close find bar with Escape, returning focus to editor
+- [ ] **FIND-08**: User can jump to a line number with Ctrl+G dialog
 
-- [ ] **TRANS-01**: CSS-like property transitions — animate opacity, color, background-color, position on state changes
-- [ ] **TRANS-02**: Easing functions — linear, ease-in, ease-out, ease-in-out, custom cubic-bezier
-- [ ] **TRANS-03**: Duration specification — transitions have configurable duration in milliseconds
-- [ ] **TRANS-04**: Hover/active transitions — elements smoothly transition between default, hovered, and pressed states
+### Performance
 
-### Component Migration — Editor Chrome
+- [ ] **PERF-01**: Incremental tree-sitter parsing — `parser.parse(content, Some(old_tree))` reuses previous parse tree
+- [ ] **PERF-02**: Glyphon Buffer objects cached by (text, font_size, line_height) with LRU eviction
+- [ ] **PERF-03**: Tree-sitter parsing runs on background thread for files >100KB
 
-- [ ] **CHROME-01**: TabBar/EditorTabs migrated to ora View — tab strip with close buttons, dirty indicators, hover states
-- [ ] **CHROME-02**: StatusBar/StatusLine migrated to ora View — cursor position, language, encoding, git branch display
-- [ ] **CHROME-03**: Sidebar migrated to ora View — collapsible file explorer panel with header and content area
-- [ ] **CHROME-04**: Gutter migrated to ora View — line numbers with current line highlight
-- [ ] **CHROME-05**: Dialog migrated to ora View — modal overlay for save/discard prompts
+## Future Requirements (Post-v2)
 
-### Component Migration — Text Editing Core
+### Multi-File Search
+- **SEARCH-01**: Find across files (Ctrl+Shift+F) with results panel
 
-- [ ] **EDIT-01**: TextArea migrated to ora View — syntax-highlighted text rendering with selection backgrounds
-- [ ] **EDIT-02**: Caret migrated to ora element — blinking cursor with configurable blink rate
-- [ ] **EDIT-03**: Selection rendering migrated to ora — background highlights for selected text ranges
+### Advanced Editing
+- **AEDIT-01**: Multi-cursor editing
+- **AEDIT-02**: Bracket matching and auto-close
+- **AEDIT-03**: Minimap sidebar
 
-### Component Migration — Advanced UI
+### File Tree Mutation
+- **FTREE-01**: Create new file/folder from sidebar
+- **FTREE-02**: Rename file/folder inline
+- **FTREE-03**: Delete file/folder with confirmation
 
-- [x] **UI-01**: CommandPalette migrated to ora View — searchable command overlay with filtered results
-- [x] **UI-02**: FileTree migrated to ora View — hierarchical file navigation with expand/collapse, icons
-- [x] **UI-03**: PanelManager migrated to ora View — bottom panel system with tabs (output, problems)
-- [x] **UI-04**: AppLayout migrated to ora — main layout orchestrator that computes bounds for all regions
+### Editor Layout
+- **LAYOUT-01**: Split panes (vertical/horizontal)
+- **LAYOUT-02**: Tab reordering via drag and drop
 
-### Component Migration — Widgets
+### Language Intelligence
+- **LSP-01**: LSP client integration
+- **LSP-02**: Diagnostics display (errors, warnings)
+- **LSP-03**: Go to definition, find references
+- **LSP-04**: Autocomplete
 
-- [x] **WIDGET-01**: Button widget implemented in ora — with size tiers, hover/active states, label + optional icon
-- [x] **WIDGET-02**: Input widget implemented in ora — text input with placeholder, focus state, selection
-- [x] **WIDGET-03**: Checkbox and Toggle widgets in ora — boolean controls with checked/unchecked states
-- [x] **WIDGET-04**: ListItem widget in ora — selectable list row with label, optional icon, hover state
-- [x] **WIDGET-05**: Tab widget in ora — individual tab with active/inactive states, close button
-- [x] **WIDGET-06**: TreeItem widget in ora — tree node with expand/collapse chevron, indentation
-- [x] **WIDGET-07**: ContextMenu widget in ora — popup menu with items, separators, keyboard navigation
-- [x] **WIDGET-08**: Toast widget in ora — temporary notification with auto-dismiss
-
-### Integration
-
-- [ ] **INT-01**: wgpu_client reduced to thin app shell — creates ora App, registers root View, calls `ora::run()`
-- [ ] **INT-02**: core_editor integration — ora views consume RenderModel from core_editor's ViewModelBuilder
-- [ ] **INT-03**: EditorCommand dispatch — keyboard events translated to EditorCommand, dispatched to core_editor App
-- [ ] **INT-04**: All hardcoded values eliminated — no raw float literals for heights, widths, font sizes, padding in wgpu_client
-- [ ] **INT-05**: All duplicated styling logic removed — single layout calculation path per component
-
-## v2 Requirements
-
-Deferred to future release. Tracked but not in current roadmap.
-
-### Layout Engine
-
-- **LAYOUT-V2-01**: Full CSS flexbox via taffy — flex-wrap, align-content, order, flex-basis
-- **LAYOUT-V2-02**: CSS Grid layout support via taffy — grid-template, grid-area, named lines
-
-### Animation
-
-- **ANIM-V2-01**: Keyframe animation system — multi-step animations with per-keyframe easing
-- **ANIM-V2-02**: Spring physics animations — natural motion for panel slides, scroll deceleration
-
-### Advanced Features
-
-- **ADV-V2-01**: Multi-window support — secondary windows for split views, settings
-- **ADV-V2-02**: Drag-and-drop API — tab reordering, file tree drag, cross-component drops
-- **ADV-V2-03**: Virtualized scrolling — framework-level list virtualization for large datasets
-- **ADV-V2-04**: Accessibility/screen reader — platform-specific APIs (VoiceOver, NVDA)
-- **ADV-V2-05**: Hot-reload themes — runtime theme switching without recompile
-- **ADV-V2-06**: Layout debug overlay — browser-like element inspector with bounds visualization
+### Terminal
+- **TERM-01**: Integrated terminal panel
 
 ## Out of Scope
 
@@ -141,14 +108,16 @@ Explicitly excluded. Documented to prevent scope creep.
 
 | Feature | Reason |
 |---------|--------|
-| Web rendering target | wgpu-web requires WASM, different event model; entirely different ecosystem |
-| Custom shader API | Exposes wgpu internals, breaks abstraction; styled primitives cover 99% of editor UI |
-| TUI/ratatui backend | ora is GPU-only; ratatui_client has fundamentally different rendering semantics |
-| Component marketplace/plugins | ora is internal to muda; no external consumers; premature abstraction |
-| Responsive breakpoints | Editor layout is manual (user drags dividers); no automatic "mobile view" |
-| Rich animation timeline | Editors need transitions, not After Effects; keyframes deferred to v2 |
-| Undo/redo for UI state | Document undo lives in core_editor; UI state doesn't need undo |
-| Gesture recognition | Editors are keyboard-first; basic mouse events sufficient |
+| Find across files (Ctrl+Shift+F) | High complexity, defer to v3 |
+| Multi-cursor editing | Complex selection model, not needed for functional editor |
+| File tree mutation (rename/delete/new) | v2 is read-only file browsing; mutation in v3 |
+| Split panes | Single editor pane sufficient for v2 |
+| Tab reordering via drag | Click switching sufficient for v2 |
+| LSP integration | v2 focuses on basic editing; language intelligence in v3 |
+| Bracket matching / minimap | Polish features, not core functionality |
+| Terminal panel | Separate concern, defer to v3 |
+| Hot-reload themes at runtime | Compile-time token system sufficient |
+| Plugin/extension API | Internal framework only |
 
 ## Traceability
 
@@ -156,78 +125,52 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CORE-01 | Phase 1 | Complete |
-| CORE-02 | Phase 1 | Complete |
-| CORE-03 | Phase 3 | Complete |
-| CORE-04 | Phase 3 | Complete |
-| CORE-05 | Phase 1 | Complete |
-| VIEW-01 | Phase 1 | Complete |
-| VIEW-02 | Phase 1 | Complete |
-| VIEW-03 | Phase 3 | Complete |
-| VIEW-04 | Phase 3 | Complete |
-| ELEM-01 | Phase 1 | Complete |
-| ELEM-02 | Phase 2 | Complete |
-| ELEM-03 | Phase 2 | Complete |
-| ELEM-04 | Phase 1 | Complete |
-| ELEM-05 | Phase 5 | Pending |
-| ELEM-06 | Phase 2 | Partial (API ready, GPU deferred) |
-| LAYOUT-01 | Phase 2 | Complete |
-| LAYOUT-02 | Phase 2 | Complete |
-| LAYOUT-03 | Phase 2 | Complete |
-| LAYOUT-04 | Phase 2 | Complete |
-| LAYOUT-05 | Phase 2 | Complete |
-| REND-01 | Phase 2 | Complete |
-| REND-02 | Phase 2 | Complete |
-| REND-03 | Phase 2 | Complete |
-| REND-04 | Phase 2 | Complete |
-| REND-05 | Phase 2 | Complete |
-| REND-06 | Phase 2 | Complete |
-| REND-07 | Phase 8.1 | Complete |
-| EVT-01 | Phase 4 | Pending |
-| EVT-02 | Phase 4 | Pending |
-| EVT-03 | Phase 4 | Pending |
-| EVT-04 | Phase 4 | Pending |
-| EVT-05 | Phase 4 | Pending |
-| DS-01 | Phase 6 | Pending |
-| DS-02 | Phase 6 | Pending |
-| DS-03 | Phase 6 | Pending |
-| DS-04 | Phase 6 | Pending |
-| DS-05 | Phase 6 | Pending |
-| TRANS-01 | Phase 9 | Pending |
-| TRANS-02 | Phase 9 | Pending |
-| TRANS-03 | Phase 9 | Pending |
-| TRANS-04 | Phase 9 | Pending |
-| CHROME-01 | Phase 7 | Pending |
-| CHROME-02 | Phase 7 | Pending |
-| CHROME-03 | Phase 7 | Pending |
-| CHROME-04 | Phase 7 | Pending |
-| CHROME-05 | Phase 7 | Pending |
-| EDIT-01 | Phase 7 | Pending |
-| EDIT-02 | Phase 7 | Pending |
-| EDIT-03 | Phase 7 | Pending |
-| UI-01 | Phase 8 | Complete |
-| UI-02 | Phase 8 | Complete |
-| UI-03 | Phase 8 | Complete |
-| UI-04 | Phase 8 | Complete |
-| WIDGET-01 | Phase 8 | Complete |
-| WIDGET-02 | Phase 8 | Complete |
-| WIDGET-03 | Phase 8 | Complete |
-| WIDGET-04 | Phase 8 | Complete |
-| WIDGET-05 | Phase 8 | Complete |
-| WIDGET-06 | Phase 8 | Complete |
-| WIDGET-07 | Phase 8 | Complete |
-| WIDGET-08 | Phase 8 | Complete |
-| INT-01 | Phase 9 | Pending |
-| INT-02 | Phase 9 | Pending |
-| INT-03 | Phase 9 | Pending |
-| INT-04 | Phase 9 | Pending |
-| INT-05 | Phase 9 | Pending |
+| FIX-01 | Phase 10 | Complete |
+| FIX-02 | Phase 10 | Complete |
+| FIX-03 | Phase 10 | Complete |
+| FIX-04 | Phase 10 | Complete |
+| FIX-05 | Phase 10 | Complete |
+| TAB-01 | Phase 11 | Pending |
+| TAB-02 | Phase 11 | Pending |
+| TAB-03 | Phase 11 | Pending |
+| TAB-04 | Phase 11 | Pending |
+| TAB-05 | Phase 11 | Pending |
+| FILE-01 | Phase 12 | Complete |
+| FILE-02 | Phase 12 | Complete |
+| FILE-03 | Phase 12 | Complete |
+| FILE-04 | Phase 12 | Complete |
+| FILE-05 | Phase 12 | Complete |
+| FILE-06 | Phase 12 | Complete |
+| SIDE-01 | Phase 14 | Pending |
+| SIDE-02 | Phase 14 | Pending |
+| SIDE-03 | Phase 14 | Pending |
+| SIDE-04 | Phase 14 | Pending |
+| SIDE-05 | Phase 14 | Pending |
+| SIDE-06 | Phase 14 | Pending |
+| SEL-01 | Phase 13 | Complete |
+| SEL-02 | Phase 13 | Complete |
+| SEL-03 | Phase 13 | Complete |
+| SEL-04 | Phase 13 | Complete |
+| SEL-05 | Phase 13 | Complete |
+| SEL-06 | Phase 13 | Complete |
+| SEL-07 | Phase 13 | Complete |
+| FIND-01 | Phase 15 | Pending |
+| FIND-02 | Phase 15 | Pending |
+| FIND-03 | Phase 15 | Pending |
+| FIND-04 | Phase 15 | Pending |
+| FIND-05 | Phase 15 | Pending |
+| FIND-06 | Phase 15 | Pending |
+| FIND-07 | Phase 15 | Pending |
+| FIND-08 | Phase 15 | Pending |
+| PERF-01 | Phase 16 | Pending |
+| PERF-02 | Phase 16 | Pending |
+| PERF-03 | Phase 16 | Pending |
 
 **Coverage:**
-- v1 requirements: 59 total
-- Mapped to phases: 59
-- Unmapped: 0 (100% coverage)
+- v2.0 requirements: 40 total (note: source material stated 34; actual count is FIX(5)+TAB(5)+FILE(6)+SIDE(6)+SEL(7)+FIND(8)+PERF(3)=40)
+- Mapped to phases: 40/40
+- Unmapped: 0
 
 ---
-*Requirements defined: 2026-01-28*
-*Last updated: 2026-03-02 after Phase 8.1 completion (REND-07 complete)*
+*Requirements defined: 2026-03-26*
+*Last updated: 2026-03-26 after v2.0 roadmap creation — all 40 requirements mapped*

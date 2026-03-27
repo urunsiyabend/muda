@@ -3,134 +3,64 @@
 //! Renders a horizontal bar with tabs for each open document.
 //! Consumes `TabBarPresentation` from ora::editor_adapter for tab data.
 
-use crate::animation::transition::TransitionId;
 use crate::context::ViewContext;
+use crate::editor_adapter::{EditorCommand, TabBarPresentation};
 use crate::element::AnyElement;
-use crate::elements::{Div, TextElement};
-use crate::editor_adapter::{TabBarPresentation, TabPresentation};
+use crate::elements::{tab, Div};
 use crate::style::{pct, px};
 use crate::theme::ColorToken;
 use crate::view::View;
-
-/// Base TransitionId namespace for tab elements.
-/// Tab IDs = TAB_TRANSITION_BASE + tab.view_id  (no collision with other views).
-const TAB_TRANSITION_BASE: u64 = 20_000;
+use std::rc::Rc;
 
 /// Tab bar height in logical pixels (matches sidebar header for alignment).
 pub const TAB_BAR_HEIGHT: f32 = 36.0;
 
-/// Horizontal padding within each tab.
-const TAB_PADDING_H: f32 = 12.0;
-
-/// Vertical padding within each tab.
-const TAB_PADDING_V: f32 = 8.0;
-
-/// Font size for tab titles (readable size).
-const TAB_FONT_SIZE: f32 = 13.0;
-
 /// Gap between tabs.
 const TAB_GAP: f32 = 1.0;
-
-/// Close button size.
-const CLOSE_BUTTON_SIZE: f32 = 16.0;
 
 /// Tab bar view for displaying open document tabs.
 ///
 /// Consumes `TabBarPresentation` from core_editor and renders
 /// a horizontal row of tabs with:
-/// - Dirty indicator ("*" prefix for unsaved changes)
+/// - Dot dirty indicator (dot before filename for unsaved changes)
 /// - Title text
 /// - Active/inactive background styling
-/// - Hover highlight
+/// - Accent bottom border for active tab
+/// - Click handlers for switching and closing tabs
 ///
 /// # Example
 ///
 /// ```ignore
-/// let tab_bar = TabBarView::new(presentation);
+/// let tab_bar = TabBarView::new(presentation)
+///     .with_dispatch(Rc::new(move |cmd| adapter.borrow_mut().dispatch_command(cmd)));
 /// // In a parent view's render():
 /// Div::new().child(tab_bar.render(cx))
 /// ```
 pub struct TabBarView {
     /// The presentation data for the tab bar.
     presentation: TabBarPresentation,
+    /// Optional command dispatch callback for wiring tab click handlers.
+    dispatch: Option<Rc<dyn Fn(EditorCommand)>>,
 }
 
 impl TabBarView {
     /// Creates a new tab bar view with the given presentation data.
     pub fn new(presentation: TabBarPresentation) -> Self {
-        Self { presentation }
+        Self { presentation, dispatch: None }
+    }
+
+    /// Attaches a command dispatch callback for tab click handlers.
+    ///
+    /// When provided, clicking a tab dispatches `SwitchTab(view_id)` and
+    /// clicking the close button dispatches `CloseTab`.
+    pub fn with_dispatch(mut self, dispatch: Rc<dyn Fn(EditorCommand)>) -> Self {
+        self.dispatch = Some(dispatch);
+        self
     }
 
     /// Updates the presentation data.
     pub fn set_presentation(&mut self, presentation: TabBarPresentation) {
         self.presentation = presentation;
-    }
-
-    /// Renders a single tab element.
-    fn render_tab(&self, tab: &TabPresentation, cx: &mut ViewContext) -> Div {
-        let theme = cx.theme();
-
-        // Determine background color based on active state
-        let bg_color = if tab.is_active {
-            theme.color(ColorToken::BgPrimary)
-        } else {
-            theme.color(ColorToken::BgSecondary)
-        };
-
-        // Hover color for inactive tabs (subtle highlight)
-        let hover_color = theme.color(ColorToken::BgElevated);
-
-        // Build title with dirty indicator
-        let title = if tab.is_dirty {
-            format!("* {}", tab.title)
-        } else {
-            tab.title.clone()
-        };
-
-        // Create text element for tab title
-        let text = TextElement::new(&title)
-            .size(TAB_FONT_SIZE)
-            .color(theme.color(ColorToken::FgPrimary));
-
-        // Create close button (visible on hover via parent hover state)
-        // Using "x" character as close icon
-        let close_button = Div::new()
-            .flex_row()
-            .align_center()
-            .justify_center()
-            .w(px(CLOSE_BUTTON_SIZE))
-            .h(px(CLOSE_BUTTON_SIZE))
-            .border_radius(3.0)
-            .hover_bg(theme.color(ColorToken::BgElevated))
-            .child(
-                TextElement::new("x")
-                    .size(TAB_FONT_SIZE - 2.0)
-                    .color(theme.color(ColorToken::FgMuted))
-            );
-
-        // Stable TransitionId per tab: base + view_id (avoids collisions with other views)
-        let tid = TransitionId(TAB_TRANSITION_BASE + tab.view_id);
-
-        // Build tab container with title and close button.
-        // Inactive tabs also get a hover_bg; the transition smoothly interpolates between states.
-        let mut tab_div = Div::new()
-            .flex_row()
-            .align_center()
-            .gap(8.0)
-            .px(TAB_PADDING_H)
-            .py(TAB_PADDING_V)
-            .bg(bg_color)
-            .transition_id(tid)
-            .transition_bg(150)
-            .child(text)
-            .child(close_button);
-
-        // Add hover effect for inactive tabs only
-        if !tab.is_active {
-            tab_div = tab_div.hover_bg(hover_color);
-        }
-
-        tab_div
     }
 }
 
@@ -143,14 +73,36 @@ impl View for TabBarView {
                 .into();
         }
 
-        // Build tab elements (render_tab borrows cx mutably, so build first)
-        let mut tab_elements: Vec<AnyElement> = Vec::with_capacity(self.presentation.tabs.len());
-        for tab in &self.presentation.tabs {
-            tab_elements.push(self.render_tab(tab, cx).into());
-        }
-
-        // Now get theme for container styling
         let theme = cx.theme();
+        let mut tab_elements: Vec<AnyElement> = Vec::with_capacity(self.presentation.tabs.len());
+
+        for tab_data in &self.presentation.tabs {
+            let view_id = tab_data.view_id;
+            let dispatch = self.dispatch.clone();
+
+            let mut t = tab(&tab_data.title)
+                .active(tab_data.is_active)
+                .dirty(tab_data.is_dirty);
+
+            // Wire click handler: dispatch SwitchTab(view_id)
+            if let Some(d) = dispatch.clone() {
+                t = t.on_click(move || {
+                    d(EditorCommand::SwitchTab(view_id));
+                });
+            }
+
+            // Wire close handler: switch to this tab first, then close it.
+            // Without the SwitchTab, CloseTab closes the *active* tab which
+            // may differ from the tab whose close button was clicked.
+            if let Some(d) = dispatch.clone() {
+                t = t.on_close(move || {
+                    d(EditorCommand::SwitchTab(view_id));
+                    d(EditorCommand::CloseTab);
+                });
+            }
+
+            tab_elements.push(t.into());
+        }
 
         // Build the tab bar container (explicit height and width for consistent alignment)
         Div::new()
@@ -201,6 +153,28 @@ mod tests {
     #[test]
     fn test_tab_bar_constants() {
         assert_eq!(TAB_BAR_HEIGHT, 36.0);
-        assert_eq!(TAB_FONT_SIZE, 13.0);
+    }
+
+    #[test]
+    fn test_tab_bar_with_dispatch() {
+        use std::cell::Cell;
+        use std::rc::Rc;
+
+        let called = Rc::new(Cell::new(false));
+        let called_clone = called.clone();
+
+        let presentation = TabBarPresentation {
+            tabs: vec![TabPresentation::new(42, "test.rs".to_string(), true, false)],
+            visible: true,
+        };
+
+        let view = TabBarView::new(presentation)
+            .with_dispatch(Rc::new(move |cmd| {
+                if matches!(cmd, EditorCommand::SwitchTab(42)) {
+                    called_clone.set(true);
+                }
+            }));
+
+        assert!(view.dispatch.is_some());
     }
 }

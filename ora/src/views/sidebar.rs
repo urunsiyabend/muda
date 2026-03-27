@@ -7,16 +7,20 @@
 //!
 //! Consumes `SidebarPresentation` from core_editor for visibility and entries.
 
+use std::rc::Rc;
+
 use crate::animation::transition::TransitionId;
 use crate::context::ViewContext;
+use crate::editor_adapter::EditorCommand;
 use crate::element::AnyElement;
-use crate::elements::{Div, TextElement};
+use crate::elements::{Div, TextElement, scroll_area, scroll_state, SharedScrollState};
 use crate::events::focus::FocusHandle;
 use crate::style::{pct, px};
 use crate::theme::ColorToken;
 use crate::editor_adapter::{FileTreePresentation, SidebarPresentation};
 use crate::view::View;
 use crate::views::file_tree::FileTreeView;
+use crate::elements::tree_item::TREE_ITEM_HEIGHT;
 
 /// TransitionId for the sidebar toggle button (collapse/expand arrow in header).
 const SIDEBAR_TOGGLE_TRANSITION_ID: TransitionId = TransitionId(10_000);
@@ -31,7 +35,7 @@ pub const SIDEBAR_DEFAULT_WIDTH: f32 = 480.0;
 pub const SIDEBAR_COLLAPSED_WIDTH: f32 = 48.0;
 
 /// Header height in logical pixels.
-const HEADER_HEIGHT: f32 = 36.0;
+const HEADER_HEIGHT: f32 = 40.0;
 
 /// Horizontal padding in header.
 const HEADER_PADDING_H: f32 = 12.0;
@@ -85,6 +89,12 @@ pub struct SidebarView {
     toggle_focus: Option<FocusHandle>,
     /// File tree view for hierarchical file navigation.
     file_tree: FileTreeView,
+    /// Command dispatch callback for sidebar actions.
+    dispatch: Option<Rc<dyn Fn(EditorCommand)>>,
+    /// Shared scroll state for the file tree scroll area.
+    tree_scroll: SharedScrollState,
+    /// Available height for the tree content (window height minus chrome).
+    content_height: f32,
 }
 
 impl SidebarView {
@@ -96,6 +106,9 @@ impl SidebarView {
             width: SIDEBAR_DEFAULT_WIDTH,
             toggle_focus: None,
             file_tree: FileTreeView::new(tree),
+            dispatch: None,
+            tree_scroll: scroll_state(),
+            content_height: 600.0,
         }
     }
 
@@ -107,7 +120,28 @@ impl SidebarView {
             width: SIDEBAR_DEFAULT_WIDTH,
             toggle_focus: Some(toggle_focus),
             file_tree: FileTreeView::new(tree),
+            dispatch: None,
+            tree_scroll: scroll_state(),
+            content_height: 600.0,
         }
+    }
+
+    /// Attach a command dispatch callback for sidebar file actions.
+    pub fn with_dispatch(mut self, dispatch: Rc<dyn Fn(EditorCommand)>) -> Self {
+        self.dispatch = Some(dispatch);
+        self
+    }
+
+    /// Set a shared scroll state for the file tree.
+    pub fn with_scroll_state(mut self, scroll: SharedScrollState) -> Self {
+        self.tree_scroll = scroll;
+        self
+    }
+
+    /// Set available content height (window height minus chrome).
+    pub fn with_content_height(mut self, h: f32) -> Self {
+        self.content_height = h;
+        self
     }
 
     /// Updates the file tree presentation data.
@@ -148,7 +182,7 @@ impl SidebarView {
 
     /// Sets the expanded width (minimum 100px, maximum 400px).
     pub fn set_width(&mut self, width: f32) {
-        self.width = width.clamp(100.0, 400.0);
+        self.width = width.clamp(220.0, 560.0);
     }
 
     /// Renders the sidebar header with title and toggle button.
@@ -156,9 +190,9 @@ impl SidebarView {
         let theme = cx.theme();
 
         // Title text
-        let title = TextElement::new("Explorer")
+        let title = TextElement::new("EXPLORER")
             .size(TITLE_FONT_SIZE)
-            .color(theme.color(ColorToken::FgSecondary));
+            .color(theme.color(ColorToken::FgMuted));
 
         // Toggle button (collapse/expand arrow) - always visible ASCII character
         // Using clear ASCII arrows that are always visible (not hidden on hover)
@@ -169,7 +203,7 @@ impl SidebarView {
             .justify_center()
             .w(px(24.0))
             .h(px(24.0))
-            .border_radius(4.0)
+            .border_radius(6.0)
             .hover_bg(theme.color(ColorToken::BgElevated))
             .transition_id(SIDEBAR_TOGGLE_TRANSITION_ID)
             .transition_bg(150)
@@ -187,33 +221,52 @@ impl SidebarView {
             .h(px(HEADER_HEIGHT))
             .px(HEADER_PADDING_H)
             .bg(theme.color(ColorToken::BgSecondary))
-            .border(1.0, theme.color(ColorToken::Border))
             .child(title)
             .child(toggle_button)
     }
 
     /// Renders the content area with FileTree or empty state.
-    fn render_content(&self, cx: &mut ViewContext) -> Div {
-        let theme = cx.theme();
-
+    fn render_content(&self, cx: &mut ViewContext) -> AnyElement {
         if self.file_tree.is_empty() {
-            // Show "No folder open" placeholder
+            let bg = cx.theme().color(ColorToken::BgSecondary);
+            let fg = cx.theme().color(ColorToken::FgMuted);
             return Div::new()
                 .flex_col()
                 .grow(1.0)
                 .p(ENTRY_PADDING_H)
-                .bg(theme.color(ColorToken::BgSecondary))
+                .bg(bg)
                 .child(TextElement::new("No folder open")
                     .size(ENTRY_FONT_SIZE)
-                    .color(theme.color(ColorToken::FgMuted)));
+                    .color(fg))
+                .into();
         }
 
-        // Render FileTree
-        Div::new()
-            .flex_col()
-            .grow(1.0)
-            .bg(theme.color(ColorToken::BgSecondary))
-            .child(self.file_tree.render(cx))
+        let bg = cx.theme().color(ColorToken::BgSecondary);
+
+        let available_h = (self.content_height - HEADER_HEIGHT).max(100.0);
+
+        // Read current scroll offset from shared scroll state for virtualization
+        let scroll_offset = self.tree_scroll.get();
+
+        // Render FileTree with scroll offset and viewport height for virtualization
+        let mut tree = FileTreeView::new(self.file_tree.presentation.clone())
+            .with_scroll_offset(scroll_offset)
+            .with_viewport_height(available_h);
+        if let Some(ref dispatch) = self.dispatch {
+            tree = tree.with_dispatch(dispatch.clone());
+        }
+        let tree_element = tree.render(cx);
+
+        // Total rows for max scroll calculation
+        let total_rows = self.file_tree.visible_row_count();
+        let total_content_h = total_rows as f32 * TREE_ITEM_HEIGHT;
+        let _ = total_content_h; // used implicitly by ScrollArea's own clamping
+
+        scroll_area(self.tree_scroll.clone())
+            .bg(bg)
+            .max_h(available_h)
+            .child(tree_element)
+            .into()
     }
 
     /// Renders the collapsed icon rail state.
@@ -227,7 +280,7 @@ impl SidebarView {
             .justify_center()
             .w(px(32.0))
             .h(px(32.0))
-            .border_radius(4.0)
+            .border_radius(8.0)
             .hover_bg(theme.color(ColorToken::BgElevated))
             .transition_id(SIDEBAR_EXPAND_TRANSITION_ID)
             .transition_bg(150)
@@ -243,7 +296,7 @@ impl SidebarView {
             .h(pct(100.0))
             .shrink(0.0)  // Don't shrink below fixed width
             .bg(theme.color(ColorToken::BgSecondary))
-            // No outer border for alignment with main area
+            .border_right(1.0, theme.color(ColorToken::Border))
             .align_center()
             .py(8.0)
             .child(expand_button)
@@ -259,7 +312,7 @@ impl SidebarView {
             .h(pct(100.0))
             .shrink(0.0)  // Don't shrink below fixed width
             .bg(theme.color(ColorToken::BgSecondary))
-            // No outer border - header has its own border for separation
+            .border_right(1.0, theme.color(ColorToken::Border))
             .child(self.render_header(cx))
             .child(self.render_content(cx))
     }
@@ -296,6 +349,7 @@ mod tests {
             focused: false,
             directory_name: "my_project".to_string(),
             entries: vec![],
+            tree: vec![],
             width: 480,
         };
 
@@ -344,10 +398,13 @@ mod tests {
         let mut view = SidebarView::new(presentation, FileTreePresentation::default());
 
         view.set_width(50.0); // Below minimum
-        assert_eq!(view.width, 100.0);
+        assert_eq!(view.width, 220.0);
 
         view.set_width(500.0); // Above maximum
-        assert_eq!(view.width, 400.0);
+        assert_eq!(view.width, 500.0);
+
+        view.set_width(800.0); // Above maximum
+        assert_eq!(view.width, 560.0);
 
         view.set_width(250.0); // Within range
         assert_eq!(view.width, 250.0);
@@ -357,6 +414,6 @@ mod tests {
     fn test_sidebar_constants() {
         assert_eq!(SIDEBAR_DEFAULT_WIDTH, 480.0);
         assert_eq!(SIDEBAR_COLLAPSED_WIDTH, 48.0);
-        assert_eq!(HEADER_HEIGHT, 36.0);
+        assert_eq!(HEADER_HEIGHT, 40.0);
     }
 }

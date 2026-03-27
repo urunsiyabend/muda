@@ -7,6 +7,25 @@
 //! in `wgpu_client`, not here. This keeps ora free of core_editor as a dependency.
 
 // =============================================================================
+// PendingFileOp — queued file-dialog operation
+// =============================================================================
+
+/// A file operation that must be dispatched from the event loop.
+///
+/// Because native file dialogs block the thread and `dispatch_command` returns `()`,
+/// this queue pattern is used: the adapter sets `pending_file_op` and the event
+/// loop polls `take_pending_file_op()` each frame to open the appropriate dialog.
+#[derive(Debug)]
+pub enum PendingFileOp {
+    /// Show an open-file dialog (Ctrl+O).
+    Open,
+    /// Show a save-as dialog (Ctrl+Shift+S or save of untitled buffer).
+    SaveAs,
+    /// Trigger a direct save (Ctrl+S with known path).
+    Save,
+}
+
+// =============================================================================
 // TextStyle — semantic syntax highlighting tokens
 // =============================================================================
 
@@ -125,15 +144,25 @@ pub struct LinePresentation {
     pub is_current_line: bool,
     /// The styled spans that make up this line's content.
     pub spans: Vec<StyledSpan>,
+    /// Column ranges that are selected on this line.
+    /// Each tuple is (start_col, end_col) in character offsets (0-indexed).
+    /// Empty vec means no selection on this line.
+    pub selection_ranges: Vec<(usize, usize)>,
 }
 
 impl LinePresentation {
     pub fn new(line_number: usize, is_current_line: bool) -> Self {
-        Self { line_number, is_current_line, spans: Vec::new() }
+        Self { line_number, is_current_line, spans: Vec::new(), selection_ranges: Vec::new() }
     }
 
     pub fn with_spans(line_number: usize, is_current_line: bool, spans: Vec<StyledSpan>) -> Self {
-        Self { line_number, is_current_line, spans }
+        Self { line_number, is_current_line, spans, selection_ranges: Vec::new() }
+    }
+
+    /// Appends a selected column range to this line.
+    pub fn with_selection(mut self, start_col: usize, end_col: usize) -> Self {
+        self.selection_ranges.push((start_col, end_col));
+        self
     }
 }
 
@@ -248,6 +277,8 @@ impl DialogPresentation {
 pub struct FileEntryPresentation {
     /// The display name of the file/directory.
     pub name: String,
+    /// Full path to the file/directory.
+    pub path: String,
     /// Whether this is a directory.
     pub is_dir: bool,
     /// Whether this entry is currently selected.
@@ -255,8 +286,8 @@ pub struct FileEntryPresentation {
 }
 
 impl FileEntryPresentation {
-    pub fn new(name: String, is_dir: bool, is_selected: bool) -> Self {
-        Self { name, is_dir, is_selected }
+    pub fn new(name: String, path: String, is_dir: bool, is_selected: bool) -> Self {
+        Self { name, path, is_dir, is_selected }
     }
 }
 
@@ -273,8 +304,10 @@ pub struct SidebarPresentation {
     pub focused: bool,
     /// The base directory name (for title).
     pub directory_name: String,
-    /// The visible file entries.
+    /// The visible file entries (flat, for backward compat).
     pub entries: Vec<FileEntryPresentation>,
+    /// Recursive file tree (for tree-based rendering).
+    pub tree: Vec<FileTreeNode>,
     /// Width of the sidebar in characters.
     pub width: usize,
 }
@@ -311,12 +344,16 @@ impl TabPresentation {
 pub struct FileTreeNode {
     /// Display name (file or directory name).
     pub name: String,
+    /// Full path to the file/directory.
+    pub path: String,
     /// File extension (e.g., "rs", "js") for icon coloring. Empty for directories.
     pub extension: String,
     /// Whether this is a directory.
     pub is_dir: bool,
     /// Whether this directory is expanded (only meaningful for directories).
     pub is_expanded: bool,
+    /// Whether this is a generated/build directory (target, node_modules, etc.).
+    pub is_generated: bool,
     /// Nested children (only for directories).
     pub children: Vec<FileTreeNode>,
 }
@@ -324,22 +361,41 @@ pub struct FileTreeNode {
 impl FileTreeNode {
     /// Create a file node with the given name and extension.
     pub fn file(name: impl Into<String>, extension: impl Into<String>) -> Self {
+        let n = name.into();
         Self {
-            name: name.into(),
+            path: n.clone(),
+            name: n,
             extension: extension.into(),
             is_dir: false,
             is_expanded: false,
+            is_generated: false,
+            children: vec![],
+        }
+    }
+
+    /// Create a file node with the given name, path, and extension.
+    pub fn file_with_path(name: impl Into<String>, path: impl Into<String>, extension: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            path: path.into(),
+            extension: extension.into(),
+            is_dir: false,
+            is_expanded: false,
+            is_generated: false,
             children: vec![],
         }
     }
 
     /// Create a directory node with the given name, expanded state, and children.
     pub fn dir(name: impl Into<String>, expanded: bool, children: Vec<FileTreeNode>) -> Self {
+        let n = name.into();
         Self {
-            name: name.into(),
+            path: n.clone(),
+            name: n,
             extension: String::new(),
             is_dir: true,
             is_expanded: expanded,
+            is_generated: false,
             children,
         }
     }
@@ -405,6 +461,11 @@ pub struct RenderModel {
     /// Views apply this as a negative vertical shift to the text content,
     /// producing smooth pixel-level scrolling between logical line boundaries.
     pub scroll_y_offset_px: f32,
+    /// Whether the editor window currently has OS-level focus.
+    ///
+    /// When `false`, selection backgrounds use a dimmed color to signal
+    /// that the editor is not the active application window.
+    pub editor_focused: bool,
 }
 
 impl RenderModel {
@@ -470,6 +531,38 @@ pub enum EditorCommand {
     // --- File operations ---
     /// Save the current document.
     Save,
+    /// Save As (Ctrl+Shift+S)
+    SaveAs,
+    /// Open a file (Ctrl+O)
+    OpenFile,
+    /// New file (Ctrl+N)
+    New,
+
+    // --- Tab management ---
+    /// Switch to a specific tab (0 = cycle next, view_id = switch directly)
+    SwitchTab(u64),
+    /// Close the current tab (Ctrl+W)
+    CloseTab,
+    /// Cycle to the previous tab in visual order (Ctrl+Shift+Tab)
+    SwitchTabPrev,
+
+    // --- Sidebar ---
+    /// Open a file from the sidebar by path (double-click).
+    OpenSidebarFile(String),
+    /// Toggle/navigate into a directory in the sidebar.
+    ToggleSidebarDir(String),
+
+    // --- Search ---
+    /// Find in file (Ctrl+F)
+    Find,
+    /// Replace in file (Ctrl+H)
+    Replace,
+    /// Replace all occurrences (triggered from UI, no default keybinding)
+    ReplaceAll,
+
+    // --- Navigation ---
+    /// Go to line (Ctrl+G)
+    GoToLine,
 
     // --- View toggles ---
     /// Toggle line number visibility.
@@ -478,6 +571,19 @@ pub enum EditorCommand {
     // --- Scrolling ---
     /// Scroll the viewport by the given number of lines (positive = down).
     Scroll(i32),
+
+    // --- Mouse interaction ---
+    /// Click at a document position (from mouse click in text area).
+    /// line and col are 0-indexed document coordinates.
+    /// extend_selection: true if Shift was held (extend from anchor).
+    /// click_count: 1=single, 2=double (word), 3=triple (line).
+    ClickAt { line: usize, col: usize, extend_selection: bool, click_count: u32 },
+    /// Drag to a document position (from mouse move during drag).
+    /// line and col are 0-indexed document coordinates.
+    /// Drag to a document position with snap mode (0=char, 1=word, 2=line).
+    DragTo { line: usize, col: usize, snap_mode: u32 },
+    /// Click in the gutter to select an entire line.
+    GutterClickAt { line: usize },
 }
 
 /// Direction for cursor movement.

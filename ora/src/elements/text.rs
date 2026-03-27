@@ -1,5 +1,6 @@
 use crate::element::{Element, LayoutContext, LayoutId, PaintContext, PrepaintContext};
 use crate::events::mouse::HitboxId;
+use crate::rendering::text::GlyphCacheKey;
 use crate::style::*;
 
 /// Text rendering element with glyphon-based measurement and rendering.
@@ -81,6 +82,7 @@ pub struct TextState {
     layout_id: LayoutId,
     measured_size: Size<f32>,
     pub(crate) buffer: Option<glyphon::Buffer>,
+    cache_key: Option<GlyphCacheKey>,
     hitbox_id: Option<HitboxId>,
 }
 
@@ -93,7 +95,7 @@ impl Element for TextElement {
             Length::Px(w) => Some(w),
             _ => None,
         };
-        let (buffer, measured) = cx.measure_text(&self.content, self.font_size, self.line_height, max_width);
+        let (cache_key, buffer, measured) = cx.measure_text_cached(&self.content, self.font_size, self.line_height, max_width);
         cx.set_intrinsic_size(id, measured);
         (
             id,
@@ -101,6 +103,7 @@ impl Element for TextElement {
                 layout_id: id,
                 measured_size: measured,
                 buffer: Some(buffer),
+                cache_key: Some(cache_key),
                 hitbox_id: None,
             },
         )
@@ -118,7 +121,11 @@ impl Element for TextElement {
     fn paint(&mut self, state: &mut TextState, cx: &mut PaintContext) {
         let bounds = cx.bounds(state.layout_id);
         if let Some(buffer) = state.buffer.take() {
-            cx.paint_text(buffer, &self.color, &bounds);
+            if let Some(key) = state.cache_key.take() {
+                cx.paint_text_cached(buffer, &self.color, &bounds, key);
+            } else {
+                cx.paint_text(buffer, &self.color, &bounds);
+            }
         }
     }
 }

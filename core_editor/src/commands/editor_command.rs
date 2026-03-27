@@ -94,6 +94,15 @@ pub enum EditorCommand {
     /// Scroll the viewport.
     Scroll { lines: i32 },
 
+    // === Mouse interaction ===
+    /// Mouse click at document position (0-indexed line, col).
+    ClickAt { line: usize, col: usize, extend_selection: bool, click_count: u32 },
+    /// Mouse drag to document position (0-indexed line, col).
+    /// snap_mode: 0=char, 1=word-snap, 2=line-snap.
+    DragTo { line: usize, col: usize, snap_mode: u32 },
+    /// Gutter click to select entire line.
+    GutterClickAt { line: usize },
+
     // === Application ===
     /// Request to quit the application.
     Quit,
@@ -130,6 +139,9 @@ impl EditorCommand {
                 | EditorCommand::ClearSelection
                 | EditorCommand::DeleteSelection
                 | EditorCommand::Cut
+                | EditorCommand::ClickAt { .. }
+                | EditorCommand::DragTo { .. }
+                | EditorCommand::GutterClickAt { .. }
         )
     }
 }

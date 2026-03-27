@@ -57,7 +57,7 @@ impl ViewModelBuilder {
         view: &EditorView,
         pending_action: Option<&PendingAction>,
         protection_error: Option<&ProtectionError>,
-        sidebar: &Sidebar,
+        sidebar: &mut Sidebar,
         focus: FocusState,
         viewport_height: usize,
         status_message: Option<&str>,
@@ -169,7 +169,7 @@ impl ViewModelBuilder {
 
     /// Builds a RenderModel when only the sidebar should be shown (no document).
     pub fn build_sidebar_only(
-        sidebar: &Sidebar,
+        sidebar: &mut Sidebar,
         focus: FocusState,
         viewport_height: usize,
     ) -> RenderModel {
@@ -182,7 +182,7 @@ impl ViewModelBuilder {
 
     /// Builds the sidebar presentation from sidebar state.
     fn build_sidebar_presentation(
-        sidebar: &Sidebar,
+        sidebar: &mut Sidebar,
         focus: FocusState,
         viewport_height: usize,
     ) -> SidebarPresentation {
@@ -206,17 +206,21 @@ impl ViewModelBuilder {
                 let actual_index = sidebar.scroll_offset + i;
                 FileEntryPresentation::new(
                     entry.name.clone(),
+                    entry.path.to_string_lossy().to_string(),
                     entry.is_dir,
                     actual_index == sidebar.selected_index,
                 )
             })
             .collect();
 
+        let tree = sidebar.build_tree();
+
         SidebarPresentation {
             visible: true,
             focused: focus == FocusState::Sidebar,
             directory_name,
             entries,
+            tree,
             width: sidebar.width(),
         }
     }
@@ -470,7 +474,7 @@ impl ViewModelBuilder {
         let title = document.file_path()
             .and_then(|p| p.file_name())
             .and_then(|n| n.to_str())
-            .unwrap_or("[Yeni Dosya]")
+            .unwrap_or("[New File]")
             .to_string();
 
         let language = format!("{:?}", document.highlighter().language());
@@ -498,10 +502,10 @@ mod tests {
         let doc = Document::from_str("Hello\nWorld", None);
         let mut view = EditorView::new(doc.id());
         view.viewport.resize(80, 24); // Set viewport dimensions
-        let sidebar = Sidebar::default();
+        let mut sidebar = Sidebar::default();
         let open_views: Vec<(u64, String, bool, bool)> = vec![];
 
-        let model = ViewModelBuilder::build(&doc, &view, None, None, &sidebar, FocusState::Editor, 24, None, &open_views);
+        let model = ViewModelBuilder::build(&doc, &view, None, None, &mut sidebar, FocusState::Editor, 24, None, &open_views);
 
         assert_eq!(model.visible_lines.len(), 2);
         assert_eq!(model.visible_lines[0].line_number, 1);
@@ -516,10 +520,10 @@ mod tests {
         let mut view = EditorView::new(doc.id());
         view.viewport.resize(80, 24); // Set viewport dimensions
         view.move_caret_to(7, false); // "W" in "World"
-        let sidebar = Sidebar::default();
+        let mut sidebar = Sidebar::default();
         let open_views: Vec<(u64, String, bool, bool)> = vec![];
 
-        let model = ViewModelBuilder::build(&doc, &view, None, None, &sidebar, FocusState::Editor, 24, None, &open_views);
+        let model = ViewModelBuilder::build(&doc, &view, None, None, &mut sidebar, FocusState::Editor, 24, None, &open_views);
 
         assert_eq!(model.caret.position.row, 1); // Second line
         assert_eq!(model.caret.position.column, 1); // Second char
@@ -533,18 +537,18 @@ mod tests {
         let doc = Document::from_str("test", None);
         let mut view = EditorView::new(doc.id());
         view.viewport.resize(80, 24);
-        let sidebar = Sidebar::default();
+        let mut sidebar = Sidebar::default();
         let open_views: Vec<(u64, String, bool, bool)> = vec![];
 
         // No dialog when no pending action
-        let model_no_dialog = ViewModelBuilder::build(&doc, &view, None, None, &sidebar, FocusState::Editor, 24, None, &open_views);
+        let model_no_dialog = ViewModelBuilder::build(&doc, &view, None, None, &mut sidebar, FocusState::Editor, 24, None, &open_views);
         assert!(matches!(model_no_dialog.dialog, DialogPresentation::None));
 
         // Dialog shown when pending action + protection error
         let pending = PendingAction::Exit;
         let unsaved = UnsavedDocument::new(DocumentId::new(), "test.txt");
         let error = ProtectionError::UnsavedChanges(unsaved);
-        let model_with_dialog = ViewModelBuilder::build(&doc, &view, Some(&pending), Some(&error), &sidebar, FocusState::Editor, 24, None, &open_views);
+        let model_with_dialog = ViewModelBuilder::build(&doc, &view, Some(&pending), Some(&error), &mut sidebar, FocusState::Editor, 24, None, &open_views);
 
         if let DialogPresentation::UnsavedChangesConfirmation { action_description, unsaved_documents } = model_with_dialog.dialog {
             assert_eq!(action_description, "Exit");
@@ -559,10 +563,10 @@ mod tests {
         let doc = Document::from_str("Line 1\nLine 2\nLine 3", None);
         let mut view = EditorView::new(doc.id());
         view.viewport.resize(80, 24);
-        let sidebar = Sidebar::default();
+        let mut sidebar = Sidebar::default();
         let open_views: Vec<(u64, String, bool, bool)> = vec![];
 
-        let model = ViewModelBuilder::build(&doc, &view, None, None, &sidebar, FocusState::Editor, 24, None, &open_views);
+        let model = ViewModelBuilder::build(&doc, &view, None, None, &mut sidebar, FocusState::Editor, 24, None, &open_views);
 
         assert_eq!(model.status.cursor_line, 1);
         assert_eq!(model.status.cursor_column, 1);
@@ -576,10 +580,10 @@ mod tests {
         let doc = Document::from_str("test", None);
         let mut view = EditorView::new(doc.id());
         view.viewport.resize(80, 24);
-        let sidebar = Sidebar::default();
+        let mut sidebar = Sidebar::default();
         let open_views: Vec<(u64, String, bool, bool)> = vec![];
 
-        let model = ViewModelBuilder::build(&doc, &view, None, None, &sidebar, FocusState::Editor, 24, Some("File saved"), &open_views);
+        let model = ViewModelBuilder::build(&doc, &view, None, None, &mut sidebar, FocusState::Editor, 24, Some("File saved"), &open_views);
 
         assert_eq!(model.status.message, Some("File saved".to_string()));
     }
@@ -592,14 +596,14 @@ mod tests {
         let open_views: Vec<(u64, String, bool, bool)> = vec![];
 
         // Test hidden sidebar
-        let sidebar = Sidebar::default();
-        let model = ViewModelBuilder::build(&doc, &view, None, None, &sidebar, FocusState::Editor, 24, None, &open_views);
+        let mut sidebar = Sidebar::default();
+        let model = ViewModelBuilder::build(&doc, &view, None, None, &mut sidebar, FocusState::Editor, 24, None, &open_views);
         assert!(!model.sidebar.visible);
 
         // Test visible sidebar
         let mut sidebar = Sidebar::default();
         sidebar.visible = true;
-        let model = ViewModelBuilder::build(&doc, &view, None, None, &sidebar, FocusState::Sidebar, 24, None, &open_views);
+        let model = ViewModelBuilder::build(&doc, &view, None, None, &mut sidebar, FocusState::Sidebar, 24, None, &open_views);
         assert!(model.sidebar.visible);
         assert!(model.sidebar.focused);
     }

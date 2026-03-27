@@ -68,6 +68,9 @@ pub struct DocumentMetadata {
     pub line_ending: LineEnding,
     /// Whether the document has unsaved changes.
     pub dirty: bool,
+    /// Display name for untitled (unsaved) documents, e.g. "Untitled", "Untitled (2)".
+    /// Set when created via `Document::new_with_name`. Cleared when a real path is assigned.
+    pub untitled_name: Option<String>,
 }
 
 /// An editable text artifact with identity and persistence semantics.
@@ -100,6 +103,24 @@ impl Document {
         }
     }
 
+    /// Creates a new empty document with an explicit untitled display name.
+    ///
+    /// Used by `Workspace::create_untitled_document` to assign names like
+    /// "Untitled", "Untitled (2)", etc. before the document is saved to disk.
+    pub fn new_with_name(name: String) -> Self {
+        Self {
+            id: DocumentId::new(),
+            buffer: TextBuffer::new(),
+            metadata: DocumentMetadata {
+                untitled_name: Some(name),
+                ..DocumentMetadata::default()
+            },
+            highlighter: SyntaxHighlighter::new(SyntaxLanguage::Plain),
+            cached_content: String::new(),
+            cached_content_revision: 0,
+        }
+    }
+
     /// Creates a document from a string with an optional file path.
     pub fn from_str(content: &str, path: Option<PathBuf>) -> Self {
         let line_ending = LineEnding::detect(content);
@@ -121,6 +142,7 @@ impl Document {
                 uri: path,
                 line_ending,
                 dirty: false,
+                untitled_name: None,
             },
             highlighter,
             cached_content: content.to_string(),
@@ -263,20 +285,27 @@ impl Document {
     }
 
     /// Sets the file path for this document.
+    ///
+    /// Also clears `untitled_name` since the document now has a real file path.
     pub fn set_file_path(&mut self, path: PathBuf) {
         let language = SyntaxLanguage::from_extension(&path);
         self.highlighter = SyntaxHighlighter::new(language);
         self.update_syntax();
         self.metadata.uri = Some(path);
+        self.metadata.untitled_name = None;
     }
 
-    /// Returns the document title (filename or "[New File]").
+    /// Returns the document title (filename, untitled name, or "[New File]").
     pub fn title(&self) -> String {
-        let name = self.metadata.uri
+        let name = if let Some(file_name) = self.metadata.uri
             .as_ref()
             .and_then(|p| p.file_name())
             .and_then(|n| n.to_str())
-            .unwrap_or("[Yeni Dosya]");
+        {
+            file_name
+        } else {
+            self.metadata.untitled_name.as_deref().unwrap_or("[New File]")
+        };
 
         if self.metadata.dirty {
             format!("*{}", name)
@@ -440,7 +469,7 @@ mod tests {
         let doc = Document::new();
         assert!(!doc.is_dirty());
         assert!(doc.file_path().is_none());
-        assert_eq!(doc.title(), "[Yeni Dosya]");
+        assert_eq!(doc.title(), "[New File]");
     }
 
     #[test]

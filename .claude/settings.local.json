@@ -8,7 +8,16 @@
       "Bash(cargo bench:*)",
       "WebSearch",
       "Bash(cargo doc:*)",
-      "WebFetch(domain:docs.rs)"
+      "WebFetch(domain:docs.rs)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:news.ycombinator.com)",
+      "WebFetch(domain:app.studyraid.com)",
+      "Bash(ls C:/Users/uruns/RustroverProjects/muda/.planning/debug/*.md)",
+      "Bash(xargs grep:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git -C C:UsersurunsRustroverProjectsmuda check-ignore -q .planning)",
+      "Bash(git:*)"
     ]
   }
 }

@@ -1,8 +1,9 @@
 //! Sidebar state for file explorer.
 //!
 //! Manages the file explorer sidebar state including visibility,
-//! file list, selection, and base directory.
+//! base directory, and expand/collapse state for directories.
 
+use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
 
@@ -38,22 +39,28 @@ impl Default for FocusState {
     }
 }
 
-/// Sidebar state for file explorer.
+/// Sidebar state for file explorer with tree expand/collapse.
 #[derive(Clone, Debug)]
 pub struct Sidebar {
     /// Whether the sidebar is visible.
     pub visible: bool,
-    /// The base directory being explored.
+    /// The root directory being explored.
     pub base_directory: Option<PathBuf>,
-    /// List of file entries in the current directory.
+    /// Set of expanded directory paths (for tree expand/collapse).
+    pub expanded_dirs: HashSet<PathBuf>,
+    /// Flat list of entries in root directory (kept for keyboard navigation).
     pub entries: Vec<FileEntry>,
-    /// Currently selected index in the file list.
+    /// Currently selected index in the flat list.
     pub selected_index: usize,
     /// Scroll offset for the file list.
     pub scroll_offset: usize,
     /// Cached viewport height for scroll calculations.
-    /// Updated by adjust_scroll_for_height().
     viewport_height: usize,
+    /// Cached file tree — rebuilt only when sidebar state changes,
+    /// not on every frame. Avoids filesystem reads in the render path.
+    tree_cache: Vec<crate::view_model::FileTreeNode>,
+    /// Whether the tree cache needs rebuilding.
+    tree_dirty: bool,
 }
 
 impl Default for Sidebar {
@@ -61,10 +68,13 @@ impl Default for Sidebar {
         Self {
             visible: false,
             base_directory: None,
+            expanded_dirs: HashSet::new(),
             entries: Vec::new(),
             selected_index: 0,
             scroll_offset: 0,
-            viewport_height: 20, // Reasonable default, will be updated by adjust_scroll_for_height
+            viewport_height: 20,
+            tree_cache: Vec::new(),
+            tree_dirty: true,
         }
     }
 }
@@ -75,52 +85,125 @@ impl Sidebar {
         let mut sidebar = Self {
             visible: base_directory.is_some(),
             base_directory,
+            expanded_dirs: HashSet::new(),
             entries: Vec::new(),
             selected_index: 0,
             scroll_offset: 0,
-            viewport_height: 20, // Will be updated by adjust_scroll_for_height
+            viewport_height: 20,
+            tree_cache: Vec::new(),
+            tree_dirty: true,
         };
         sidebar.refresh_entries();
         sidebar
     }
 
-    /// Refreshes the file list from the base directory.
+    /// Refreshes the root-level file list from the base directory.
     pub fn refresh_entries(&mut self) {
         self.entries.clear();
 
         if let Some(ref base_dir) = self.base_directory {
-            if let Ok(read_dir) = fs::read_dir(base_dir) {
-                let mut entries: Vec<FileEntry> = read_dir
-                    .filter_map(|entry| entry.ok())
-                    .filter_map(|entry| {
-                        let path = entry.path();
-                        let name = entry.file_name().to_string_lossy().to_string();
-
-                        // Skip hidden files (starting with .)
-                        if name.starts_with('.') {
-                            return None;
-                        }
-
-                        let is_dir = path.is_dir();
-                        Some(FileEntry::new(name, path, is_dir))
-                    })
-                    .collect();
-
-                // Sort: directories first, then alphabetically
-                entries.sort_by(|a, b| match (a.is_dir, b.is_dir) {
-                    (true, false) => std::cmp::Ordering::Less,
-                    (false, true) => std::cmp::Ordering::Greater,
-                    _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
-                });
-
-                self.entries = entries;
-            }
+            self.entries = Self::read_dir_sorted(base_dir);
         }
 
-        // Reset selection if out of bounds
         if self.selected_index >= self.entries.len() {
             self.selected_index = self.entries.len().saturating_sub(1);
         }
+        self.tree_dirty = true;
+    }
+
+    /// Read a directory and return sorted entries (dirs first, then alpha).
+    fn read_dir_sorted(dir: &PathBuf) -> Vec<FileEntry> {
+        let Ok(read_dir) = fs::read_dir(dir) else {
+            return Vec::new();
+        };
+
+        let mut entries: Vec<FileEntry> = read_dir
+            .filter_map(|entry| entry.ok())
+            .filter_map(|entry| {
+                let path = entry.path();
+                let name = entry.file_name().to_string_lossy().to_string();
+
+                // Skip hidden files (dotfiles)
+                if name.starts_with('.') {
+                    return None;
+                }
+
+                let is_dir = path.is_dir();
+                Some(FileEntry::new(name, path, is_dir))
+            })
+            .collect();
+
+        entries.sort_by(|a, b| match (a.is_dir, b.is_dir) {
+            (true, false) => std::cmp::Ordering::Less,
+            (false, true) => std::cmp::Ordering::Greater,
+            _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+        });
+
+        entries
+    }
+
+    /// Toggles a directory's expanded state.
+    pub fn toggle_dir(&mut self, path: &PathBuf) {
+        if self.expanded_dirs.contains(path) {
+            self.expanded_dirs.remove(path);
+        } else {
+            self.expanded_dirs.insert(path.clone());
+        }
+        self.tree_dirty = true;
+    }
+
+    /// Returns whether a directory is expanded.
+    pub fn is_expanded(&self, path: &PathBuf) -> bool {
+        self.expanded_dirs.contains(path)
+    }
+
+    /// Returns the cached file tree, rebuilding only if dirty.
+    /// This avoids filesystem reads on every frame.
+    pub fn build_tree(&mut self) -> Vec<crate::view_model::FileTreeNode> {
+        if self.tree_dirty {
+            self.tree_cache = match self.base_directory {
+                Some(ref base_dir) => self.build_tree_recursive(base_dir),
+                None => Vec::new(),
+            };
+            self.tree_dirty = false;
+        }
+        self.tree_cache.clone()
+    }
+
+    /// Recursively builds tree nodes for a directory.
+    fn build_tree_recursive(&self, dir: &PathBuf) -> Vec<crate::view_model::FileTreeNode> {
+        let entries = Self::read_dir_sorted(dir);
+
+        entries
+            .into_iter()
+            .map(|entry| {
+                if entry.is_dir {
+                    let is_expanded = self.expanded_dirs.contains(&entry.path);
+                    let children = if is_expanded {
+                        self.build_tree_recursive(&entry.path)
+                    } else {
+                        Vec::new()
+                    };
+                    let is_generated = matches!(
+                        entry.name.as_str(),
+                        "target" | "node_modules" | "__pycache__" | "dist" | "build"
+                        | ".next" | "out" | "coverage" | ".turbo"
+                    );
+                    let mut node = crate::view_model::FileTreeNode::dir(&entry.name, is_expanded, children);
+                    node.path = entry.path.to_string_lossy().to_string();
+                    node.is_generated = is_generated;
+                    node
+                } else {
+                    let ext = entry.path.extension()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let mut node = crate::view_model::FileTreeNode::file(&entry.name, &ext);
+                    node.path = entry.path.to_string_lossy().to_string();
+                    node
+                }
+            })
+            .collect()
     }
 
     /// Toggles sidebar visibility.
@@ -155,32 +238,23 @@ impl Sidebar {
     }
 
     /// Ensures the selected item is visible within the viewport.
-    ///
-    /// Uses the cached viewport height from the last `adjust_scroll_for_height` call.
     pub fn ensure_visible(&mut self) {
         self.update_scroll_for_selection(self.viewport_height);
     }
 
     /// Updates the scroll offset for a given viewport height.
-    ///
-    /// This should be called whenever the terminal/window is resized to update
-    /// the cached viewport height and ensure proper scrolling behavior.
     pub fn adjust_scroll_for_height(&mut self, viewport_height: usize) {
         if viewport_height == 0 {
             return;
         }
-
-        // Cache the viewport height for use in ensure_visible
         self.viewport_height = viewport_height;
         self.update_scroll_for_selection(viewport_height);
     }
 
-    /// Internal helper to update scroll offset based on selection and viewport.
     fn update_scroll_for_selection(&mut self, viewport_height: usize) {
         if viewport_height == 0 {
             return;
         }
-
         if self.selected_index < self.scroll_offset {
             self.scroll_offset = self.selected_index;
         } else if self.selected_index >= self.scroll_offset + viewport_height {
@@ -198,7 +272,7 @@ impl Sidebar {
         self.selected_entry().map(|e| &e.path)
     }
 
-    /// Returns visible entries for rendering.
+    /// Returns visible entries for rendering (flat, for keyboard nav compatibility).
     pub fn visible_entries(&self, viewport_height: usize) -> &[FileEntry] {
         let start = self.scroll_offset;
         let end = (start + viewport_height).min(self.entries.len());
@@ -223,20 +297,19 @@ impl Sidebar {
         self.base_directory = Some(path);
         self.selected_index = 0;
         self.scroll_offset = 0;
+        self.expanded_dirs.clear();
         self.refresh_entries();
     }
 
     /// Navigates to the parent directory.
     pub fn go_to_parent_directory(&mut self) {
         if let Some(ref base) = self.base_directory {
-            // Capture the name of the directory we are currently in (to select it in parent)
             let previous_dir_name = base.file_name().map(|n| n.to_string_lossy().to_string());
 
             if let Some(parent) = base.parent() {
                 let parent_path = parent.to_path_buf();
                 self.set_base_directory(parent_path);
 
-                // If we know which directory we came from, select it
                 if let Some(name) = previous_dir_name {
                     if let Some(index) = self.entries.iter().position(|e| e.name == name) {
                         self.selected_index = index;
@@ -294,5 +367,47 @@ mod tests {
     fn test_focus_state_default() {
         let focus = FocusState::default();
         assert_eq!(focus, FocusState::Editor);
+    }
+
+    #[test]
+    fn test_real_tree_expand() {
+        // Use the actual project directory to test tree building
+        let cwd = std::env::current_dir().unwrap();
+        let mut sidebar = Sidebar::new(Some(cwd.clone()));
+        assert!(sidebar.visible);
+        assert!(!sidebar.entries.is_empty());
+
+        let tree = sidebar.build_tree();
+        assert!(!tree.is_empty(), "Tree should have root entries");
+
+        // Find a directory in the tree
+        let dir_node = tree.iter().find(|n| n.is_dir);
+        assert!(dir_node.is_some(), "Should have at least one directory");
+        let dir_node = dir_node.unwrap();
+        assert!(!dir_node.is_expanded, "Should start collapsed");
+        assert!(dir_node.children.is_empty(), "Collapsed dir has no children");
+
+        // Toggle it open using the path from the tree node
+        let dir_path = PathBuf::from(&dir_node.path);
+        sidebar.toggle_dir(&dir_path);
+        assert!(sidebar.is_expanded(&dir_path));
+
+        // Rebuild tree — expanded dir should have children
+        let tree2 = sidebar.build_tree();
+        let dir_node2 = tree2.iter().find(|n| n.name == dir_node.name).unwrap();
+        assert!(dir_node2.is_expanded, "Dir should be expanded after toggle");
+        // It should have children now (unless it's an empty directory)
+        eprintln!("Dir '{}' expanded, children: {}", dir_node2.name, dir_node2.children.len());
+    }
+
+    #[test]
+    fn test_toggle_dir() {
+        let mut sidebar = Sidebar::default();
+        let dir = PathBuf::from("/some/dir");
+        assert!(!sidebar.is_expanded(&dir));
+        sidebar.toggle_dir(&dir);
+        assert!(sidebar.is_expanded(&dir));
+        sidebar.toggle_dir(&dir);
+        assert!(!sidebar.is_expanded(&dir));
     }
 }

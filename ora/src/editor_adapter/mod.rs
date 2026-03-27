@@ -20,19 +20,24 @@
 pub mod types;
 pub use types::*;
 
-/// Trait abstracting over an editor backend.
+use std::path::PathBuf;
+
+// =============================================================================
+// Sub-traits (FIX-04): split the monolithic EditorDataSource into three
+// focused traits. This allows future phases to add methods to the correct
+// sub-trait and narrows method signatures for views that only need rendering.
+// =============================================================================
+
+/// Read-only buffer/viewport data for rendering.
 ///
-/// `wgpu_client` implements this for `core_editor::app::App`.
-/// ora views receive `&dyn EditorDataSource` to query presentation data.
-pub trait EditorDataSource {
+/// Views that only read data (e.g. text area, gutter) can accept
+/// `&dyn BufferDataSource` instead of the full `&dyn EditorDataSource`.
+pub trait BufferDataSource {
     /// Build the complete render model for the current frame.
     ///
     /// `viewport_lines` is the number of text lines currently visible
     /// in the editor viewport (used to compute `visible_lines` in the model).
     fn build_render_model(&self, viewport_lines: usize) -> RenderModel;
-
-    /// Dispatch an editor command (from keyboard input or UI action).
-    fn dispatch_command(&mut self, cmd: EditorCommand);
 
     /// Resize the editor viewport (called on window resize).
     ///
@@ -55,6 +60,122 @@ pub trait EditorDataSource {
     /// `max_scroll_px = (total_lines - 1) * LINE_HEIGHT`
     fn total_lines(&self) -> usize;
 
+    /// Returns the sidebar width in pixels (0 if hidden).
+    ///
+    /// Used by the event loop for mouse click hit-testing to determine
+    /// whether a click falls inside the text area.
+    fn sidebar_width_px(&self) -> f32;
+
+    /// Returns the gutter width in characters.
+    ///
+    /// Used by the event loop for mouse click coordinate conversion
+    /// (pixel position to document line/col).
+    fn gutter_width_chars(&self) -> usize;
+
+    /// Returns the horizontal scroll offset in characters.
+    fn scroll_x(&self) -> usize;
+}
+
+/// Command dispatch to the editor backend.
+pub trait CommandDispatcher {
+    /// Dispatch an editor command (from keyboard input or UI action).
+    fn dispatch_command(&mut self, cmd: EditorCommand);
+}
+
+/// Window/chrome metadata.
+pub trait WindowDataSource {
     /// Get the window title (for title bar updates).
     fn window_title(&self) -> String;
+}
+
+/// File-operation callbacks invoked by the event loop's async dialog futures.
+///
+/// The event loop spawns async tasks that open native file dialogs, read files,
+/// and then call these methods to deliver results back to the adapter.
+pub trait FileOpDataSource {
+    /// Take and clear any pending file operation queued by `dispatch_command`.
+    ///
+    /// Called every frame by the event loop; returns `None` most frames.
+    fn take_pending_file_op(&mut self) -> Option<PendingFileOp>;
+
+    /// Called when a file has been successfully read and validated.
+    ///
+    /// `path` is the canonical path of the file; `content` is the UTF-8 text
+    /// (BOM already stripped by the caller). The adapter must create or
+    /// activate the appropriate tab and trigger a re-render.
+    fn handle_file_loaded(&mut self, path: PathBuf, content: String);
+
+    /// Called when a file could not be opened (I/O error or non-UTF-8 data).
+    ///
+    /// `message` is a user-visible error string to display in the status bar.
+    fn handle_file_error(&mut self, message: String);
+
+    /// Returns `true` if a native file dialog is currently open.
+    ///
+    /// Used to guard against concurrent dialogs (e.g. rapid Ctrl+O presses).
+    fn is_dialog_open(&self) -> bool;
+
+    /// Set the dialog-open guard flag.
+    ///
+    /// Called by the event loop before spawning a dialog task and cleared
+    /// when the dialog completes.
+    fn set_dialog_open(&mut self, open: bool);
+
+    /// Called when the user has chosen a path in the Save As dialog and the
+    /// file has been written to disk.
+    ///
+    /// The adapter must update the document's file path, clear dirty state,
+    /// register the path in the buffer registry, and trigger a re-render.
+    fn handle_file_saved(&mut self, path: PathBuf);
+
+    /// Returns `true` if the active document already has a file path.
+    ///
+    /// Used by the event loop to decide whether Ctrl+S should save silently
+    /// or open the Save As dialog.
+    fn active_doc_has_path(&self) -> bool;
+
+    /// Saves the active document to its current file path synchronously.
+    ///
+    /// Returns `Ok(true)` if the file was saved, `Ok(false)` if the document
+    /// has no path (caller should open Save As), or `Err` on I/O failure.
+    /// On error the adapter sets `pending_status_message` automatically.
+    fn save_active_doc(&mut self) -> Result<bool, String>;
+
+    /// Returns the last directory the user navigated to in a file dialog.
+    ///
+    /// Used to pre-populate the directory in subsequent open/save dialogs.
+    fn last_opened_directory(&self) -> PathBuf;
+
+    /// Returns the expiry instant of the current status message, if any.
+    ///
+    /// The event loop uses this to wake at the right moment and clear
+    /// the message from the status bar without polling every frame.
+    fn status_message_expiry(&self) -> Option<std::time::Instant>;
+}
+
+// =============================================================================
+// EditorDataSource — convenience super-trait combining all sub-traits.
+//
+// The blanket impl means any type implementing all four sub-traits
+// automatically implements EditorDataSource, preserving full backward
+// compatibility. Existing Box<dyn EditorDataSource> usage is unchanged.
+// =============================================================================
+
+/// Trait abstracting over an editor backend.
+///
+/// `wgpu_client` implements this for `core_editor::app::App`.
+/// ora views receive `&dyn EditorDataSource` to query presentation data.
+///
+/// This is a convenience super-trait combining `BufferDataSource`,
+/// `CommandDispatcher`, `WindowDataSource`, and `FileOpDataSource`.
+/// Implement those four sub-traits and this trait is satisfied automatically
+/// via blanket impl.
+pub trait EditorDataSource:
+    BufferDataSource + CommandDispatcher + WindowDataSource + FileOpDataSource
+{
+}
+
+impl<T> EditorDataSource for T where
+    T: BufferDataSource + CommandDispatcher + WindowDataSource + FileOpDataSource
+{
 }

@@ -69,7 +69,9 @@ impl App {
         let mut workspace = Workspace::new();
 
         match workspace.open_document(&path_buf) {
-            Ok(doc_id) => {
+            Ok((doc_id, _was_existing)) => {
+                // App::open_file creates a fresh Workspace, so was_existing is always false.
+                // We always create a new view here.
                 workspace.create_view(doc_id);
                 log::debug!("Opened file: {}", path);
             }
@@ -96,12 +98,12 @@ impl App {
         })
     }
 
-    /// Creates an App by opening a directory (shows sidebar).
+    /// Creates an App by opening a directory (shows sidebar, no empty document).
     pub fn open_directory(path: &str) -> std::io::Result<Self> {
         let path_buf = PathBuf::from(path);
         let canonical_path = std::fs::canonicalize(&path_buf)?;
 
-        let workspace = Workspace::with_new_document();
+        let workspace = Workspace::new();
         let sidebar = Sidebar::new(Some(canonical_path));
 
         Ok(Self {
@@ -171,6 +173,91 @@ impl App {
     // =========================================================================
     // Application-Level Command Handlers
     // =========================================================================
+
+    /// Creates a new untitled document and switches to it.
+    ///
+    /// The document is named "Untitled", "Untitled (2)", etc. according to the
+    /// workspace's monotonically increasing untitled counter.
+    ///
+    /// Returns the new DocumentId.
+    pub fn new_untitled(&mut self) -> crate::domain::DocumentId {
+        let doc_id = self.workspace.create_untitled_document();
+        let view_id = self.workspace.create_view(doc_id);
+        self.workspace.set_active_view(view_id);
+        self.needs_render = true;
+        doc_id
+    }
+
+    // =========================================================================
+    // Tab Management
+    // =========================================================================
+
+    /// Switches to the tab with the given view ID.
+    ///
+    /// Does NOT call `can_switch_active()` — tab switching preserves the current
+    /// buffer and simply changes focus. Only close/quit operations use dirty protection.
+    pub fn switch_tab(&mut self, view_id: u64) {
+        use crate::view::ViewId;
+        let vid = ViewId::from_raw(view_id);
+        self.workspace.set_active_view(vid);
+        self.needs_render = true;
+    }
+
+    /// Switches to a tab relative to the current active tab in visual (tab strip) order.
+    ///
+    /// `offset` of +1 advances forward (Ctrl+Tab), -1 goes backward (Ctrl+Shift+Tab).
+    /// Wraps around at both ends.
+    pub fn switch_tab_relative(&mut self, offset: i32) {
+        let tab_order = self.workspace.tab_order();
+        let len = tab_order.len();
+        if len == 0 {
+            return;
+        }
+
+        let current_id = match self.workspace.active_view_id() {
+            Some(id) => id,
+            None => return,
+        };
+
+        let current_pos = tab_order
+            .iter()
+            .position(|&id| id == current_id)
+            .unwrap_or(0) as isize;
+
+        let new_pos = (current_pos + offset as isize).rem_euclid(len as isize) as usize;
+        let new_view_id = tab_order[new_pos];
+        self.workspace.set_active_view(new_view_id);
+        self.needs_render = true;
+    }
+
+    /// Closes the active tab with dirty-buffer protection.
+    ///
+    /// If the document has unsaved changes, sets `pending_action` and
+    /// `pending_error` to trigger the save/discard/cancel dialog.
+    pub fn close_active_tab(&mut self) {
+        let doc_id = match self.workspace.active_view().map(|v| v.document_id()) {
+            Some(id) => id,
+            None => return,
+        };
+
+        match self.workspace.close_document_protected(doc_id) {
+            Ok(_) => {
+                // Document and views closed; MRU fallback handled by workspace.
+            }
+            Err(error @ crate::domain::ProtectionError::UnsavedChanges(_)) => {
+                self.pending_action =
+                    Some(crate::view_model::PendingAction::CloseDocument(doc_id));
+                self.pending_error = Some(error);
+            }
+            Err(error) => {
+                // MultipleUnsavedChanges — treat the same way for now
+                self.pending_action =
+                    Some(crate::view_model::PendingAction::CloseDocument(doc_id));
+                self.pending_error = Some(error);
+            }
+        }
+        self.needs_render = true;
+    }
 
     /// Saves the active document, updating status message on success or failure.
     pub fn save(&mut self) -> std::io::Result<bool> {
@@ -616,11 +703,28 @@ impl App {
     }
 
     /// Opens a file from the sidebar into the workspace.
+    ///
+    /// If the file is already open (deduplication via Buffer Registry), switches
+    /// to the existing view instead of creating a duplicate.
     fn open_file_from_sidebar(&mut self, path: &PathBuf) {
         match self.workspace.open_document(path) {
-            Ok(doc_id) => {
-                self.workspace.create_view(doc_id);
-                log::debug!("Opened file from sidebar: {:?}", path);
+            Ok((doc_id, was_existing)) => {
+                if was_existing {
+                    // File already open — find the existing view and switch to it
+                    let existing_view = self
+                        .workspace
+                        .views()
+                        .find(|(_, v)| v.document_id() == doc_id)
+                        .map(|(&id, _)| id);
+                    if let Some(view_id) = existing_view {
+                        self.workspace.set_active_view(view_id);
+                        log::debug!("Switched to existing view for: {:?}", path);
+                    }
+                } else {
+                    self.workspace.create_view(doc_id);
+                    log::debug!("Opened file from sidebar: {:?}", path);
+                }
+                self.needs_render = true;
             }
             Err(e) => {
                 log::debug!("Could not open file from sidebar: {:?}, error: {}", path, e);
@@ -644,13 +748,18 @@ impl App {
     // =========================================================================
 
     /// Returns information about all open views for the tab bar.
-    /// Returns a list of (view_id, title, is_active, is_dirty) tuples.
+    /// Returns a list of (view_id, title, is_active, is_dirty) tuples in tab strip order.
+    ///
+    /// Uses `tab_order` to guarantee deterministic insertion-order rendering,
+    /// rather than random HashMap iteration order.
     fn get_open_views_info(&self) -> Vec<(u64, String, bool, bool)> {
         let active_view_id = self.workspace.active_view_id();
 
-        self.workspace.views()
-            .filter_map(|(view_id, view)| {
-                // Get the document for this view
+        self.workspace
+            .tab_order()
+            .iter()
+            .filter_map(|view_id| {
+                let view = self.workspace.view(*view_id)?;
                 let doc = self.workspace.document(view.document_id())?;
                 let title = doc.title();
                 let is_active = Some(*view_id) == active_view_id;
@@ -691,7 +800,7 @@ impl App {
                 view,
                 self.pending_action.as_ref(),
                 self.pending_error.as_ref(),
-                &self.sidebar,
+                &mut self.sidebar,
                 self.focus,
                 viewport_height,
                 status_message,
@@ -699,7 +808,7 @@ impl App {
             ),
             _ => {
                 // Even without a document, we might want to show the sidebar
-                ViewModelBuilder::build_sidebar_only(&self.sidebar, self.focus, viewport_height)
+                ViewModelBuilder::build_sidebar_only(&mut self.sidebar, self.focus, viewport_height)
             }
         };
 
@@ -748,6 +857,131 @@ mod app_render_tests {
 
         // Sidebar should NOT be visible (no directory opened)
         assert!(!model.sidebar.visible, "sidebar should not be visible for new app");
+    }
+}
+
+#[cfg(test)]
+mod tab_management_tests {
+    use super::*;
+
+    /// Creates an App with two tabs (two documents, each with one view).
+    fn app_with_two_tabs() -> App {
+        let mut app = App::new();
+        // App::new() already has one doc+view via Workspace::with_new_document()
+        let doc_id = app.workspace.create_document();
+        app.workspace.create_view(doc_id);
+        app
+    }
+
+    #[test]
+    fn test_switch_tab_relative_forward() {
+        let mut app = app_with_two_tabs();
+
+        let initial_id = app.workspace.active_view_id().unwrap();
+        app.switch_tab_relative(1);
+        let after_id = app.workspace.active_view_id().unwrap();
+
+        // Should have moved to a different tab
+        assert_ne!(initial_id, after_id, "switch_tab_relative(+1) should change active view");
+        assert!(app.needs_render, "needs_render should be set after tab switch");
+    }
+
+    #[test]
+    fn test_switch_tab_relative_wraps() {
+        let mut app = app_with_two_tabs();
+
+        let tab_order = app.workspace.tab_order().to_vec();
+        let first_id = tab_order[0];
+
+        // Force active to first tab
+        app.workspace.set_active_view(first_id);
+        // Cycle backward from first tab — should wrap to last
+        app.switch_tab_relative(-1);
+
+        let last_id = *tab_order.last().unwrap();
+        assert_eq!(
+            app.workspace.active_view_id().unwrap(),
+            last_id,
+            "switch_tab_relative(-1) from first tab should wrap to last"
+        );
+    }
+
+    #[test]
+    fn test_switch_tab_by_id() {
+        let mut app = app_with_two_tabs();
+
+        let tab_order = app.workspace.tab_order().to_vec();
+        // Make sure we're on the second tab first
+        app.workspace.set_active_view(tab_order[1]);
+
+        let first_id = tab_order[0];
+        app.switch_tab(first_id.as_u64());
+
+        assert_eq!(
+            app.workspace.active_view_id().unwrap(),
+            first_id,
+            "switch_tab(view_id) should switch directly to that tab"
+        );
+        assert!(app.needs_render);
+    }
+
+    #[test]
+    fn test_close_active_tab_clean_doc() {
+        let mut app = app_with_two_tabs();
+        let initial_count = app.workspace.view_count();
+        assert_eq!(initial_count, 2);
+
+        // Close the active tab (clean document)
+        app.close_active_tab();
+
+        assert_eq!(
+            app.workspace.view_count(),
+            1,
+            "one view should remain after closing active tab"
+        );
+        assert!(app.needs_render);
+        assert!(
+            app.pending_action.is_none(),
+            "clean doc close should not set pending_action"
+        );
+    }
+
+    #[test]
+    fn test_close_active_tab_dirty_sets_dialog() {
+        let mut app = app_with_two_tabs();
+
+        // Make the active document dirty
+        if let Some(doc) = app.workspace.active_document_mut() {
+            doc.mark_dirty();
+        }
+
+        app.close_active_tab();
+
+        // Should not have closed — dialog pending
+        assert_eq!(app.workspace.view_count(), 2, "dirty doc should not be closed");
+        assert!(app.pending_action.is_some(), "pending_action should be set for dirty doc");
+        assert!(app.pending_error.is_some(), "pending_error should be set for dirty doc");
+        assert!(app.needs_render);
+    }
+
+    #[test]
+    fn test_switch_tab_relative_empty() {
+        // Should not panic on empty workspace
+        let workspace = crate::domain::Workspace::new();
+        let mut app = App {
+            workspace,
+            dispatcher: crate::commands::CommandDispatcher::new(),
+            needs_render: false,
+            should_quit: false,
+            pending_action: None,
+            pending_error: None,
+            sidebar: crate::view::Sidebar::default(),
+            focus: crate::view::FocusState::Editor,
+            status_message: None,
+        };
+        // Should return without panicking
+        app.switch_tab_relative(1);
+        assert!(!app.needs_render, "needs_render should not be set with no tabs");
     }
 }
 

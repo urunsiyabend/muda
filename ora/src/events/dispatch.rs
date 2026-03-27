@@ -1,4 +1,4 @@
-use super::mouse::{HitboxId, MouseDownEvent, MouseMoveEvent, MouseUpEvent};
+use super::mouse::{HitboxId, MouseDownEvent, MouseMoveEvent, MouseScrollEvent, MouseUpEvent};
 use std::cell::Cell;
 use std::collections::HashMap;
 
@@ -55,6 +55,7 @@ impl EventContext {
 pub type MouseDownHandler = Box<dyn FnMut(&MouseDownEvent, &EventContext)>;
 pub type MouseUpHandler = Box<dyn FnMut(&MouseUpEvent, &EventContext)>;
 pub type MouseMoveHandler = Box<dyn FnMut(&MouseMoveEvent, &EventContext)>;
+pub type MouseScrollHandler = Box<dyn FnMut(&MouseScrollEvent, &EventContext)>;
 
 /// Event handler registry.
 /// Stores handlers for each hitbox and parent relationships for bubbling.
@@ -65,8 +66,10 @@ pub struct EventHandlers {
     mouse_up_handlers: HashMap<HitboxId, Vec<MouseUpHandler>>,
     /// Mouse move handlers indexed by hitbox ID.
     mouse_move_handlers: HashMap<HitboxId, Vec<MouseMoveHandler>>,
+    /// Mouse scroll handlers indexed by hitbox ID.
+    mouse_scroll_handlers: HashMap<HitboxId, Vec<MouseScrollHandler>>,
     /// Parent relationships for bubbling (child -> parent).
-    parent_map: HashMap<HitboxId, HitboxId>,
+    pub(crate) parent_map: HashMap<HitboxId, HitboxId>,
 }
 
 impl EventHandlers {
@@ -76,6 +79,7 @@ impl EventHandlers {
             mouse_down_handlers: HashMap::new(),
             mouse_up_handlers: HashMap::new(),
             mouse_move_handlers: HashMap::new(),
+            mouse_scroll_handlers: HashMap::new(),
             parent_map: HashMap::new(),
         }
     }
@@ -95,9 +99,19 @@ impl EventHandlers {
         self.mouse_move_handlers.entry(id).or_default().push(handler);
     }
 
+    /// Register a mouse scroll handler for a hitbox.
+    pub fn register_mouse_scroll(&mut self, id: HitboxId, handler: MouseScrollHandler) {
+        self.mouse_scroll_handlers.entry(id).or_default().push(handler);
+    }
+
     /// Register a parent-child relationship for bubbling.
     pub fn register_parent(&mut self, child: HitboxId, parent: HitboxId) {
         self.parent_map.insert(child, parent);
+    }
+
+    /// Check if any scroll handlers are registered (for debugging).
+    pub fn has_scroll_handlers(&self) -> bool {
+        !self.mouse_scroll_handlers.is_empty()
     }
 }
 
@@ -239,4 +253,44 @@ pub fn dispatch_mouse_move(handlers: &mut EventHandlers, event: &MouseMoveEvent,
             }
         }
     }
+}
+
+/// Dispatch a mouse scroll event through the two-phase system.
+/// Returns true if any handler consumed the event (stopped propagation).
+pub fn dispatch_mouse_scroll(handlers: &mut EventHandlers, event: &MouseScrollEvent, target: HitboxId) -> bool {
+    let path = build_dispatch_path(&handlers.parent_map, target);
+
+    // Phase 1: Capture (root to target)
+    let capture_ctx = EventContext::new(DispatchPhase::Capture, target);
+    for &hitbox_id in &path {
+        if capture_ctx.is_propagation_stopped() {
+            return true;
+        }
+        if let Some(handler_list) = handlers.mouse_scroll_handlers.get_mut(&hitbox_id) {
+            for handler in handler_list.iter_mut() {
+                handler(event, &capture_ctx);
+                if capture_ctx.is_propagation_stopped() {
+                    return true;
+                }
+            }
+        }
+    }
+
+    // Phase 2: Bubble (target to root)
+    let bubble_ctx = EventContext::new(DispatchPhase::Bubble, target);
+    for &hitbox_id in path.iter().rev() {
+        if bubble_ctx.is_propagation_stopped() {
+            return true;
+        }
+        if let Some(handler_list) = handlers.mouse_scroll_handlers.get_mut(&hitbox_id) {
+            for handler in handler_list.iter_mut() {
+                handler(event, &bubble_ctx);
+                if bubble_ctx.is_propagation_stopped() {
+                    return true;
+                }
+            }
+        }
+    }
+
+    false
 }

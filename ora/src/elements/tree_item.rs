@@ -1,10 +1,13 @@
+use std::rc::Rc;
+
 use crate::element::{Element, LayoutContext, LayoutId, PaintContext, PrepaintContext};
 use crate::elements::text::{TextElement, TextState};
 use crate::events::mouse::HitboxId;
+use crate::events::MouseButton;
 use crate::style::*;
 use crate::theme::ColorToken;
 
-const TREE_ITEM_HEIGHT: f32 = 24.0;
+pub const TREE_ITEM_HEIGHT: f32 = 24.0;
 const INDENT_WIDTH: f32 = 16.0;
 const CHEVRON_WIDTH: f32 = 16.0;
 const ICON_WIDTH: f32 = 16.0;
@@ -17,9 +20,10 @@ pub struct TreeItem {
     is_dir: bool,
     is_expanded: bool,
     is_selected: bool,
+    is_generated: bool,
     icon_color: Option<Color>,
-    on_click: Option<Box<dyn Fn() + 'static>>,
-    on_toggle: Option<Box<dyn Fn() + 'static>>,
+    on_click: Option<Rc<dyn Fn() + 'static>>,
+    on_toggle: Option<Rc<dyn Fn() + 'static>>,
     // Internal text elements (created during request_layout)
     chevron_element: Option<TextElement>,
     icon_element: Option<TextElement>,
@@ -34,6 +38,7 @@ pub fn tree_item(label: impl Into<String>) -> TreeItem {
         is_dir: false,
         is_expanded: false,
         is_selected: false,
+        is_generated: false,
         icon_color: None,
         on_click: None,
         on_toggle: None,
@@ -63,6 +68,12 @@ impl TreeItem {
         self
     }
 
+    /// Mark as a generated/build directory (muted styling)
+    pub fn generated(mut self, generated: bool) -> Self {
+        self.is_generated = generated;
+        self
+    }
+
     /// Set the file-type icon color
     pub fn icon_color(mut self, color: Color) -> Self {
         self.icon_color = Some(color);
@@ -71,13 +82,13 @@ impl TreeItem {
 
     /// Attach a click handler for selection
     pub fn on_click(mut self, handler: impl Fn() + 'static) -> Self {
-        self.on_click = Some(Box::new(handler));
+        self.on_click = Some(Rc::new(handler));
         self
     }
 
     /// Attach a handler for expand/collapse toggle
     pub fn on_toggle(mut self, handler: impl Fn() + 'static) -> Self {
-        self.on_toggle = Some(Box::new(handler));
+        self.on_toggle = Some(Rc::new(handler));
         self
     }
 }
@@ -167,22 +178,27 @@ impl Element for TreeItem {
         let hitbox_id = cx.register_hitbox(bounds, true);
         state.hitbox_id = Some(hitbox_id);
 
-        // Separate hitbox for chevron area (directory toggle)
-        if self.is_dir {
-            let left_padding = self.depth as f32 * INDENT_WIDTH;
-            let chevron_bounds = Rect {
-                origin: Point {
-                    x: bounds.origin.x + left_padding,
-                    y: bounds.origin.y,
-                },
-                size: Size {
-                    width: CHEVRON_WIDTH,
-                    height: TREE_ITEM_HEIGHT,
-                },
-            };
-            let chevron_hitbox_id = cx.register_hitbox(chevron_bounds, false);
-            state.chevron_hitbox_id = Some(chevron_hitbox_id);
-        }
+        // Wire click handlers — only fire on Bubble phase to avoid double dispatch
+        let on_click = self.on_click.clone();
+        let on_toggle = self.on_toggle.clone();
+        let is_dir = self.is_dir;
+        cx.on_mouse_down(hitbox_id, move |event, ctx| {
+            if ctx.phase() != crate::events::dispatch::DispatchPhase::Bubble {
+                return;
+            }
+            if event.button != MouseButton::Left {
+                return;
+            }
+            if is_dir {
+                if let Some(handler) = &on_toggle {
+                    handler();
+                }
+            } else if event.click_count >= 2 {
+                if let Some(handler) = &on_click {
+                    handler();
+                }
+            }
+        });
 
         // Prepaint child elements
         if let Some(chevron_el) = &mut self.chevron_element {
@@ -205,7 +221,7 @@ impl Element for TreeItem {
         // Extract all needed colors from theme up front
         let bg_color = if self.is_selected {
             let mut c = cx.theme().color(ColorToken::Accent);
-            c.a = 0.15; // low-alpha accent for selection
+            c.a = 0.15;
             c
         } else if is_hovered {
             cx.theme().color(ColorToken::BgElevated)
@@ -214,7 +230,12 @@ impl Element for TreeItem {
         };
 
         let chevron_color = cx.theme().color(ColorToken::FgMuted);
-        let label_color = cx.theme().color(ColorToken::FgPrimary);
+        let label_color = if self.is_generated {
+            // Generated dirs: slightly dimmed but still readable
+            cx.theme().color(ColorToken::FgSecondary)
+        } else {
+            cx.theme().color(ColorToken::FgPrimary)
+        };
         let border_color = cx.theme().color(ColorToken::Border);
 
         let icon_color = if let Some(c) = self.icon_color {

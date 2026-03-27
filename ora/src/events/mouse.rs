@@ -14,6 +14,8 @@ pub struct MouseDownEvent {
     pub position: Point,
     pub button: MouseButton,
     pub modifiers: Modifiers,
+    /// Number of rapid consecutive clicks (1 = single, 2 = double, etc.)
+    pub click_count: u32,
 }
 
 /// Mouse button up event

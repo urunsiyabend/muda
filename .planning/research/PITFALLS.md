@@ -1,587 +1,545 @@
-# Domain Pitfalls: GPUI-Like UI Framework in Rust
+# Domain Pitfalls: v2.0 Functional Editor Features
 
-**Domain:** GPU-driven reactive UI framework (wgpu + winit + glyphon + taffy)
-**Researched:** 2026-01-28
-**Confidence:** MEDIUM (Web search findings corroborated with existing codebase analysis and multiple sources)
+**Domain:** Adding file ops, file browser, multi-tab, find/replace, selection, clipboard, and
+performance optimization to an existing GPU editor
+**Researched:** 2026-03-26
+**Confidence:** HIGH (grounded in actual codebase analysis — specific types, methods, and
+architectural decisions are cited throughout)
+
+---
+
+## Preface: How to Read This Document
+
+Each pitfall points to specific code in this codebase: file paths, struct names, method names. The
+goal is to prevent specific bugs, not recite generic advice. Where a pitfall says "see
+`workspace.rs` line 92", that line actually exists and contains the named risk.
 
 ---
 
 ## Critical Pitfalls
 
-Mistakes that cause rewrites, major performance issues, or architectural dead-ends.
-
-### Pitfall 1: Event Loop Ownership Architecture Mismatch
-
-**What goes wrong:** winit's event loop takes full control via `EventLoop::run()`, which never returns. Attempting to maintain control outside the framework leads to platform-specific failures (web, iOS) and fighting the API design.
-
-**Why it happens:** Developers coming from traditional game loops or retained-mode UIs expect to control the main loop. winit 0.30+ removed `poll_events()` specifically because it couldn't work properly on all platforms.
-
-**Consequences:**
-- Incompatible with multiple event loop instances
-- Cannot integrate with existing application lifecycle
-- Forces complete restructuring if discovered late
-- Platform-specific behavior divergence (RedrawRequested ordering varies by platform)
-
-**Prevention:**
-- Design ora to own the winit event loop from day one (`ora::run(app)` takes full control)
-- Document clearly that ora controls application lifecycle, not the reverse
-- Accept that wgpu_client becomes a thin shell that hands off control to ora
-- Test on multiple platforms early (Windows, Linux, macOS at minimum)
-
-**Detection:**
-- Attempting to call `window.request_redraw()` from outside the event loop
-- Platform-specific crashes on web or mobile targets
-- Race conditions where events arrive out of order
-
-**Phase impact:** Phase 1 (Core Framework) must get this right. No middle ground exists.
-
-**Sources:**
-- [EventLoop 3.0 Changes · Issue #2900 · rust-windowing/winit](https://github.com/rust-windowing/winit/issues/2900)
-- [How does the event loop system work for this library? · Discussion #3662](https://github.com/rust-windowing/winit/discussions/3662)
+Mistakes that cause data loss, rewrites, or irreparable user-facing bugs.
 
 ---
 
-### Pitfall 2: Immediate-Mode Rebuild Without Incremental Rendering
+### Pitfall 1: Synchronous File I/O Blocking the UI Thread
 
-**What goes wrong:** Rebuilding the entire UI tree every frame (immediate-mode style) performs well for small UIs but becomes CPU-bound at scale. Without incremental invalidation, scrolling a large file or hovering over many elements causes frame drops.
+**What goes wrong:** `Document::open()` calls `std::fs::read_to_string(path)` synchronously. `Document::save()` calls `self.buffer.to_string()` (materializing the full rope into a heap string) then `std::fs::write()`. Both run on the UI thread inside an `EditorCommand` dispatch cycle. Opening a 5 MB file on a slow disk or network share freezes the window for hundreds of milliseconds. On Windows, antivirus scanning adds unpredictable latency to every file open.
 
-**Why it happens:** GPUI's immediate-mode API is elegant and easy to use, making developers defer optimization. The framework "just works" until it doesn't—usually discovered during performance profiling late in development.
+**Why it happens:** The current single-document design never exposed this problem. `Document::open` in `core_editor/src/domain/document.rs` line 132 was written for correctness, not async.
 
 **Consequences:**
-- Scrolling stutters on files > 1000 lines
-- Hover effects lag when many elements are present
-- CPU pegged at 100% even when nothing changes visually
-- Power consumption spikes on laptops
-- 120 FPS target impossible to maintain
+- UI thread hangs — winit stops processing events, the window goes white on Windows
+- No way to cancel an in-progress open/save
+- Network-mounted directories (WSL, UNC paths) can stall for 30+ seconds
+- Antivirus hooks make "fast" local SSDs behave unpredictably
 
 **Prevention:**
-- Implement dirty region tracking from Phase 1
-- Cache render model and only rebuild on state changes (muda already has this issue: `build_render_model()` called every frame unconditionally)
-- Use compositing and invalid region tracking (WebRender had to retrofit this painfully)
-- Add frame time budgeting (4ms batching made terminal emulator usable)
-- Profile early with realistic data (10k+ line files, 100+ UI elements)
+- Move file I/O to a background thread using `std::thread::spawn` or `tokio::spawn`
+- Dispatch `EditorCommand::Open(path)` to trigger async load; when complete, send result back via channel
+- Show a "loading..." indicator while load is in flight
+- Accept that `Document::open()` in core_editor stays synchronous — the async wrapper lives in wgpu_client or a new workspace service layer
 
-**Detection:**
-- Frame times > 16ms (60 FPS) or > 8ms (120 FPS)
-- CPU usage high even when idle
-- Profiler shows significant time in `View::render()` every frame
-- Battery drain during static screens
+**Warning signs:**
+- Opening any file visibly lags the editor
+- The OS "not responding" indicator appears on the title bar
+- Files on mapped network drives freeze the process
 
-**Phase impact:** Phase 2 (Layout & Rendering) must include invalidation strategy. Retrofitting is painful.
-
-**Sources:**
-- [Eight million pixels and counting – GUIs on the GPU](https://nical.github.io/drafts/gui-gpu-notes.html)
-- [Building a GPU-Accelerated Terminal Emulator with Rust and GPUI](https://dev.to/zhiwei_ma_0fc08a668c1eb51/building-a-gpu-accelerated-terminal-emulator-with-rust-and-gpui-4103)
-- [GPUI: A Deep Dive into the High-Performance Rust UI Framework](https://beckmoulton.medium.com/gpui-a-technical-overview-of-the-high-performance-rust-ui-framework-powering-zed-ac65975cda9f)
+**Phase:** File Operations phase. Must be async from day one — retrofitting sync to async touches every call site.
 
 ---
 
-### Pitfall 3: Draw Call Explosion Without Aggressive Batching
+### Pitfall 2: Opening the Same File Twice Creates Silent Data Loss
 
-**What goes wrong:** Submitting hundreds or thousands of draw calls per frame becomes CPU-bound before GPU-bound. Rule of thumb: > 100 draw calls will stutter on mobile or integrated GPUs. Typical frame with 20k+ quads requires sophisticated batching.
+**What goes wrong:** `Workspace::open_document()` (workspace.rs line 92) creates a new Document every time it is called, with a new `DocumentId`. If the user opens `main.rs` from the file browser while a tab for `main.rs` already exists, two independent `Document` instances exist in the workspace. The user edits in one tab. Saving the other tab (which has stale content from disk) overwrites the live edits. Data is lost with no warning.
 
-**Why it happens:** Naive rendering treats each UI element as a separate draw call. Text rendering is especially vulnerable—each glyph can become a draw call without proper batching.
+**Why it happens:** `open_document` has no path-deduplication check. There is no index from `PathBuf` to `DocumentId`.
 
 **Consequences:**
-- Performance bottleneck is CPU, not GPU (GPU sits idle)
-- Frame time dominated by draw call submission overhead
-- Mobile/integrated GPU performance collapse
-- Cannot achieve target FPS regardless of scene complexity
+- Silent data loss when two tabs for the same file diverge and one is saved
+- `undo_history` for each copy is independent, so undo after the overwrite produces unexpected results
+- The file browser has no way to highlight that a file is "already open"
 
 **Prevention:**
-- Use instanced rendering (single unit quad mesh, instanced per element)
-- Batch all quads by material/texture into single draw call
-- Group text glyphs by atlas region into batches
-- Minimize pipeline state changes (use same PipelineLayout across pipelines to avoid rebinding)
-- Measure draw call count in debug builds (add warning at > 100 per frame)
+- Add a `path_to_doc: HashMap<PathBuf, DocumentId>` index to `Workspace`
+- In `open_document`, check the index first: if found, activate the existing view instead of creating a new document
+- Canonicalize paths before indexing (`std::fs::canonicalize`) to handle `./foo.rs` vs `foo.rs` vs symlinks
+- When activating an existing tab, consider a "file may have changed on disk" check if time elapsed
 
-**Detection:**
-- Profiler shows significant time in `wgpu::RenderPass::draw()`
-- GPU utilization < 50% while frame rate drops
-- Adding more UI elements causes linear slowdown
-- Debug overlay shows > 100 draw calls per frame
+**Warning signs:**
+- Opening a file that is already in a tab creates a second tab with the same name
+- Saving one instance silently overwrites what you typed in the other
 
-**Phase impact:** Phase 2 (Layout & Rendering) batching strategy is critical. Cannot be added later without full renderer rewrite.
-
-**Sources:**
-- [Eight million pixels and counting – GUIs on the GPU](https://nical.github.io/drafts/gui-gpu-notes.html)
-- [Honest Feedback on WGPU and the Need for Better Learning Resources · Issue #8010](https://github.com/gfx-rs/wgpu/issues/8010)
+**Phase:** File Operations phase. Must be in the first implementation before any file browser exists.
 
 ---
 
-### Pitfall 4: Reentrancy Bugs in Reactive State Updates
+### Pitfall 3: `can_switch_active()` Blocks Tab Switching
 
-**What goes wrong:** Emitting events during event handling causes reentrancy—listener function emits to the same emitter it's subscribed to, creating infinite loops, stack overflows, or state corruption.
+**What goes wrong:** `Workspace::can_switch_active()` (workspace.rs line 460) returns a `ProtectionError::UnsavedChanges` if the active document is dirty. If the tab bar calls this before switching, every tab click is blocked when the user has unsaved edits. VS Code and Zed allow free switching between tabs regardless of dirty state — the dirty indicator in the tab title is sufficient.
 
-**Why it happens:** Reactive frameworks naturally want to propagate changes immediately. Model changes trigger view updates which trigger more model changes. Classic observer pattern reentrancy.
+**Why it happens:** `can_switch_active` was designed for a flow where switching documents requires confirmation, not for a tab bar model where dirty tabs are a normal, expected state.
 
 **Consequences:**
-- Stack overflow crashes during state updates
-- Infinite update loops that freeze the UI
-- Subtle state corruption when nested updates interleave
-- Impossible to debug without understanding full event graph
+- Tab clicks trigger an "unsaved changes" dialog instead of just switching
+- Users cannot look at another file without saving or discarding edits
+- The entire multi-tab UX is broken
 
 **Prevention:**
-- Use effect queue system (GPUI pattern: `cx.notify()` pushes to queue, processes later)
-- Give run-to-completion semantics: handle one event fully before next
-- Never invoke listeners directly from `emit()` or `notify()`
-- Document clearly: "State updates are queued, not immediate"
-- Add cycle detection in debug builds
+- Do not call `can_switch_active()` during normal tab switching
+- Reserve unsaved-change prompts for: close tab, close workspace, quit application
+- In the ora tab bar click handler, call `workspace.set_active_view(view_id)` directly
+- `can_switch_active()` may be removed or repurposed; document its intended use clearly
 
-**Detection:**
-- Stack traces showing recursive `View::render()` or `Model::update()`
-- UI freezes during specific state changes
-- Stack overflow crashes with "exceeded recursion limit"
-- Debug cycle detector fires
+**Warning signs:**
+- Every tab click shows "save or discard" dialog
+- Users cannot switch between open files without saving
 
-**Phase impact:** Phase 3 (Reactive State) must implement effect queue architecture. Cannot be patched in later.
-
-**Sources:**
-- [Ownership and data flow in GPUI — Zed's Blog](https://zed.dev/blog/gpui-ownership)
-- [GPUI Framework | zed-industries/zed | DeepWiki](https://deepwiki.com/zed-industries/zed/2.2-gpui-framework)
+**Phase:** Multi-tab phase. Must be checked before implementing tab click handlers.
 
 ---
 
-### Pitfall 5: wgpu API Churn and Breaking Changes
+### Pitfall 4: Selection Rendering Bug Is in Span Generation, Not the Renderer
 
-**What goes wrong:** wgpu is pre-1.0 and introduces breaking changes frequently. Tutorial code breaks within months. Migration paths are unclear. Working code becomes unbuildable after dependency updates.
+**What goes wrong:** The known bug — "Shift+arrow selection causes text to disappear" — is almost certainly not in the GPU renderer. Selection is represented as `TextStyle::Selection` on `StyledSpan` objects in `LinePresentation` (see `types.rs` line 25). The renderer simply colors those spans. When selection spans appear where visible text should be, the text "disappears" because it renders in selection-background color. The bug is in the `build_render_model` code that generates spans (in wgpu_client's adapter implementation), not in ora's rendering.
 
-**Why it happens:** wgpu tracks the evolving WebGPU specification, which is still in Working Draft phase. As spec details change, wgpu API changes. The ecosystem is young and rapidly evolving.
+**Why it happens:** When selection overlaps a line, the code composing `TextStyle::Selection` spans may be replacing content spans instead of layering them, or the selection range is not correctly translated to the `VisualPosition` system used by `LinePresentation`.
 
 **Consequences:**
-- Cannot upgrade dependencies without rewriting rendering code
-- Security fixes and performance improvements locked out
-- Codebase fragments across wgpu versions (transitive deps diverge)
-- Maintenance burden escalates over time
-- Tutorials and examples become useless
+- Debugging in the wrong layer (renderer) while the actual bug is in span composition
+- Weeks lost if investigation starts at the GPU/rendering layer
+- Mouse selection implementation will reproduce the same bug if the root cause is not understood
 
 **Prevention:**
-- Pin wgpu version explicitly in Cargo.toml (already done: `wgpu = "23"`)
-- Budget 1-2 weeks per major version upgrade
-- Create abstraction layer between ora and wgpu (don't expose wgpu types in public API)
-- Monitor wgpu changelog and test pre-releases on feature branch
-- Accept 6-12 month lag behind latest wgpu version
-- Document which wgpu version ora targets
+- Investigate by printing `visible_lines[i].spans` to stdout during a selection event — if the text content is missing from the spans, the bug is in the adapter
+- The fix is in `wgpu_client`'s `build_render_model` implementation, specifically in how selection ranges intersect styled spans
+- Consider switching from `TextStyle::Selection` in spans to a separate selection overlay (list of `(line, col_start, col_end)` rectangles drawn behind text). This is the Zed/VS Code approach — selection rendering is decoupled from text spans
 
-**Detection:**
-- Compilation failures after `cargo update`
-- Deprecation warnings from wgpu
-- Performance regressions after wgpu upgrade
-- New validation errors in existing code
+**Warning signs:**
+- Text disappears during selection but comes back when selection is cleared
+- The gutter line numbers still show correctly during the "disappearance" (proves the renderer is fine)
 
-**Phase impact:** All phases. Design ora's public API to hide wgpu. Phase 1 abstraction layer is critical.
+**Phase:** Selection/Clipboard phase, but the existing bug should be fixed before that phase begins.
 
-**Sources:**
-- [Honest Feedback on WGPU and the Need for Better Learning Resources · Issue #8010](https://github.com/gfx-rs/wgpu/issues/8010)
-- [wgpu/CHANGELOG.md at trunk · gfx-rs/wgpu](https://github.com/gfx-rs/wgpu/blob/trunk/CHANGELOG.md)
+---
+
+### Pitfall 5: Clipboard Requires Platform Access, Which Crosses the Adapter Boundary
+
+**What goes wrong:** `EditorCommand::Copy/Cut/Paste` exist in both `core_editor` and the ora mirror types (`types.rs` line 432). The clipboard operation itself requires a platform API call — on Windows, `arboard` or `clipboard-win` needs a window handle or COM initialization. The `EditorDataSource` trait has no clipboard methods. The ora view dispatches `EditorCommand::Copy`, which flows to wgpu_client's dispatcher, which calls `workspace.dispatch_command(Copy)` — but at that point the clipboard content needs to come from the platform, not from core_editor.
+
+**Why it happens:** The adapter boundary (ora views never import core_editor) was designed for rendering/commands, not bidirectional platform I/O. Clipboard is both output (write on copy/cut) and input (read on paste).
+
+**Consequences:**
+- Paste inserts nothing because no clipboard content was ever fetched
+- Copy/Cut silently fail because nowhere in the pipeline initiates a platform clipboard write
+- `arboard` initialization failures on Windows (COM not initialized) crash silently
+
+**Prevention:**
+- Handle clipboard at the wgpu_client dispatch layer, not inside core_editor
+- On `Copy`: get text from `workspace.active_document()` using selection range, then call `arboard::Clipboard::new().set_text(text)` — all in wgpu_client
+- On `Paste`: call `arboard::Clipboard::new().get_text()` first, then dispatch `EditorCommand::InsertText(text)`
+- On Windows, call `arboard::Clipboard::new()` once and keep it alive — repeated construction has overhead
+- Add `arboard` to `wgpu_client/Cargo.toml`, not to `core_editor` or `ora`
+
+**Warning signs:**
+- Ctrl+C appears to do nothing
+- Ctrl+V inserts nothing or inserts from a previous session
+- COM-related panic on Windows clipboard construction
+
+**Phase:** Selection/Clipboard phase.
+
+---
+
+### Pitfall 6: Mouse Hit-Testing Requires Character Width Knowledge That Lives Behind the GPU
+
+**What goes wrong:** Mouse text selection requires mapping pixel coordinates `(x, y)` to a text position `(line, column)`. Column calculation requires knowing the rendered width of each character, which depends on the font metrics managed by the `TextSystem` inside `GpuState`. The `EditorDataSource` trait has no hit-test method. `ora::views::TextAreaView` receives pixel events from winit but has no way to convert them to document offsets without touching the text system.
+
+**Why it happens:** The current design is render-only. Events flow: `winit -> ora -> EditorCommand dispatch`. No return path for coordinate mapping exists.
+
+**Consequences:**
+- Mouse click-to-position works only for monospace text at fixed `char_width`
+- Click position is off by several characters for non-monospace fonts or varying glyph widths
+- Mouse drag selection accumulates position errors with each event
+
+**Prevention:**
+- For a monospace editor with fixed `char_width` (currently `CHAR_WIDTH` constant in `TextAreaView`), hit-testing is `column = floor((mouse_x - gutter_width) / char_width)`, `line = floor((mouse_y + scroll_offset_px) / LINE_HEIGHT)`. This is sufficient for v2.
+- Add `hit_test(pixel_x: f32, pixel_y: f32) -> (line: usize, col: usize)` to `EditorDataSource` or implement it directly in `TextAreaView` using `char_width` and `LINE_HEIGHT`
+- For the gutter width offset: `GutterModel::width` is already in the `RenderModel`
+- Do not attempt sub-character pixel-perfect hit testing — column-granular is correct for a code editor
+
+**Warning signs:**
+- Clicking at end of a line positions cursor one character left of where you clicked
+- Click accuracy degrades as `char_width` estimate diverges from actual rendered width
+
+**Phase:** Selection/Clipboard phase.
 
 ---
 
 ## Moderate Pitfalls
 
-Mistakes that cause delays, technical debt, or require significant refactoring.
-
-### Pitfall 6: Text Atlas Memory Exhaustion
-
-**What goes wrong:** glyphon's texture atlas grows unbounded as new glyphs are encountered. Long editing sessions with varied fonts, sizes, or large unicode coverage exhaust GPU memory (especially integrated GPUs).
-
-**Why it happens:** No eviction policy—once a glyph enters the atlas, it stays forever. Large font sizes (48pt+) with CJK text consume massive atlas space.
-
-**Consequences:**
-- VRAM exhaustion after extended sessions
-- GPU allocation failures cause crashes
-- Frame rate degrades as atlas grows (lookup overhead)
-- Mobile/integrated GPU users hit limits first
-
-**Prevention:**
-- Implement LRU glyph eviction (muda CONCERNS.md already flags this)
-- Cap atlas size and reuse old entries
-- Use multiple atlases partitioned by font/size
-- Consider signed distance field rendering for large sizes
-- Monitor VRAM usage in telemetry
-
-**Detection:**
-- `wgpu::Device::create_texture()` allocation failures
-- Frame time increases over session duration
-- Memory profiler shows unbounded texture growth
-- Crashes after 1+ hour editing sessions
-
-**Phase impact:** Phase 2 (Layout & Rendering). Design glyph cache management upfront.
-
-**Sources:**
-- muda codebase CONCERNS.md (line 92-98: "GPU Texture Atlas Growth Unbounded")
-- [glyphon | 🦅🦁 Fast, simple 2D text renderer for wgpu](https://kandi.openweaver.com/rust/grovesNL/glyphon)
+Mistakes that cause notable technical debt, delayed bugs, or UX failures.
 
 ---
 
-### Pitfall 7: Taffy Layout Integration and Coordinate Space Mismatch
+### Pitfall 7: `EditorDataSource` Trait Pressure — Every Feature Adds Methods
 
-**What goes wrong:** Taffy computes layout in logical coordinates (x, y, width, height), but GPU rendering requires device coordinates (pixels). Mixing coordinate systems causes clipping errors, misaligned text, and scissor rect bugs.
+**What goes wrong:** Each new v2.0 feature (find/replace state, multi-tab commands, file browser interaction) requires new data to flow through the adapter boundary. Currently `EditorDataSource` has 7 methods (`build_render_model`, `dispatch_command`, `resize_viewport`, `viewport_lines`, `scroll_y`, `total_lines`, `window_title`). Find/replace needs highlight ranges. The file browser needs directory entries and expansion state. Clipboard needs read/write. Each addition is a dyn trait method, which means every implementor (wgpu_client's adapter) must implement it, and the trait becomes a grab-bag.
 
-**Why it happens:** Layout engine works in abstract units, but GPU shaders need screen-space coordinates. Conversion logic scattered across codebase instead of centralized. DPI scaling multiplies the confusion.
+**Why it happens:** The trait was designed for the current single-document render model. It was not designed for extension.
 
 **Consequences:**
-- Text renders outside scissor rect
-- Components clip incorrectly at window edges
-- Mouse hover areas misaligned with visual elements
-- DPI scaling breaks layout
+- Trait implementations become large monoliths
+- Adding a method requires touching the trait definition, wgpu_client implementation, and any test stubs
+- `RenderModel` grows to include find highlight state, sidebar state, file browser state — one large struct for everything
+- Performance: building the full RenderModel every frame even when only tab title changed
 
 **Prevention:**
-- Define clear coordinate space types (`LogicalPos`, `DevicePos`)
-- Centralize conversion functions (`logical_to_device()`, `device_to_logical()`)
-- Document which coordinate space each API uses
-- Use newtype pattern to prevent mixing (e.g., `struct LogicalX(f32)`)
-- Test at multiple DPI scales (100%, 150%, 200%)
+- Plan the full set of methods needed across all v2.0 features before starting implementation
+- Consider splitting: `EditorDataSource` (text content), `WorkspaceDataSource` (multi-tab, file state), `SearchDataSource` (find/replace)
+- Or add sub-models to `RenderModel` lazily (only populate when the relevant UI is visible)
+- The `RenderModel` could gain a revision/generation counter so `TextAreaView` can skip re-rendering when only status bar data changed
 
-**Detection:**
-- Components render outside bounds after window resize
-- Mouse events don't align with visual elements
-- Scissor clipping edge cases fail
-- DPI scaling produces incorrect layouts
+**Warning signs:**
+- Adding a new feature requires touching `EditorDataSource` in 3+ files
+- `RenderModel` struct has more than 15 fields
+- Methods like `find_highlights()` sit on the same trait as `scroll_y()`
 
-**Phase impact:** Phase 2 (Layout & Rendering). Establish coordinate system discipline early.
-
-**Sources:**
-- muda codebase CONCERNS.md (line 72: "Scissor rect calculations duplicated across components")
-- [taffy - Rust](https://docs.rs/taffy)
-- [GitHub - DioxusLabs/taffy: A high performance rust-powered UI layout library](https://github.com/DioxusLabs/taffy)
+**Phase:** All v2.0 phases. Plan the trait expansion strategy during the first feature phase.
 
 ---
 
-### Pitfall 8: Missing Compositor and Invalidation for Power Efficiency
+### Pitfall 8: Undo History Destroyed When Tab Is Closed and Reopened
 
-**What goes wrong:** Without compositing and dirty region tracking, basic interactions (scrolling, button clicks) consume orders of magnitude more power than necessary. Battery life plummets. Users on laptops notice high power usage.
+**What goes wrong:** `Workspace::close_document_force()` (workspace.rs line 109) calls `self.histories.remove(&doc_id)`. When the user closes a tab and reopens the same file, a new `DocumentId` is created and a fresh `CommandHistory` is inserted. The entire undo history from the previous session is gone. There is no "I just closed and reopened this file" distinction from "fresh open."
 
-**Why it happens:** Developers optimize for frame rate, not power consumption. Immediate-mode rendering re-renders everything, even static regions. Mobile/laptop users pay the cost.
+**Why it happens:** `CommandHistory` is indexed by `DocumentId`, which is ephemeral. There is no persistence across close/reopen.
 
 **Consequences:**
-- High battery drain even during idle periods
-- Laptops throttle CPU/GPU to conserve power (frame rate drops)
-- Users perceive app as "heavy" or "power hungry"
-- Reduced user session duration on battery
+- Ctrl+Z after accidentally closing and reopening a tab does nothing useful
+- User mental model: "I can undo recent accidental edits" — violated
+- Cannot be fixed without either persisting history to disk or keeping it in memory after close
 
 **Prevention:**
-- Implement dirty region tracking (only redraw changed areas)
-- Use compositing layers for static content
-- Skip rendering if nothing changed since last frame
-- Measure power consumption on laptops during development
-- Add "power saving mode" for battery users
+- For v2: do not try to persist history across close/reopen — document the limitation
+- Instead, add "close tab" confirmation when a dirty document has meaningful history (document not saved since last meaningful edit)
+- Consider keeping recently-closed document histories in a small LRU cache indexed by path — if the same path is reopened within the same session, restore the history
+- Do not index by `DocumentId` for the LRU — use `PathBuf` as key
 
-**Detection:**
-- Power profiler shows high CPU/GPU usage when idle
-- Battery drains faster than similar apps
-- Laptop fans spin up during light usage
-- Frame buffer unchanged but GPU still rendering
+**Warning signs:**
+- User closes a tab by accident, reopens the file, and Ctrl+Z produces nothing
 
-**Phase impact:** Phase 2 (Layout & Rendering). Retrofitting is extremely painful (WebRender experience).
-
-**Sources:**
-- [Eight million pixels and counting – GUIs on the GPU](https://nical.github.io/drafts/gui-gpu-notes.html)
+**Phase:** Multi-tab phase.
 
 ---
 
-### Pitfall 9: Flexbox Interop with Grid and Nested Layout Complexity
+### Pitfall 9: File Browser Reads Directory Synchronously During Render
 
-**What goes wrong:** Taffy supports both Flexbox and CSS Grid, but their interaction in nested contexts causes layout bugs. Indefinitely sized containers with mixed layout modes produce incorrect dimensions.
+**What goes wrong:** If the file browser's `render()` function calls `std::fs::read_dir()` to populate the tree, it runs on the UI thread during the render pass. Large directories (node_modules, Rust target/) contain thousands of entries. Even on SSDs, iterating 50,000 entries synchronously drops frames.
 
-**Why it happens:** Flexbox and Grid have different sizing semantics. Nested layouts require multiple measurement passes. Edge cases around min/max constraints interact poorly.
+**Why it happens:** The simplest implementation of a file tree is to read the directory when the tree node is expanded. `FileTreeNode` in `types.rs` line 312 holds `children: Vec<FileTreeNode>` in-memory — easy to populate synchronously.
 
 **Consequences:**
-- Components render with zero width/height
-- Nested layouts produce incorrect dimensions
-- Flex-grow doesn't work as expected in grid containers
-- Performance degrades with deeply nested layouts
+- Expanding `target/` in a Rust project freezes the UI for 1-3 seconds
+- Windows: antivirus may scan each accessed directory entry, multiplying latency
+- Frame budget exceeded, input events queue up, UI appears stuck
 
 **Prevention:**
-- Test nested layouts early (Flex in Grid, Grid in Flex)
-- Document which layout combinations are supported
-- Use simple layout hierarchy (prefer Flexbox-only for ora v1)
-- Add layout validation in debug builds (detect zero-sized nodes)
-- Defer Grid layout to future milestone if complexity exceeds budget
+- Read directory contents on a background thread; populate `FileTreeNode.children` asynchronously
+- Show a spinner or "loading..." placeholder in the tree while loading
+- Lazy-load: only read children when a directory node is expanded, not eagerly on workspace open
+- Cache directory contents; invalidate when file system watcher fires (or on manual refresh)
+- Exclude known large directories from immediate expansion: `.git`, `target`, `node_modules`, `.venv`
 
-**Detection:**
-- Components invisible due to zero dimensions
-- Layout changes when parent container resizes unexpectedly
-- Flex-basis calculations produce wrong values
-- Performance degrades with nested layouts
+**Warning signs:**
+- Expanding any directory node causes a visible pause
+- The editor becomes unresponsive for 1+ seconds after clicking a folder arrow
 
-**Phase impact:** Phase 2 (Layout & Rendering). Decide if Grid is needed for v1.
-
-**Sources:**
-- [Support multiple layout algorithms · Issue #28 · DioxusLabs/taffy](https://github.com/DioxusLabs/taffy/issues/28)
-- [Support CSS Grid · Issue #204 · DioxusLabs/taffy](https://github.com/DioxusLabs/taffy/issues/204)
+**Phase:** File browser phase.
 
 ---
 
-### Pitfall 10: Render Pipeline State Incompatibility Panics
+### Pitfall 10: File System Watching Is Unreliable on Windows
 
-**What goes wrong:** wgpu panics with "Render pipeline targets are incompatible with render pass" when FragmentState color attachment configuration doesn't match RenderPassDescriptor. Debugging is cryptic.
+**What goes wrong:** `ReadDirectoryChangesW` (the Windows API underlying `notify` crate) has well-documented limitations: it misses changes in deeply nested directories when the buffer overflows, drops events during high I/O activity, and does not fire for changes made via certain backup or antivirus processes. The `notify` crate wraps this API.
 
-**Why it happens:** Pipeline creation happens separately from render pass setup. Configuration mismatch only detected at runtime. Error messages don't clearly explain which attachments are incompatible.
+**Why it happens:** Windows file system watching requires polling as a fallback for reliability, not just event-driven watching.
 
 **Consequences:**
-- Runtime panics instead of compile-time errors
-- Cryptic error messages make debugging difficult
-- Adding new render targets breaks existing pipelines
-- Multi-pass rendering requires careful state management
+- File tree does not update when an external tool creates or deletes files
+- "File changed on disk" detection fails silently for some save patterns
+- Buffer overflow causes entire subtree to stop being watched until restart
 
 **Prevention:**
-- Create helper functions that construct matched pipeline + render pass pairs
-- Document color attachment requirements clearly
-- Use consistent PipelineLayout across all pipelines (avoids rebinding resources)
-- Add validation layer in debug builds with better error messages
-- Test all render pass combinations during development
+- Do not rely solely on file system events for freshness
+- Combine events with periodic polling (every 5-10 seconds) as fallback
+- On external change event: reload only the affected entry, not the entire tree
+- For "file changed on disk" detection: check mtime on focus gain as a reliable fallback
+- Use `notify` crate with `RecommendedWatcher` (it uses `ReadDirectoryChangesW` on Windows) but treat events as hints, not guarantees
 
-**Detection:**
-- Panic with "incompatible with render pass" message
-- Validation errors from wgpu backend
-- Render pass state changes break existing pipelines
+**Warning signs:**
+- Renaming a file externally does not update the file tree
+- "This file has been changed on disk" prompt fails to appear after external save
+- File tree becomes stale after high I/O activity (build, `cargo check`)
 
-**Phase impact:** Phase 2 (Layout & Rendering). Design pipeline management strategy upfront.
-
-**Sources:**
-- [Relationship between `RenderPassDescriptor::color_attachments` and `FragmentState::targets` in `RenderPipelineDescriptor` is not well documented · Issue #7322](https://github.com/gfx-rs/wgpu/issues/7322)
-- [wgpu render pipeline state management problems](https://github.com/gfx-rs/wgpu-rs/issues/18)
+**Phase:** File browser phase. Note Windows-specific reliability as a known limitation in user documentation.
 
 ---
 
-### Pitfall 11: State Management Lifecycle Bugs in Reactive Hooks
+### Pitfall 11: Find/Replace Regex Stalls the UI Thread on Large Files
 
-**What goes wrong:** Calling side-effect functions (like `material_assets.add()`) directly in component creation methods leaks resources. Each update cycle adds new materials/textures without cleanup.
+**What goes wrong:** Running a regex search over the entire rope on the UI thread blocks rendering. A poorly written regex (catastrophic backtracking) or a large file (200K lines) can stall the thread for seconds. The `ropey::Rope` does not have built-in regex search — the naive implementation materializes the rope to a `String` and searches that, which is an O(n) allocation plus O(n*m) search.
 
-**Why it happens:** Developers treat reactive `create()` methods like one-time constructors, but they run every update. State management requires "mostly functional" style with explicit side-effect control.
+**Why it happens:** `EditorCommand` dispatch is synchronous (see `EditorDataSource::dispatch_command` — it takes `&mut self`). There is no async path for long-running commands.
 
 **Consequences:**
-- Memory leaks (resources allocated every frame)
-- Resource exhaustion (GPU handles leak)
-- Performance degradation over time
-- Subtle bugs where state persists unexpectedly
+- Typing in the search box causes visible lag on large files as regex is re-run on each keystroke
+- Catastrophic backtracking on user-entered regex hangs the process entirely
+- UI thread stalls = dropped input events = missed keystrokes
 
 **Prevention:**
-- Document clearly: "create() runs every update, not once"
-- Provide explicit state management methods (`.insert()`, `.create_mutable()`)
-- Use functional style in create(): minimize side effects
-- Add resource leak detection in debug builds
-- Use RAII patterns for GPU resources
+- Run find/replace search on a background thread; send results back to UI via channel
+- Debounce search: wait 100-150ms after the last keystroke before starting search
+- Use the `regex` crate which has a bounded execution time guarantee (no catastrophic backtracking)
+- Limit search to visible range first, then expand to full document asynchronously
+- Add a timeout: if search takes > 200ms, show "searching..." instead of blocking
 
-**Detection:**
-- Memory usage grows unbounded during updates
-- Profiler shows increasing allocation rate
-- Debug builds detect resource handle leaks
-- Frame time increases over session duration
+**Warning signs:**
+- Typing in search box causes stutter
+- Opening find on a 50K+ line file freezes the editor
+- CPU spikes to 100% during search
 
-**Phase impact:** Phase 3 (Reactive State). Document lifecycle clearly. Add examples.
+**Phase:** Find/Replace phase.
 
-**Sources:**
-- [GitHub - viridia/quill: A reactive UI framework for Bevy](https://github.com/viridia/quill)
-- [GitHub - actuate-rs/actuate: A framework for declarative programming in Rust](https://github.com/actuate-rs/actuate)
+---
+
+### Pitfall 12: Replace-All Does Not Preserve Cursor or Scroll Position
+
+**What goes wrong:** A naive replace-all implementation replaces text positions from end to start (to preserve offsets) but then resets the cursor to position 0 and scroll offset to 0. The user's view context is lost. In files with many replacements, this is disorienting.
+
+**Why it happens:** `Replace All` is often implemented as "clear document, insert new content" or as a loop of `EditOperation::Replace` calls that each update the caret.
+
+**Consequences:**
+- Cursor jumps to line 1 after every Replace All
+- User must manually find their place again
+- Undo creates N individual undo steps (one per replacement) instead of one atomic "replace all" step
+
+**Prevention:**
+- Batch all replacements into a single `Transaction` so Ctrl+Z undoes the entire Replace All in one step (the `Transaction` type exists in `core_editor/src/commands/transaction.rs`)
+- Save caret offset and scroll position before Replace All; restore after
+- If the caret was within a replaced range, move it to end of that replacement; otherwise keep the relative position
+- Process replacements in reverse offset order to avoid invalidating earlier offsets
+
+**Warning signs:**
+- After Replace All, cursor is at line 1
+- Ctrl+Z requires N presses to undo all replacements
+- Editor scrolls back to top after Replace All
+
+**Phase:** Find/Replace phase.
+
+---
+
+### Pitfall 13: Premature Performance Optimization via Cache Invalidation Complexity
+
+**What goes wrong:** The current architecture rebuilds `RenderModel` every frame including `Vec<LinePresentation>` with `Vec<StyledSpan>` per line. The first performance instinct is to add caching everywhere. But complex cache invalidation introduces bugs that are harder to fix than the performance problem: stale line presentations, incorrect gutter numbers after insertion, syntax highlighting that doesn't update after edits.
+
+**Why it happens:** Performance anxiety drives premature optimization. The real bottleneck is often not where developers expect.
+
+**Consequences:**
+- Stale render model causes visual artifacts (old line shown after deletion)
+- Cache invalidation logic becomes the most bug-prone part of the codebase
+- Dirty tracking bugs cause "why didn't this update?" UI regression reports
+
+**Prevention:**
+- Measure first. Use `std::time::Instant` around `build_render_model` calls. If it's under 1ms, it's not the bottleneck.
+- The correct first optimization: only call `build_render_model` when `document.revision()` or view state has changed (store last-seen revision in the adapter)
+- The `Document` already has `revision()` and `cached_content_revision` for exactly this pattern
+- Second optimization: only regenerate syntax spans for lines whose byte range was touched by the last edit (the `update_syntax_incremental` method already exists)
+- Avoid caching individual line presentations — the complexity is not worth it for v2
+
+**Warning signs:**
+- Visual glitch where old content shows after an edit
+- Gutter shows wrong line numbers after line insertion/deletion
+- Syntax highlighting doesn't update after file open
+
+**Phase:** Performance optimization phase. Do not start optimizing before profiling.
+
+---
+
+### Pitfall 14: `with_active_context` Unsafe Block Will Not Extend to Multi-Buffer Operations
+
+**What goes wrong:** `Workspace::with_active_context` (workspace.rs line 319) uses raw pointer casts to obtain simultaneous mutable access to view, document, history, and event bus. This works for single-document operations. Any feature that needs to access two documents simultaneously (move text between tabs, compare files, "paste into new file") cannot use this pattern safely.
+
+**Why it happens:** Rust's borrow checker prevents multiple `&mut` references to fields of the same struct. The raw pointer workaround is sound for the current use case because the fields are truly disjoint.
+
+**Consequences:**
+- The unsafe block is correct today but becomes a trap when the API expands
+- Copy-paste of the pattern for non-disjoint accesses causes undefined behavior
+- Developers unfamiliar with the safety contract will misuse it
+
+**Prevention:**
+- Add a comment at the unsafe block documenting the invariant: "safe only because views, documents, and histories are separate HashMaps with different key types"
+- Do not use this pattern for any operation involving two documents at once
+- For multi-document operations, fetch what you need from each, then apply changes separately
+- Consider refactoring to a method-based API: `workspace.with_document_and_view(doc_id, view_id, |doc, view| ...)` that statically prevents the dangerous cases
+
+**Warning signs:**
+- Someone adds a case to `with_active_context` that accesses `self.documents` twice (different keys)
+- A multi-buffer operation is implemented by nesting `with_active_context` calls
+
+**Phase:** Multi-tab phase. Add the documentation comment before implementing multi-tab.
+
+---
+
+### Pitfall 15: Non-UTF-8 Files Produce Unhelpful Errors
+
+**What goes wrong:** `Document::open()` calls `std::fs::read_to_string()`, which returns `Err(InvalidData)` for any file that is not valid UTF-8. This includes Latin-1 encoded source files (common in older codebases), binary files the user accidentally opens, and files with a UTF-8 BOM that `read_to_string` handles inconsistently. The error propagates up as `std::io::Error` with no explanation to the user.
+
+**Why it happens:** The current implementation is correct Rust (UTF-8 is the string type), but provides no user-facing feedback.
+
+**Consequences:**
+- User tries to open a file, nothing happens (or generic "could not open file" error)
+- UTF-8 BOM (common in Windows tools like Notepad) can cause issues if not stripped
+- Old `.cpp` files with Latin-1 encoded comments fail to open entirely
+
+**Prevention:**
+- Detect non-UTF-8 and show a user-facing message: "This file contains characters that cannot be displayed (not UTF-8 encoded)"
+- Strip UTF-8 BOM (`\xEF\xBB\xBF`) before creating the buffer (add to `Document::from_str` preprocessing)
+- For v2: do not implement full encoding detection/conversion. Document the UTF-8 limitation.
+- Use `std::fs::read()` (returns `Vec<u8>`), attempt UTF-8 via `String::from_utf8()`, handle the error with a helpful message
+
+**Warning signs:**
+- Opening any file from a Windows-generated project silently fails
+- Old C++ files with non-ASCII comments in strings produce errors
+
+**Phase:** File Operations phase.
 
 ---
 
 ## Minor Pitfalls
 
-Mistakes that cause annoyance but are fixable without major refactoring.
-
-### Pitfall 12: Font Metrics Measurement Fallback Inaccuracy
-
-**What goes wrong:** Glyph measurement fails silently and returns hardcoded fallback (`font_size * 0.6`), causing text positioning errors for fonts where the approximation is wrong.
-
-**Why it happens:** Font loading can fail, but error handling defaults to approximation instead of propagating failure. No warning logged.
-
-**Consequences:**
-- Text positioning slightly wrong for some fonts
-- Monospace fonts may not align correctly
-- Silent failure makes debugging difficult
-
-**Prevention:**
-- Log warning when fallback is used (muda CONCERNS.md already flags this)
-- Ensure font loading succeeds before measuring
-- Test with various fonts (monospace, variable-width, CJK)
-- Add fallback metric validation (compare to actual measurements)
-
-**Detection:**
-- Text alignment slightly off in specific fonts
-- Monospace grid doesn't align
-- No error logged but positioning wrong
-
-**Phase impact:** Phase 2 (Layout & Rendering). Add logging and validation.
-
-**Sources:**
-- muda codebase CONCERNS.md (line 26-29: "Character Width Measurement Fallback")
+Mistakes that cause annoyance but are straightforward to fix.
 
 ---
 
-### Pitfall 13: Manual Viewport Cache Invalidation Bugs
+### Pitfall 16: Tab Title Shows "[Yeni Dosya]" (Turkish) Instead of "[New File]"
 
-**What goes wrong:** Manually caching viewport dimensions to avoid recalculation causes state synchronization bugs. Cache invalidation logic misses edge cases (file open, window resize).
+**What goes wrong:** `Document::title()` (document.rs line 279) returns `"[Yeni Dosya]"` (Turkish for "New File") when no path is set. `Workspace::document_title()` (workspace.rs line 409) returns `"[New File]"` (English). Two different fallback strings for the same concept in two different places.
 
-**Why it happens:** Performance optimization to avoid recalculating viewport every frame, but cache invalidation requires tracking all state changes that affect dimensions.
+**Why it happens:** Copy-paste from a test with a Turkish string was never updated. The workspace method uses English.
 
 **Consequences:**
-- Viewport dimensions stale after certain operations
-- Text rendering uses wrong bounds
-- Layout doesn't update after state changes
+- Tab bar shows Turkish text for untitled documents
+- Inconsistent: status bar shows "New File", tab bar shows "Yeni Dosya"
+- Search for "[New File]" in codebase misses the Turkish variant
 
 **Prevention:**
-- Remove manual cache, recalculate every frame (measure first—may not be bottleneck)
-- Use automatic invalidation (dirty flag on state changes)
-- If cache needed, centralize invalidation logic
-- Add assertions that cached value matches calculated value
+- Standardize on `"[New File]"` in `Document::title()` line 279
+- Add a test asserting the English string
+- Consider a dedicated constant `UNTITLED_DOCUMENT_TITLE` shared between both
 
-**Detection:**
-- Layout doesn't update after window resize
-- Text renders outside bounds after file open
-- Assertions fire: cached != calculated
+**Warning signs:**
+- New tabs show "[Yeni Dosya]" in the title
 
-**Phase impact:** Phase 2 (Layout & Rendering). Validate caching is necessary before implementing.
-
-**Sources:**
-- muda codebase CONCERNS.md (line 19-23: "Manual Viewport Caching")
+**Phase:** Fix before multi-tab (will be visible in every untitled document tab).
 
 ---
 
-### Pitfall 14: CSS Transition Animation System Undefined Value Handling
+### Pitfall 17: `LineEnding::detect()` Detects CRLF Even in Mixed Files
 
-**What goes wrong:** Animation libraries that assume undefined keyframe values should use defaults break advanced animations (merged timelines, property-specific easing).
+**What goes wrong:** `LineEnding::detect()` (document.rs line 43) uses `content.contains("\r\n")`. A file with a single `\r\n` line followed by 999 `\n` lines is classified as CRLF. On save, the file is written back without normalization — it still has mixed endings. But the metadata says CRLF, so the status bar shows "CRLF" which is misleading.
 
-**Why it happens:** CSS transition semantics unclear. Some libraries fill in defaults, breaking composition.
+**Why it happens:** Line ending detection as a fast `contains` check is a simplification.
 
 **Consequences:**
-- Complex animations don't compose correctly
-- Merged timelines produce wrong interpolation
-- Per-property easing conflicts with defaults
+- Status bar shows wrong line ending mode for mixed files
+- Users cannot trust the displayed line ending indicator
+- No option to normalize line endings (convert CRLF to LF or vice versa)
 
 **Prevention:**
-- Don't assume undefined values = use defaults
-- Allow explicit "inherit" vs "undefined" in keyframes
-- Document animation composition semantics clearly
-- Test merged timelines and property-specific easing
+- For v2: accept the limitation and document it — mixed line ending handling is complex
+- Consider majority-rules detection: if > 50% of lines are CRLF, report CRLF
+- Add a "Normalize Line Endings" command to the command palette for v2.1
 
-**Detection:**
-- Animations don't interpolate as expected
-- Merged timelines produce jumps or wrong values
-- Per-property easing ignored
+**Warning signs:**
+- Status bar shows CRLF for a file with a single Windows newline
 
-**Phase impact:** Phase 4 (Transitions). Design animation API carefully.
-
-**Sources:**
-- [Mina — Rust GUI library // Lib.rs](https://lib.rs/crates/mina)
-- [mina - Rust](https://docs.rs/mina)
+**Phase:** File Operations phase. Low priority, but note as a known limitation.
 
 ---
 
-### Pitfall 15: Component Size Token Defined But Unused
+### Pitfall 18: `ora::EditorCommand` Enum Missing File and Search Variants
 
-**What goes wrong:** Design system defines size tokens (ComponentSize enum, Space enum) but components ignore them and use raw literals. Token system provides no value if not enforced.
+**What goes wrong:** The `EditorCommand` enum in `ora/src/editor_adapter/types.rs` (line 431) does not have variants for: `Open(PathBuf)`, `SaveAs(PathBuf)`, `New`, `CloseTab(u64)`, `SwitchTab(u64)`, `Find { query: String }`, `Replace { query: String, replacement: String }`. The core_editor `EditorCommand` (`core_editor/src/commands/editor_command.rs`) has `Open`, `SaveAs`, and `New`, but these are not mirrored in the ora adapter. Any UI action that needs these commands has no channel to dispatch them.
 
-**Why it happens:** Existing code predates token system. Migration incomplete. No enforcement mechanism.
+**Why it happens:** The ora adapter types were created for the v1 rendering-only use case. File and search commands were deferred.
 
 **Consequences:**
-- Design system exists but is fiction
-- Components still hardcode values
-- Changing tokens doesn't affect layout
-- Wasted effort defining unused tokens
+- Implementing "Open File" button or file browser click requires adding to both enums and the wgpu_client conversion
+- Find bar keyboard shortcut has no command to dispatch
+- Tab close button click has no command to send
 
 **Prevention:**
-- Migrate existing components to token system (muda pain point)
-- Add lints to detect raw float literals in layout code
-- Code review checklist: "Uses design tokens, not raw values"
-- Make raw values inaccessible (newtype wrappers, private fields)
+- Before implementing any v2.0 feature, audit the full set of commands needed and add them to `ora::EditorCommand` all at once
+- Update the `From<ora::EditorCommand> for core_editor::EditorCommand` conversion in wgpu_client in the same PR
+- Do not add commands one at a time as each feature is built — the churn is wasteful
 
-**Detection:**
-- Grep codebase for raw float literals (`24.0`, `8.0`)
-- Components don't respond to token changes
-- Design system file never imported
+**Warning signs:**
+- Implementing a UI button requires touching 3+ files just to add the command variant
 
-**Phase impact:** Phase 5 (Design System). Enforce token usage from start.
-
-**Sources:**
-- muda codebase PROJECT.md (line 62-71: Pain points ora addresses)
+**Phase:** Audit needed before any v2.0 feature phase begins.
 
 ---
 
 ## Phase-Specific Warnings
 
-| Phase Topic | Likely Pitfall | Mitigation |
-|-------------|---------------|------------|
-| Phase 1: Core Framework & Event Loop | Event loop ownership mismatch | Accept winit owns the loop. Design ora as `ora::run(app)` from day one. Test on multiple platforms early. |
-| Phase 1: Core Framework & Event Loop | wgpu API churn | Abstract wgpu behind ora's API. Pin wgpu version. Budget upgrade time. |
-| Phase 2: Layout & Rendering | Immediate-mode rebuild performance | Implement dirty region tracking and incremental invalidation upfront. Profile with realistic data. |
-| Phase 2: Layout & Rendering | Draw call explosion | Design batching strategy first. Use instancing. Measure draw call count. |
-| Phase 2: Layout & Rendering | Coordinate space mismatch | Define logical vs device coordinate types. Centralize conversions. Test at multiple DPI. |
-| Phase 2: Layout & Rendering | Compositor missing | Add compositing and dirty tracking early. Retrofitting is painful. |
-| Phase 2: Layout & Rendering | Text atlas exhaustion | Implement glyph eviction policy. Cap atlas size. Monitor VRAM. |
-| Phase 2: Layout & Rendering | Pipeline state panics | Create matched pipeline + render pass helpers. Use consistent PipelineLayout. |
-| Phase 3: Reactive State | Reentrancy bugs | Use effect queue pattern. Never invoke listeners directly. Add cycle detection. |
-| Phase 3: Reactive State | Lifecycle resource leaks | Document create() runs every update. Use functional style. Provide explicit state methods. |
-| Phase 4: Transitions | Animation composition bugs | Don't assume undefined = default. Test merged timelines. Document semantics. |
-| Phase 5: Design System Migration | Token system unused | Enforce token usage. Add lints for raw literals. Make raw values inaccessible. |
-| Phase 5: Design System Migration | Viewport cache bugs | Remove manual cache if possible. Centralize invalidation. Add assertions. |
+| Phase | Likely Pitfall | Mitigation |
+|-------|---------------|------------|
+| File Operations | Synchronous I/O blocks UI | Async wrapper from day one; never `read_to_string` on UI thread |
+| File Operations | Same file opened twice | Path deduplication index in Workspace before file browser exists |
+| File Operations | Non-UTF-8 errors | Use `read()` + `from_utf8()` with user-facing error message |
+| File Operations | Line ending display wrong | Document limitation; fix `contains` detection |
+| Multi-tab | Tab switch blocked by `can_switch_active` | Call `set_active_view` directly; reserve protection for close/quit |
+| Multi-tab | Undo history lost on close | LRU cache indexed by PathBuf for recent close/reopen; document limitation |
+| Multi-tab | Missing `EditorCommand` variants | Audit and add all needed variants before implementing any feature |
+| Multi-tab | Title shows "Yeni Dosya" | Fix before multi-tab is visible to users |
+| Selection/Clipboard | Disappearing text bug | Fix in span composition (adapter), not renderer; consider overlay approach |
+| Selection/Clipboard | Clipboard platform access | Handle in wgpu_client dispatch layer; use `arboard` only there |
+| Selection/Clipboard | Mouse hit-testing offset | Implement `floor((mouse_x - gutter_px) / char_width)` in TextAreaView |
+| Find/Replace | Regex stalls UI thread | Background thread + debounce + `regex` crate (bounded execution) |
+| Find/Replace | Replace All wrecks cursor | Batch as Transaction; save/restore position before/after |
+| File Browser | Directory read blocks frame | Background thread; lazy-load on expand; exclude `target/`, `.git/` |
+| File Browser | File watcher misses events | Combine events with mtime polling on focus gain |
+| Performance | Cache invalidation bugs | Measure first; use `document.revision()` as cheap staleness check |
+| Integration | `with_active_context` unsafe | Add invariant comment; do not use for multi-document operations |
+| Integration | Trait pressure on `EditorDataSource` | Plan trait expansion upfront; consider splitting into sub-traits |
 
 ---
 
-## Known Sharp Edges from Existing muda Codebase
+## Integration Pitfalls: Preserving Existing Functionality
 
-These issues are already present in wgpu_client and should be prevented in ora:
+These pitfalls are specific to adding new features without breaking what already works.
 
-1. **Heights hardcoded in multiple places** - Status bar height (24.0) appears in 4 places instead of referencing constant. ora must enforce single source of truth for all dimensions.
+**Pixel-level scroll accumulator.** The smooth scrolling system in ora uses a sub-line pixel accumulator that drives `scroll_y_offset_px` in `RenderModel`. Any change to `EditorDataSource::scroll_y()` or `total_lines()` semantics (e.g., to support multi-tab scroll state) must preserve this accumulator's behavior. Resetting the accumulator when switching tabs is correct; leaking state between tabs is not.
 
-2. **Font metrics redefined per component** - Each component calculates its own font size/line height. ora text system must centralize typography.
+**Scissor clipping.** The text area uses scissor rects to clip text to the viewport. Adding the find bar overlay, selection highlight, or file browser panel must not interfere with existing scissor rect regions. Each UI region has its own clip rect; overlapping them without proper z-ordering causes visual artifacts.
 
-3. **Spacing tokens unused** - Space enum exists but raw floats used instead. ora must make tokens the only way to specify spacing.
+**Frame-rebuild assumption.** The entire view tree is rebuilt every frame. New stateful features (find bar open/close state, file browser expansion state) must store their state in the model (core_editor Workspace or a new state struct), not in local variables within a `render()` call. A `render()` method has no memory between frames.
 
-4. **Gutter width calculated twice** - Duplicated logic in separate locations. ora layout must have single calculation path per component.
-
-5. **Parallel tab bar implementations** - Two versions with different heights (28px vs 35px). ora must prevent parallel implementations.
-
-6. **Scissor rect duplication** - Clipping logic repeated across components. ora must handle clipping automatically.
-
-7. **RenderModel rebuilt every frame** - Full rebuild even when nothing changed. ora must cache and invalidate incrementally.
-
-8. **Syntax highlighting no cache** - Re-parses visible lines every frame. ora must integrate with tree-sitter incremental API.
-
-**Prevention in ora:** These are exactly the problems ora solves. Roadmap must prioritize architectural decisions that prevent duplication and enforce single source of truth.
+**`EditorDataSource` is `&mut self` for `dispatch_command`.** Adding new commands that need to return data (e.g., clipboard read, search result count) cannot use the current `dispatch_command(&mut self, cmd)` signature. The adapter may need a `query` or `request` method for operations that require a return value.
 
 ---
 
 ## Sources
 
-### Web Search Results
+All findings are grounded in direct codebase analysis. File paths and line numbers reference the state of the codebase as of 2026-03-26.
 
-- [GitHub - gfx-rs/wgpu: A cross-platform, safe, pure-Rust graphics API](https://github.com/gfx-rs/wgpu)
-- [Honest Feedback on WGPU and the Need for Better Learning Resources · Issue #8010 · gfx-rs/wgpu](https://github.com/gfx-rs/wgpu/issues/8010)
-- [wgpu/CHANGELOG.md at trunk · gfx-rs/wgpu](https://github.com/gfx-rs/wgpu/blob/trunk/CHANGELOG.md)
-- [GitHub - DioxusLabs/taffy: A high performance rust-powered UI layout library](https://github.com/DioxusLabs/taffy)
-- [Support multiple layout algorithms · Issue #28 · DioxusLabs/taffy](https://github.com/DioxusLabs/taffy/issues/28)
-- [Support CSS Grid · Issue #204 · DioxusLabs/taffy](https://github.com/DioxusLabs/taffy/issues/204)
-- [taffy - Rust](https://docs.rs/taffy)
-- [GitHub - grovesNL/glyphon: 🦅🦁 Fast, simple 2D text renderer for wgpu](https://github.com/grovesNL/glyphon)
-- [glyphon | 🦅🦁 Fast, simple 2D text renderer for wgpu](https://kandi.openweaver.com/rust/grovesNL/glyphon)
-- [EventLoop in winit::event_loop - Rust](https://docs.rs/winit/latest/winit/event_loop/struct.EventLoop.html)
-- [EventLoop 3.0 Changes · Issue #2900 · rust-windowing/winit](https://github.com/rust-windowing/winit/issues/2900)
-- [How does the event loop system work for this library? · Discussion #3662](https://github.com/rust-windowing/winit/discussions/3662)
-- [GPUI Framework | zed-industries/zed | DeepWiki](https://deepwiki.com/zed-industries/zed/2.2-gpui-framework)
-- [GPUI: A Deep Dive into the High-Performance Rust UI Framework](https://beckmoulton.medium.com/gpui-a-technical-overview-of-the-high-performance-rust-ui-framework-powering-zed-ac65975cda9f)
-- [Ownership and data flow in GPUI — Zed's Blog](https://zed.dev/blog/gpui-ownership)
-- [Optimizing the Metal pipeline to maintain 120 FPS in GPUI — Zed's Blog](https://zed.dev/blog/120fps)
-- [Building a GPU-Accelerated Terminal Emulator with Rust and GPUI](https://dev.to/zhiwei_ma_0fc08a668c1eb51/building-a-gpu-accelerated-terminal-emulator-with-rust-and-gpui-4103)
-- [Eight million pixels and counting – GUIs on the GPU](https://nical.github.io/drafts/gui-gpu-notes.html)
-- [Warp: Why is building a UI in Rust so hard?](https://www.warp.dev/blog/why-is-building-a-ui-in-rust-so-hard)
-- [Relationship between `RenderPassDescriptor::color_attachments` and `FragmentState::targets` in `RenderPipelineDescriptor` is not well documented · Issue #7322](https://github.com/gfx-rs/wgpu/issues/7322)
-- [Guidance on Pipelines and Buffers · Issue #18 · gfx-rs/wgpu-rs](https://github.com/gfx-rs/wgpu-rs/issues/18)
-- [GitHub - viridia/quill: A reactive UI framework for Bevy](https://github.com/viridia/quill)
-- [GitHub - actuate-rs/actuate: A framework for declarative programming in Rust](https://github.com/actuate-rs/actuate)
-- [Mina — Rust GUI library // Lib.rs](https://lib.rs/crates/mina)
-- [mina - Rust](https://docs.rs/mina)
-- [Graphics: why immediate mode? - The Rust Programming Language Forum](https://users.rust-lang.org/t/graphics-why-immediate-mode/93356)
-- [Towards principled reactive UI | Raph Levien's blog](https://raphlinus.github.io/rust/druid/2020/09/25/principled-reactive-ui.html)
-- [Entity-Component-System architecture for UI in Rust | Raph Levien's blog](https://raphlinus.github.io/personal/2018/05/08/ecs-ui.html)
+- `core_editor/src/domain/document.rs` — `open()`, `save()`, `title()`, `LineEnding::detect()`
+- `core_editor/src/domain/workspace.rs` — `open_document()`, `close_document_force()`, `can_switch_active()`, `with_active_context()`
+- `core_editor/src/view/selection.rs` — `Selection`, `SelectionSet`
+- `core_editor/src/commands/editor_command.rs` — full command enum
+- `ora/src/editor_adapter/types.rs` — `EditorCommand`, `RenderModel`, `TextStyle::Selection`
+- `ora/src/editor_adapter/mod.rs` — `EditorDataSource` trait
+- `ora/src/views/text_area.rs` — `LINE_HEIGHT`, `TextAreaView` stateless render
+- `.planning/PROJECT.md` — v2.0 milestone goals, known bugs, key decisions
 
-### Existing muda Codebase
-
-- `.planning/PROJECT.md` (pain points, context, requirements)
-- `.planning/codebase/CONCERNS.md` (tech debt, known bugs, performance bottlenecks, fragile areas)
-
----
-
-**Confidence note:** Most findings are MEDIUM confidence (web search verified with multiple sources and existing codebase analysis). Some specifics (like wgpu breaking changes, winit event loop architecture) are HIGH confidence (official documentation/issues). Detailed performance numbers (draw call thresholds, frame times) are LOW-MEDIUM confidence (based on community reports, not ora-specific profiling).
+**Confidence:** HIGH. Every pitfall is traceable to a specific named type or method in the codebase. No pitfall is based solely on generic industry knowledge.

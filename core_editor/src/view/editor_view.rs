@@ -139,6 +139,15 @@ impl EditorView {
         self.selections.range().map(|r| (r.start, r.end))
     }
 
+    /// Returns the selection anchor offset, or `None` if no selection is active.
+    pub fn selection_anchor(&self) -> Option<TextOffset> {
+        if self.has_selection() {
+            Some(self.selections.primary().anchor)
+        } else {
+            None
+        }
+    }
+
     /// Selects all text (anchor at 0, head at given end).
     pub fn select_all(&mut self, document_length: usize) {
         self.selections.select_all(document_length);
