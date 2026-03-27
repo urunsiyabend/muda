@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-03-26)
 
 **Core value:** A functional, performant code editor built on ora's GPU-accelerated UI framework.
-**Current focus:** v2.0 Functional Editor — Phase 13.1 in progress (Rendering Performance Optimization).
+**Current focus:** v2.0 Functional Editor — Phase 13.1 complete, ready for Phase 14.
 
 ## Current Position
 
-Phase: 13.1 — Rendering Performance Optimization (in progress)
-Plan: 03 of 3 (complete)
-Status: Phase 13.1 Plan 03 complete — sidebar viewport virtualization done
-Last activity: 2026-03-27 — Completed 13.1-03-PLAN.md (sidebar viewport virtualization)
+Phase: 13.1 — Rendering Performance Optimization (COMPLETE — all 3 plans done)
+Plan: 02 of 3 (complete — last remaining plan)
+Status: Phase 13.1 fully complete — glyph cache, layout cache, sidebar virtualization all done
+Last activity: 2026-03-27 — Completed 13.1-02-PLAN.md (layout dirty flag + cached layout reuse)
 
-Progress: [███████████████████░░░░░░░░░░░░░░░░░] v2.0 Phase 13.1 Plan 03 complete (19/~25 plans)
+Progress: [████████████████████░░░░░░░░░░░░░░░░] v2.0 Phase 13.1 all plans complete (20/~25 plans)
 
 ## Performance Metrics
 
@@ -85,16 +85,16 @@ Plan 04: Selection focus dimming (SelectionInactive), gutter click line select, 
 ## Phase 13.1 Summary (in progress)
 
 Plan 01: GlyphCacheKey struct + LRU glyph buffer cache in TextSystem (2048-cap), drain_buffers_for_cache replaces clear(), --no-glyph-cache flag, glyph hit % in --show-fps; SUMMARY.md created 2026-03-27
-Plan 02: (see 13.1-02 plan)
+Plan 02: needs_layout dirty flag on OraApp, cached_layout_outputs reuse on paint-only frames (hover/blink/scroll), --no-layout-cache flag, layout hit % in --show-fps; SUMMARY.md created 2026-03-27
 Plan 03: FileTreeView viewport virtualization — virtual_slice() with 20-row buffer zones, spacer divs, SharedScrollState drives sidebar scroll offset → FileTreeView; 5 new tests
 
 ## Session Continuity
 
-Last session: 2026-03-27T13:07:00Z
-Stopped at: Completed 13.1-03-PLAN.md (sidebar viewport virtualization)
+Last session: 2026-03-27T13:12:00Z
+Stopped at: Completed 13.1-02-PLAN.md (layout dirty flag + cached layout reuse)
 Resume file: None
-Next: Phase 14 — File Browser (sidebar virtualization prerequisite now complete)
+Next: Phase 14 — File Browser (all Phase 13.1 prerequisites complete: glyph cache, layout cache, sidebar virtualization)
 
 ---
 *State initialized: 2026-01-28*
-*Last updated: 2026-03-27 after Phase 13.1 Plan 03 completion*
+*Last updated: 2026-03-27 after Phase 13.1 Plan 02 completion (final 13.1 plan)*
