@@ -951,8 +951,12 @@ impl ApplicationHandler for OraApp {
                 }
                 } // end if !consumed
 
-                // Scroll changes which lines are visible but does not change element
-                // sizes or positions — it is paint-only. Do NOT set needs_layout = true.
+                // If a scroll-area handler consumed the event (sidebar scroll),
+                // the virtual slice may change the element tree — needs full layout.
+                // Editor text scroll (not consumed) is paint-only.
+                if consumed {
+                    self.needs_layout = true;
+                }
                 if let Some(gpu_state) = &self.gpu_state {
                     gpu_state.window.request_redraw();
                 }
