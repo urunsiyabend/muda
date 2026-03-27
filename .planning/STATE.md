@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-03-26)
 
 **Core value:** A functional, performant code editor built on ora's GPU-accelerated UI framework.
-**Current focus:** v2.0 Functional Editor — Phase 13 complete, next: Phase 14 (File Browser).
+**Current focus:** v2.0 Functional Editor — Phase 13.1 in progress (Rendering Performance Optimization).
 
 ## Current Position
 
-Phase: 13 — Selection + Clipboard (complete)
-Plan: 04 of 4 (complete)
-Status: Phase 13 complete — all 4 plans done, verified by user
-Last activity: 2026-03-27 — Phase 13 verified and approved
+Phase: 13.1 — Rendering Performance Optimization (in progress)
+Plan: 03 of 3 (complete)
+Status: Phase 13.1 Plan 03 complete — sidebar viewport virtualization done
+Last activity: 2026-03-27 — Completed 13.1-03-PLAN.md (sidebar viewport virtualization)
 
-Progress: [██████████████████░░░░░░░░░░░░░░░░░░] v2.0 Phase 13 complete (16/~22 plans)
+Progress: [███████████████████░░░░░░░░░░░░░░░░░] v2.0 Phase 13.1 Plan 03 complete (19/~25 plans)
 
 ## Performance Metrics
 
@@ -46,6 +46,11 @@ None.
 
 - 2026-03-26: v2.0 roadmap created with Phases 10-16 (7 phases, 40 requirements)
   - Source material stated "34 requirements" but actual count is 40: FIX(5) + TAB(5) + FILE(6) + SIDE(6) + SEL(7) + FIND(8) + PERF(3)
+- 2026-03-27: Phase 13.1 inserted after Phase 13: Rendering Performance Optimization (URGENT)
+  - Frame time 10-26ms with 10 tabs open (release), layout is 80% of frame cost
+  - Per-frame element tree rebuild + no layout caching + no viewport virtualization
+  - Must fix before Phase 14 (File Browser) which will add more sidebar elements
+  - Research: Zed GPUI source code, blog posts on retained rendering and element caching
 
 ### Blockers/Concerns
 
@@ -77,13 +82,19 @@ Plan 02: Mouse drag with 3px threshold, word/line snap modes in DragTo, scroll-w
 Plan 03: Full-line copy/cut with no selection, paste-above for line copies, auto-indent multi-line paste, clipboard_is_line_copy flag, 10 new tests
 Plan 04: Selection focus dimming (SelectionInactive), gutter click line select, I-beam cursor, tab close bug fix, human verification approved
 
+## Phase 13.1 Summary (in progress)
+
+Plan 01: GlyphCacheKey struct + LRU glyph buffer cache in TextSystem (LRU eviction, 1024-entry capacity)
+Plan 02: (see 13.1-02 plan)
+Plan 03: FileTreeView viewport virtualization — virtual_slice() with 20-row buffer zones, spacer divs, SharedScrollState drives sidebar scroll offset → FileTreeView; 5 new tests
+
 ## Session Continuity
 
-Last session: 2026-03-27
-Stopped at: Phase 13 complete — all plans executed and verified
+Last session: 2026-03-27T13:07:00Z
+Stopped at: Completed 13.1-03-PLAN.md (sidebar viewport virtualization)
 Resume file: None
-Next: Phase 14 — File Browser
+Next: Phase 14 — File Browser (sidebar virtualization prerequisite now complete)
 
 ---
 *State initialized: 2026-01-28*
-*Last updated: 2026-03-27 after Phase 13 completion*
+*Last updated: 2026-03-27 after Phase 13.1 Plan 03 completion*
