@@ -10,6 +10,9 @@
 use core_editor::commands::editor_command::{Direction, MoveScope as CoreMoveScope};
 use core_editor::commands::EditorCommand as CoreEditorCommand;
 use std::time::Instant;
+use notify_debouncer_full::{new_debouncer, DebounceEventResult, Debouncer, FileIdMap};
+use notify_debouncer_full::notify::RecursiveMode;
+use std::sync::mpsc;
 use ora::editor_adapter::{
     BufferDataSource, CaretPresentation, CommandDispatcher, CursorDirection, DialogPresentation,
     EditorCommand, FileEntryPresentation, FileOpDataSource, GutterModel, LinePresentation,
@@ -244,6 +247,14 @@ pub struct CoreEditorAdapter {
     /// Passed to `Sidebar` so the file tree filters only the configured entries.
     /// Default: `[".git"]`.
     ignored_patterns: Vec<String>,
+    /// Filesystem watcher debouncer — dropping stops watching.
+    ///
+    /// `None` when no workspace is open or the watcher failed to start.
+    watcher: Option<Debouncer<notify_debouncer_full::notify::RecommendedWatcher, FileIdMap>>,
+    /// Receiver for debounced filesystem events.
+    ///
+    /// Polled non-blocking via `try_recv()` in `poll_watcher_events()`.
+    watcher_rx: Option<mpsc::Receiver<DebounceEventResult>>,
 }
 
 impl CoreEditorAdapter {
@@ -260,6 +271,8 @@ impl CoreEditorAdapter {
             status_message_expiry: None,
             workspace_path: state.workspace_path,
             ignored_patterns: state.ignored_patterns,
+            watcher: None,
+            watcher_rx: None,
         }
     }
 
@@ -276,6 +289,8 @@ impl CoreEditorAdapter {
             status_message_expiry: None,
             workspace_path: state.workspace_path,
             ignored_patterns: state.ignored_patterns,
+            watcher: None,
+            watcher_rx: None,
         })
     }
 
@@ -304,7 +319,7 @@ impl CoreEditorAdapter {
         };
         save_state(&new_state);
 
-        Ok(Self {
+        let mut adapter = Self {
             app,
             pending_status_message: None,
             last_viewport: (200, 40),
@@ -312,9 +327,44 @@ impl CoreEditorAdapter {
             dialog_open: false,
             last_dir: state.last_dir,
             status_message_expiry: None,
-            workspace_path: Some(canonical),
+            workspace_path: Some(canonical.clone()),
             ignored_patterns: state.ignored_patterns,
-        })
+            watcher: None,
+            watcher_rx: None,
+        };
+        adapter.create_watcher(&canonical);
+        Ok(adapter)
+    }
+
+    /// Creates and starts a debounced filesystem watcher on the given path.
+    ///
+    /// Drops any existing watcher first. A 300ms debounce window is used so
+    /// that rapid events (e.g. during `cargo build`) are coalesced into a
+    /// single sidebar refresh instead of causing continuous redraws.
+    fn create_watcher(&mut self, path: &std::path::Path) {
+        // Drop existing watcher first
+        self.watcher = None;
+        self.watcher_rx = None;
+
+        let (tx, rx) = mpsc::channel::<DebounceEventResult>();
+        match new_debouncer(
+            std::time::Duration::from_millis(300),
+            None,
+            move |res: DebounceEventResult| { let _ = tx.send(res); },
+        ) {
+            Ok(mut debouncer) => {
+                if let Err(e) = debouncer.watch(path, RecursiveMode::Recursive) {
+                    log::warn!("Failed to watch {:?}: {:?}", path, e);
+                    return;
+                }
+                log::info!("Filesystem watcher started for {:?}", path);
+                self.watcher = Some(debouncer);
+                self.watcher_rx = Some(rx);
+            }
+            Err(e) => {
+                log::warn!("Failed to create filesystem watcher: {:?}", e);
+            }
+        }
     }
 
 }
@@ -454,7 +504,49 @@ impl FileOpDataSource for CoreEditorAdapter {
             ignored_patterns: self.ignored_patterns.clone(),
         });
 
+        // Restart the filesystem watcher on the new workspace root.
+        self.create_watcher(&canonical);
+
         self.app.needs_render = true;
+    }
+
+    fn poll_watcher_events(&mut self) -> bool {
+        let rx = match &self.watcher_rx {
+            Some(rx) => rx,
+            None => return false,
+        };
+        let mut had_events = false;
+        loop {
+            match rx.try_recv() {
+                Ok(Ok(_events)) => {
+                    had_events = true;
+                }
+                Ok(Err(errors)) => {
+                    for e in errors {
+                        log::warn!("Filesystem watcher error: {:?}", e);
+                    }
+                }
+                Err(mpsc::TryRecvError::Empty) => break,
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    log::warn!("Filesystem watcher channel disconnected");
+                    break;
+                }
+            }
+        }
+        if had_events {
+            self.app.sidebar.mark_tree_dirty();
+            self.app.needs_render = true;
+        }
+        had_events
+    }
+
+    fn start_watcher(&mut self, path: std::path::PathBuf) {
+        self.create_watcher(&path);
+    }
+
+    fn stop_watcher(&mut self) {
+        self.watcher = None;
+        self.watcher_rx = None;
     }
 }
 

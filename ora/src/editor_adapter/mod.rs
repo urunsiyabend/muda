@@ -158,6 +158,25 @@ pub trait FileOpDataSource {
     /// base directory, make the sidebar visible, update `workspace_path`,
     /// persist state, and request a re-render.
     fn handle_folder_opened(&mut self, path: PathBuf);
+
+    /// Poll for filesystem watcher events (non-blocking).
+    ///
+    /// Drains the internal mpsc channel. If any events were received,
+    /// marks the sidebar tree dirty and sets `needs_render = true`.
+    /// Returns `true` if events were received (caller should request redraw).
+    fn poll_watcher_events(&mut self) -> bool;
+
+    /// Start or restart the filesystem watcher for a new workspace path.
+    ///
+    /// Drops any existing watcher first, then creates a new debounced watcher
+    /// on the given path. Called when a workspace is opened or changed.
+    fn start_watcher(&mut self, path: PathBuf);
+
+    /// Stop the filesystem watcher.
+    ///
+    /// Drops the debouncer (which stops the background thread) and clears
+    /// the receiver. Called when the workspace is closed.
+    fn stop_watcher(&mut self);
 }
 
 // =============================================================================

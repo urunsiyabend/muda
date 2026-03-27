@@ -15,6 +15,9 @@ ora = { path = "../ora" }
 rfd = { version = "0.15", default-features = false, features = ["xdg-portal"] }
 dirs = "5"
 
+# Filesystem watcher with debouncing
+notify-debouncer-full = "0.7"
+
 # Utilities
 log = "0.4"
 simplelog = "0.12"
