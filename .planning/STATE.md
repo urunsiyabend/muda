@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-03-26)
 
 **Core value:** A functional, performant code editor built on ora's GPU-accelerated UI framework.
-**Current focus:** v2.0 Functional Editor — Phase 14 complete, next: Phase 15 (Context Menu / File Operations).
+**Current focus:** v2.0 Functional Editor — Phase 14.1 in progress (scroll performance fix).
 
 ## Current Position
 
-Phase: 14 — File Browser (Complete)
-Plan: 04 of 4 (complete)
-Status: Phase complete — Plan 14-04 done
-Last activity: 2026-03-27 — Completed 14-04-PLAN.md (External file changes + verification)
+Phase: 14.1 — View-Level Dirty Checking (In Progress)
+Plan: 01 of 3 (complete)
+Status: In progress — Plan 14.1-01 done
+Last activity: 2026-03-28 — Completed 14.1-01-PLAN.md (Paint-phase scroll offset)
 
-Progress: [████████████████████████░░░░░░░░░░░░] v2.0 Phase 14 complete (23/~28 plans)
+Progress: [█████████████████████████░░░░░░░░░░░] v2.0 Phase 14.1 in progress (24/~28 plans)
 
 ## Performance Metrics
 
@@ -62,6 +62,13 @@ Progress: [███████████████████████
 - Scissor rect y+h clamped to surface_height — GPU validation rejects out-of-bounds scissor rects
 - Scroll hitbox: subtract scroll_offset from y-origin + intersect with viewport rect — prevents off-screen hitboxes stealing events
 
+### Phase 14.1 Plan 01 Decisions
+
+- PaintOffsetElement::request_layout returns child's LayoutId directly — wrapper has no layout node, child participates in flexbox unchanged
+- paint_offset wraps the inner content Div (not the overflow_hidden container) — scissor clipping still functions correctly
+- Single shared PaintOffsetElement reused by both TextAreaView and GutterView — no duplication needed
+- Explicit `: AnyElement` type annotation required on Divs passed to paint_offset — Rust type inference can't disambiguate Into<_> target
+
 ## Accumulated Context
 
 ### Decisions
@@ -83,6 +90,11 @@ None.
   - Must fix before Phase 14 (File Browser) which will add more sidebar elements
   - Research: Zed GPUI source code, blog posts on retained rendering and element caching
   - RESULT: avg 1.8ms frame time, max 3.5ms, 98% glyph cache, 59% layout cache
+- 2026-03-28: Phase 14.1 inserted after Phase 14: View-Level Dirty Checking + Paint-Phase Scroll (URGENT)
+  - Scroll triggers full layout every frame because visible_lines count varies (element tree structure changes)
+  - Layout cache hit rate drops to 0% during scroll — tab bar, sidebar, status bar all recomputed unnecessarily
+  - Zed GPUI pattern: view-level dirty tracking with prepaint/paint command replay for clean views
+  - Must fix before Phase 15 (Find/Replace) which will add more interactive overlays during scroll
 
 ### Blockers/Concerns
 
@@ -99,7 +111,7 @@ None.
 - Window close (X button) doesn't check for dirty documents — exits without save dialog
 - Dialog butonları (Save/Don't Save/Cancel) tıklanamıyor — hitbox/event wiring eksik
 - Dispatch system fires handlers in both capture+bubble phases — all handlers must check `ctx.phase() == Bubble`
-- Scroll perf: full layout triggered every scroll frame because visible_lines count varies per frame (viewport virtualization). Documented for Phase 13.2 (Rendering Performance — View-level Dirty Checking).
+- Scroll perf: full layout triggered every scroll frame because visible_lines count varies per frame (viewport virtualization). Addressed in Phase 14.1 (View-Level Dirty Checking + Paint-Phase Scroll).
 
 ## Phase 12 Summary
 
@@ -123,20 +135,24 @@ Plan 02: needs_layout dirty flag, cached layout_outputs reuse (skip compute_flex
 Plan 03: FileTreeView viewport virtualization — virtual_slice() with 20-row buffer zones, spacer divs, TREE_ITEM_HEIGHT pub const, SharedScrollState → sidebar → FileTreeView; 5 new tests
 Plan 04: FrameDegradation guard (3+ slow frames suppress animations), --no-cache umbrella flag, [DEGRADED] indicator, human verification passed (avg 1.8ms, max 3.5ms, 0 degraded)
 
-## Phase 14 Summary (in progress)
+## Phase 14 Summary (complete)
 
 Plan 01: ignored_patterns exact-match filter (.git hidden, dotfiles visible), state.json extended with workspace_path + ignored_patterns, startup workspace restore, auto_expand_first_level, mark_tree_dirty() public
 Plan 02: Open Folder dialog via Ctrl+Shift+O + rfd pick_folder, sidebar header shows workspace name, empty state with Open Folder button, handle_folder_opened() + sidebar.show()
 Plan 03: notify-debouncer-full 0.7 watcher in CoreEditorAdapter, poll_watcher_events/start_watcher/stop_watcher on FileOpDataSource trait, 300ms debounce, polling in about_to_wait, live sidebar refresh
 Plan 04: External file deletion (deleted_paths HashSet → TabPresentation.is_deleted → muted tab indicator), clean-buffer auto-reload, dirty-buffer ExternalModificationPrompt dialog, workspace switch closes tabs; 5 rendering bug fixes (scissor clamping, scroll hitbox offset, hitbox viewport clip, needs_layout on scroll, layout cache growth guard), Phase 14 all 6 SC verified
 
+## Phase 14.1 Summary (in progress)
+
+Plan 01: PaintOffsetElement (push_offset/pop_offset wrapper, zero layout cost), TextAreaView 4-site mt() removal, GutterView 1-site mt() removal; element tree layout-stable across scroll frames
+
 ## Session Continuity
 
-Last session: 2026-03-27
-Stopped at: Completed 14-04-PLAN.md (Phase 14 complete)
+Last session: 2026-03-28
+Stopped at: Completed 14.1-01-PLAN.md (paint-phase scroll offset)
 Resume file: None
-Next: Phase 15 — Context Menu / File Operations (or Phase 13.2 Rendering Performance if scroll perf is prioritized)
+Next: Phase 14.1 Plan 02 — Remove needs_layout on scroll (layout-stable tree now in place)
 
 ---
 *State initialized: 2026-01-28*
-*Last updated: 2026-03-27 after Phase 13.1 completion*
+*Last updated: 2026-03-28 after Phase 14.1 Plan 01 completion*
