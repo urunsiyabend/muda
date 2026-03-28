@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-03-26)
 
 **Core value:** A functional, performant code editor built on ora's GPU-accelerated UI framework.
-**Current focus:** v2.0 Functional Editor — Phase 13.1 complete, next: Phase 14 (File Browser).
+**Current focus:** v2.0 Functional Editor — Phase 14 complete, next: Phase 15 (Context Menu / File Operations).
 
 ## Current Position
 
-Phase: 14 — File Browser (In progress)
-Plan: 03 of 4 (complete)
-Status: In progress — Plan 14-03 done
-Last activity: 2026-03-27 — Completed 14-03-PLAN.md (Filesystem watcher for live sidebar refresh)
+Phase: 14 — File Browser (Complete)
+Plan: 04 of 4 (complete)
+Status: Phase complete — Plan 14-04 done
+Last activity: 2026-03-27 — Completed 14-04-PLAN.md (External file changes + verification)
 
-Progress: [██████████████████████░░░░░░░░░░░░░░] v2.0 Phase 14 in progress (22/~28 plans)
+Progress: [████████████████████████░░░░░░░░░░░░] v2.0 Phase 14 complete (23/~28 plans)
 
 ## Performance Metrics
 
@@ -53,6 +53,15 @@ Progress: [██████████████████████░
 - poll_watcher_events placed BEFORE dirty-entity check in about_to_wait so watcher events get full layout pass
 - Drop-then-recreate pattern for watcher restart: self.watcher=None before new Debouncer
 
+### Phase 14 Plan 04 Decisions
+
+- deleted_paths HashSet on adapter (not core_editor domain) — avoids propagating filesystem concerns into domain, O(1) lookup per tab
+- pending_reload_prompts Vec dequeues one prompt at a time — prevents dialog stacking on simultaneous external changes
+- Muted color for deleted tab indicator — no text layout changes needed, communicates deletion clearly
+- needs_layout=true on ALL scroll events — proven necessary by LayoutId count mismatch debug logs when visible_lines count varies per frame
+- Scissor rect y+h clamped to surface_height — GPU validation rejects out-of-bounds scissor rects
+- Scroll hitbox: subtract scroll_offset from y-origin + intersect with viewport rect — prevents off-screen hitboxes stealing events
+
 ## Accumulated Context
 
 ### Decisions
@@ -90,6 +99,7 @@ None.
 - Window close (X button) doesn't check for dirty documents — exits without save dialog
 - Dialog butonları (Save/Don't Save/Cancel) tıklanamıyor — hitbox/event wiring eksik
 - Dispatch system fires handlers in both capture+bubble phases — all handlers must check `ctx.phase() == Bubble`
+- Scroll perf: full layout triggered every scroll frame because visible_lines count varies per frame (viewport virtualization). Documented for Phase 13.2 (Rendering Performance — View-level Dirty Checking).
 
 ## Phase 12 Summary
 
@@ -118,13 +128,14 @@ Plan 04: FrameDegradation guard (3+ slow frames suppress animations), --no-cache
 Plan 01: ignored_patterns exact-match filter (.git hidden, dotfiles visible), state.json extended with workspace_path + ignored_patterns, startup workspace restore, auto_expand_first_level, mark_tree_dirty() public
 Plan 02: Open Folder dialog via Ctrl+Shift+O + rfd pick_folder, sidebar header shows workspace name, empty state with Open Folder button, handle_folder_opened() + sidebar.show()
 Plan 03: notify-debouncer-full 0.7 watcher in CoreEditorAdapter, poll_watcher_events/start_watcher/stop_watcher on FileOpDataSource trait, 300ms debounce, polling in about_to_wait, live sidebar refresh
+Plan 04: External file deletion (deleted_paths HashSet → TabPresentation.is_deleted → muted tab indicator), clean-buffer auto-reload, dirty-buffer ExternalModificationPrompt dialog, workspace switch closes tabs; 5 rendering bug fixes (scissor clamping, scroll hitbox offset, hitbox viewport clip, needs_layout on scroll, layout cache growth guard), Phase 14 all 6 SC verified
 
 ## Session Continuity
 
 Last session: 2026-03-27
-Stopped at: Completed 14-03-PLAN.md
+Stopped at: Completed 14-04-PLAN.md (Phase 14 complete)
 Resume file: None
-Next: Phase 14 Plan 04 — File Browser Completion
+Next: Phase 15 — Context Menu / File Operations (or Phase 13.2 Rendering Performance if scroll perf is prioritized)
 
 ---
 *State initialized: 2026-01-28*
