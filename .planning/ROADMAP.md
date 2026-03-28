@@ -33,8 +33,9 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 11: Buffer Registry + Multi-Tab** - Central buffer deduplication, tab switching, Ctrl+W close, Ctrl+Tab cycle
 - [x] **Phase 12: File Operations** - Ctrl+O open, Ctrl+S save, Ctrl+Shift+S Save As, Ctrl+N new, async I/O
 - [x] **Phase 13: Selection + Clipboard** - Click-to-position, drag selection, Shift+arrow, Ctrl+A, Ctrl+C/X/V
-- [ ] **Phase 13.1: Rendering Performance Optimization** - Element/layout caching, viewport virtualization, glyphon cache (INSERTED)
-- [ ] **Phase 14: File Browser** - Real directory tree, click to open, expand/collapse state, file watcher
+- [x] **Phase 13.1: Rendering Performance Optimization** - Element/layout caching, viewport virtualization, glyphon cache (INSERTED)
+- [x] **Phase 14: File Browser** - Real directory tree, click to open, expand/collapse state, file watcher
+- [ ] **Phase 14.1: View-Level Dirty Checking** - Paint-phase scroll offset, conditional layout on scroll, FrameDirtyFlags (INSERTED)
 - [ ] **Phase 15: Find / Replace** - Inline find bar, match highlighting, next/prev, replace one/all, Go to line
 - [ ] **Phase 16: Performance Refinement** - Incremental tree-sitter parsing, glyphon buffer caching, background parse thread
 
@@ -349,10 +350,28 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 14-01-PLAN.md -- Sidebar filtering fix + state.json + workspace persistence (Wave 1)
-- [ ] 14-02-PLAN.md -- Open Folder dialog + sidebar header + empty state (Wave 2)
-- [ ] 14-03-PLAN.md -- Filesystem watcher integration (Wave 3)
-- [ ] 14-04-PLAN.md -- External file change handling + verification checkpoint (Wave 4)
+- [x] 14-01-PLAN.md -- Sidebar filtering fix + state.json + workspace persistence (Wave 1)
+- [x] 14-02-PLAN.md -- Open Folder dialog + sidebar header + empty state (Wave 2)
+- [x] 14-03-PLAN.md -- Filesystem watcher integration (Wave 3)
+- [x] 14-04-PLAN.md -- External file change handling + verification checkpoint (Wave 4)
+
+### Phase 14.1: View-Level Dirty Checking + Paint-Phase Scroll (INSERTED)
+**Goal**: Eliminate full layout recomputation on scroll by adopting Zed GPUI's architecture — view-level dirty tracking with prepaint/paint command replay for clean views, and paint-phase coordinate translation for scroll offset instead of element tree mutation
+**Depends on**: Phase 14
+**Requirements**: PERF-02 (scroll performance, shared with Phase 16)
+**Success Criteria** (what must be TRUE):
+  1. Scrolling through a file does NOT trigger full layout — layout cache hit rate stays above 90% during continuous scroll
+  2. Non-scrolling views (tab bar, sidebar, status bar, gutter) replay cached prepaint/paint commands during editor scroll — zero layout or render cost for unchanged regions
+  3. Editor scroll uses paint-phase coordinate offset (like ScrollArea) — visible_lines count stays constant across frames, LayoutIds are stable
+  4. Sidebar scroll with viewport virtualization still works correctly with the new dirty-checking system
+  5. Frame time during scroll stays under 2ms in release mode with 10 tabs open
+**Plans**: 3 plans
+**Research**: Zed GPUI source code — view-level caching (reuse_prepaint/reuse_paint), dirty_views set, paint-phase scroll offset, arena allocation, UniformList virtual scrolling
+
+Plans:
+- [ ] 14.1-01-PLAN.md -- Paint-phase scroll offset: replace mt(scroll_shift) with push_offset in TextAreaView + GutterView (Wave 1)
+- [ ] 14.1-02-PLAN.md -- Conditional needs_layout on scroll + FrameDirtyFlags (Wave 2)
+- [ ] 14.1-03-PLAN.md -- Benchmark + human verification checkpoint (Wave 3)
 
 ### Phase 15: Find / Replace
 **Goal**: Users can search for text within the active buffer, navigate matches, and replace occurrences — all without leaving the editor
@@ -383,7 +402,7 @@ Plans:
 
 **Execution Order:**
 v1.0: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 8.1 -> 9
-v2.0: 10 -> 11 -> 12 -> 13 (can follow 10) -> 13.1 (perf, before more features) -> 14 (needs 11+12) -> 15 (needs 10+11) -> 16 (always last)
+v2.0: 10 -> 11 -> 12 -> 13 (can follow 10) -> 13.1 (perf, before more features) -> 14 (needs 11+12) -> 14.1 (scroll perf, before more features) -> 15 (needs 10+11) -> 16 (always last)
 
 ### v1.0 Progress (Complete)
 
@@ -409,7 +428,8 @@ v2.0: 10 -> 11 -> 12 -> 13 (can follow 10) -> 13.1 (perf, before more features) 
 | 12. File Operations | 4/4 | Complete | 2026-03-26 |
 | 13. Selection + Clipboard | 4/4 | Complete | 2026-03-27 |
 | 13.1. Rendering Performance | 4/4 | Complete | 2026-03-27 |
-| 14. File Browser | 0/TBD | Pending | — |
+| 14. File Browser | 4/4 | Complete | 2026-03-27 |
+| 14.1. View-Level Dirty Checking | 0/3 | Pending | — |
 | 15. Find / Replace | 0/TBD | Pending | — |
 | 16. Performance Refinement | 0/TBD | Pending | — |
 
