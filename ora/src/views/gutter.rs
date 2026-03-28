@@ -19,7 +19,7 @@
 use crate::context::ViewContext;
 use crate::editor_adapter::{GutterModel, LinePresentation};
 use crate::element::AnyElement;
-use crate::elements::{Div, TextElement};
+use crate::elements::{paint_offset, Div, TextElement};
 use crate::style::{pct, px};
 use crate::theme::ColorToken;
 use crate::view::View;
@@ -215,14 +215,16 @@ impl View for GutterView {
 
         // Apply the partial scroll offset: shift the first line upward by the
         // fractional pixel amount so line boundaries align with the text area.
+        // Applied via paint_offset (push_offset/pop_offset) — does NOT affect
+        // layout, keeping the element tree structure stable across scroll frames.
         // The outer container's overflow_hidden() clips the partially visible
         // top and bottom lines at the GPU level via wgpu scissor rectangles.
         let shift = -(self.scroll_y_offset_px);
-        let inner: AnyElement = Div::new()
+        let inner_div: AnyElement = Div::new()
             .flex_col()
-            .mt(shift)
             .children(line_rows)
             .into();
+        let inner: AnyElement = paint_offset(shift, inner_div).into();
 
         // Build gutter container.
         // Width includes LEFT_PADDING + digits + RIGHT_PADDING + 1px right border.
