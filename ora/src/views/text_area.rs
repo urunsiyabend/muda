@@ -26,7 +26,7 @@
 
 use crate::context::ViewContext;
 use crate::element::AnyElement;
-use crate::elements::{stack, CaretElement, Div, TextElement};
+use crate::elements::{paint_offset, stack, CaretElement, Div, TextElement};
 use crate::style::{pct, px, Color};
 use crate::editor_adapter::{CaretPresentation, LinePresentation, RenderModel, TextStyle};
 use crate::theme::{ColorToken, Theme};
@@ -176,12 +176,12 @@ impl TextAreaView {
             })
             .collect();
 
-        Div::new()
+        let inner: AnyElement = Div::new()
             .flex_col()
             .w(pct(100.0))
-            .mt(-self.scroll_y_offset_px)
             .children(rows)
-            .into()
+            .into();
+        paint_offset(-self.scroll_y_offset_px, inner).into()
     }
 
     /// Renders selection background rectangles from selection_ranges.
@@ -264,12 +264,12 @@ impl TextAreaView {
             })
             .collect();
 
-        Div::new()
+        let inner: AnyElement = Div::new()
             .flex_col()
             .w(pct(100.0))
-            .mt(-self.scroll_y_offset_px)
             .children(rows)
-            .into()
+            .into();
+        paint_offset(-self.scroll_y_offset_px, inner).into()
     }
 
     /// Renders all text lines with syntax highlighting.
@@ -340,6 +340,8 @@ impl View for TextAreaView {
 
         // Partial-line scroll offset: shift line content upward by fractional
         // pixels so line boundaries align exactly during scrolling.
+        // Applied via push_offset in paint phase — does NOT affect layout,
+        // keeping the element tree structure stable across scroll frames.
         // The outer container's overflow_hidden() clips the partially visible
         // top and bottom lines at the GPU level via wgpu scissor rectangles.
         let scroll_shift = -self.scroll_y_offset_px;
@@ -373,12 +375,13 @@ impl View for TextAreaView {
 
         // Layer 4: Text content — transparent background so selection/current-line
         // layers below show through the gaps between glyphs.
-        let inner_text: AnyElement = Div::new()
+        // scroll_shift applied via paint_offset (push_offset/pop_offset), not mt().
+        let inner_text_div: AnyElement = Div::new()
             .flex_col()
             .w(pct(100.0))
-            .mt(scroll_shift)
             .children(text_lines)
             .into();
+        let inner_text: AnyElement = paint_offset(scroll_shift, inner_text_div).into();
 
         let text_layer: AnyElement = Div::new()
             .flex_col()
@@ -390,11 +393,12 @@ impl View for TextAreaView {
             .into();
 
         // Inner wrapper for caret with same scroll shift for alignment.
-        let inner_caret: AnyElement = Div::new()
+        // scroll_shift applied via paint_offset (push_offset/pop_offset), not mt().
+        let inner_caret_div: AnyElement = Div::new()
             .w(pct(100.0))
-            .mt(scroll_shift)
             .child(caret)
             .into();
+        let inner_caret: AnyElement = paint_offset(scroll_shift, inner_caret_div).into();
 
         // Layer 5 (top): Caret — overlaid on top of everything.
         let caret_layer: AnyElement = Div::new()
