@@ -951,12 +951,11 @@ impl ApplicationHandler for OraApp {
                 }
                 } // end if !consumed
 
-                // Sidebar scroll changes the virtual slice (different tree items),
-                // requiring full layout. Editor scroll is paint-only — the element
-                // tree structure stays identical, only text content changes.
-                if consumed {
-                    self.needs_layout = true;
-                }
+                // Both sidebar scroll and editor scroll change visible content,
+                // which changes element count and LayoutId assignment order.
+                // Stale cached layout outputs produce wrong positions → flicker.
+                // Layout cache still helps for non-scroll frames (hover, blink).
+                self.needs_layout = true;
                 if let Some(gpu_state) = &self.gpu_state {
                     gpu_state.window.request_redraw();
                 }
