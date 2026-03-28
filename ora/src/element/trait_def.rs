@@ -205,6 +205,11 @@ impl<'a> LayoutContext<'a> {
         );
     }
 
+    /// Number of LayoutIds allocated so far (element count this frame).
+    pub fn next_layout_id(&self) -> usize {
+        self.next_layout_id
+    }
+
     /// Get the computed bounds for a layout node.
     pub fn bounds(&self, id: LayoutId) -> Rect {
         self.layout_outputs

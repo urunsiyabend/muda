@@ -1151,6 +1151,13 @@ impl ApplicationHandler for OraApp {
                         layout_cx.set_text_system(&mut gpu_state.text_system as *mut _);
 
                         element_tree.request_layout(&mut layout_cx);
+                        let new_layout_count = layout_cx.next_layout_id();
+
+                        // If the element tree grew beyond the cached outputs,
+                        // force full layout — otherwise out-of-range LayoutIds
+                        // return Rect::zero and elements become invisible.
+                        let run_full_layout = run_full_layout
+                            || new_layout_count > self.cached_layout_outputs.len();
 
                         if run_full_layout {
                             // Full pipeline: compute_flexbox on top of request_layout
