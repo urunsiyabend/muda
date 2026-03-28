@@ -951,10 +951,12 @@ impl ApplicationHandler for OraApp {
                 }
                 } // end if !consumed
 
-                // Both editor scroll and sidebar scroll change which elements
-                // exist in the tree (different visible lines / virtual slice),
-                // so the element tree needs full layout recomputation.
-                self.needs_layout = true;
+                // Sidebar scroll changes the virtual slice (different tree items),
+                // requiring full layout. Editor scroll is paint-only — the element
+                // tree structure stays identical, only text content changes.
+                if consumed {
+                    self.needs_layout = true;
+                }
                 if let Some(gpu_state) = &self.gpu_state {
                     gpu_state.window.request_redraw();
                 }
