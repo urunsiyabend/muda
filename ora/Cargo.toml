@@ -5,12 +5,15 @@ edition = "2024"
 
 [dependencies]
 winit = "0.30"
-wgpu = "23"
+wgpu = { version = "25", default-features = false, features = ["wgsl", "dx12", "vulkan", "metal"] }
 generational-arena = "0.2"
 pollster = "0.4"
 log = "0.4"
 bytemuck = { version = "1", features = ["derive"] }
-glyphon = "0.7"
+glyphon = "0.9"
+# glyphon 0.9 (wgpu 25) — furthest we can go with rustc 1.90.
+# Gains: is_run_visible culling fix (0.9) + 1.7x prepare speedup (0.8).
+# Y-axis clipping fix (glyphon 0.10 / cosmic-text 0.15) requires rustc 1.92; deferred.
 async-executor = "1"
 rfd = { version = "0.15", default-features = false, features = ["xdg-portal"] }
 futures-lite = "2"

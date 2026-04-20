@@ -191,7 +191,7 @@ impl TextSystem {
         buffer.set_text(
             &mut self.font_system,
             text,
-            Attrs::new().family(Family::Monospace), // Use monospace for code editor
+            &Attrs::new().family(Family::Monospace), // Use monospace for code editor
             Shaping::Advanced,
         );
 
@@ -252,8 +252,9 @@ impl TextSystem {
         buffer.set_rich_text(
             &mut self.font_system,
             spans,
-            default_attrs,
+            &default_attrs,
             Shaping::Advanced,
+            None, // alignment
         );
         buffer.shape_until_scroll(&mut self.font_system, false);
 

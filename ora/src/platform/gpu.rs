@@ -23,7 +23,7 @@ impl GpuState {
         let height = size.height.max(1);
 
         // Create wgpu instance with PRIMARY backends
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
             backends: wgpu::Backends::PRIMARY,
             ..Default::default()
         });
@@ -41,17 +41,15 @@ impl GpuState {
             .await
             .expect("Failed to find an appropriate adapter");
 
-        // Request device and queue with default limits
+        // Request device and queue with default limits (wgpu 25: single-arg, returns tuple)
         let (device, queue) = adapter
-            .request_device(
-                &wgpu::DeviceDescriptor {
-                    label: Some("ora-device"),
-                    required_features: wgpu::Features::empty(),
-                    required_limits: wgpu::Limits::default(),
-                    memory_hints: Default::default(),
-                },
-                None,
-            )
+            .request_device(&wgpu::DeviceDescriptor {
+                label: Some("ora-device"),
+                required_features: wgpu::Features::empty(),
+                required_limits: wgpu::Limits::default(),
+                memory_hints: Default::default(),
+                trace: wgpu::Trace::Off,
+            })
             .await
             .expect("Failed to create device");
 
