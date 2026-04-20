@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-03-26)
 ## Current Position
 
 Phase: 14.1 — View-Level Dirty Checking (In Progress)
-Plan: 01 of 3 (complete)
-Status: In progress — Plan 14.1-01 done
-Last activity: 2026-03-28 — Completed 14.1-01-PLAN.md (Paint-phase scroll offset)
+Plan: 02 of 3 (complete)
+Status: In progress — Plan 14.1-02 done
+Last activity: 2026-04-20 — Completed 14.1-02-PLAN.md (Conditional needs_layout on scroll)
 
 Progress: [█████████████████████████░░░░░░░░░░░] v2.0 Phase 14.1 in progress (24/~28 plans)
 
@@ -68,6 +68,13 @@ Progress: [███████████████████████
 - paint_offset wraps the inner content Div (not the overflow_hidden container) — scissor clipping still functions correctly
 - Single shared PaintOffsetElement reused by both TextAreaView and GutterView — no duplication needed
 - Explicit `: AnyElement` type annotation required on Divs passed to paint_offset — Rust type inference can't disambiguate Into<_> target
+
+### Phase 14.1 Plan 02 Decisions
+
+- Editor scroll (consumed=false) does NOT set needs_layout=true — element tree layout-stable after Plan 01 (PaintOffsetElement replaced all mt() calls)
+- Sidebar scroll (consumed=true) still sets needs_layout=true — FileTreeView virtual_slice() changes element count per frame
+- FrameDirtyFlags is informational only for now — documents what changed per frame, does not gate rendering; enables future per-region paint caching
+- debug_assert guard on paint-only frames: fires when run_full_layout=false AND element tree grew — catches scroll regression bugs
 
 ## Accumulated Context
 
@@ -145,13 +152,14 @@ Plan 04: External file deletion (deleted_paths HashSet → TabPresentation.is_de
 ## Phase 14.1 Summary (in progress)
 
 Plan 01: PaintOffsetElement (push_offset/pop_offset wrapper, zero layout cost), TextAreaView 4-site mt() removal, GutterView 1-site mt() removal; element tree layout-stable across scroll frames
+Plan 02: Conditional needs_layout on scroll (editor=paint-only, sidebar=full layout), FrameDirtyFlags struct wired at all event sites, debug_assert growth guard on paint-only frames; editor scroll layout cache hit rate rises to 90%+
 
 ## Session Continuity
 
-Last session: 2026-03-28
-Stopped at: Completed 14.1-01-PLAN.md (paint-phase scroll offset)
+Last session: 2026-04-20
+Stopped at: Completed 14.1-02-PLAN.md (conditional needs_layout on scroll)
 Resume file: None
-Next: Phase 14.1 Plan 02 — Remove needs_layout on scroll (layout-stable tree now in place)
+Next: Phase 14.1 Plan 03 — Benchmark + human verification (--show-fps layout hit rate 90%+)
 
 ---
 *State initialized: 2026-01-28*
