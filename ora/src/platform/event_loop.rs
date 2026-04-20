@@ -60,6 +60,24 @@ pub fn parse_perf_flags() {
     }
 }
 
+/// Per-frame dirty region flags.
+///
+/// Tracks which UI regions were touched by events in the current frame.
+/// For now these are informational — they document what changed but do not
+/// yet gate rendering decisions. Future work can use them to skip per-region
+/// rebuild entirely.
+#[derive(Debug, Default)]
+struct FrameDirtyFlags {
+    /// Editor content area (text, gutter, caret).
+    pub editor_content: bool,
+    /// Tab bar (tab switch, file rename, close).
+    pub tab_bar: bool,
+    /// Status bar (cursor position, mode, message).
+    pub status_bar: bool,
+    /// Sidebar (file tree, scroll, watcher events).
+    pub sidebar: bool,
+}
+
 /// Frame degradation guard.
 ///
 /// Tracks consecutive slow frames (>4ms) and enters degraded mode when 3+
@@ -173,6 +191,9 @@ pub struct OraApp {
     /// Frame degradation guard. Tracks consecutive slow frames and suppresses
     /// transition animations when 3+ frames exceed the 4ms budget.
     frame_degradation: FrameDegradation,
+    /// Per-frame dirty region flags. Informational — documents which UI regions
+    /// were touched by events this frame. Reset at the start of each RedrawRequested.
+    dirty_flags: FrameDirtyFlags,
 }
 
 impl OraApp {
@@ -209,6 +230,7 @@ impl OraApp {
             layout_misses: 0,
             layout_cache_enabled: true,
             frame_degradation: FrameDegradation::new(),
+            dirty_flags: FrameDirtyFlags::default(),
         }
     }
 
@@ -250,6 +272,7 @@ impl OraApp {
             layout_misses: 0,
             layout_cache_enabled: true,
             frame_degradation: FrameDegradation::new(),
+            dirty_flags: FrameDirtyFlags::default(),
         }
     }
 }
@@ -610,6 +633,11 @@ impl ApplicationHandler for OraApp {
                 }
                 // Window size changed — element sizes will change, full layout required.
                 self.needs_layout = true;
+                // Resize affects all regions.
+                self.dirty_flags.editor_content = true;
+                self.dirty_flags.tab_bar = true;
+                self.dirty_flags.status_bar = true;
+                self.dirty_flags.sidebar = true;
             }
             WindowEvent::CloseRequested => {
                 event_loop.exit();
@@ -863,6 +891,9 @@ impl ApplicationHandler for OraApp {
                     // Mouse clicks can trigger tab switches, UI state changes, or command
                     // dispatch — mark layout dirty to be safe.
                     self.needs_layout = true;
+                    self.dirty_flags.editor_content = true;
+                    self.dirty_flags.status_bar = true;
+                    self.dirty_flags.tab_bar = true;
                     // Request redraw to update active state visuals
                     if let Some(gpu_state) = &self.gpu_state {
                         gpu_state.window.request_redraw();
@@ -951,11 +982,19 @@ impl ApplicationHandler for OraApp {
                 }
                 } // end if !consumed
 
-                // Both sidebar scroll and editor scroll change visible content,
-                // which changes element count and LayoutId assignment order.
-                // Stale cached layout outputs produce wrong positions → flicker.
-                // Layout cache still helps for non-scroll frames (hover, blink).
-                self.needs_layout = true;
+                if consumed {
+                    // Sidebar scroll: changes which file-tree items are visible in the
+                    // virtualized list. Element count and LayoutId assignment order change
+                    // every frame → full layout required.
+                    self.needs_layout = true;
+                    self.dirty_flags.sidebar = true;
+                } else {
+                    // Editor scroll: element tree structure is layout-stable after Plan 01
+                    // (PaintOffsetElement, mt() removal). needs_layout stays false —
+                    // cached layout_outputs are reused for this frame.
+                    self.dirty_flags.editor_content = true;
+                    // needs_layout intentionally NOT set — paint-only scroll frame.
+                }
                 if let Some(gpu_state) = &self.gpu_state {
                     gpu_state.window.request_redraw();
                 }
@@ -984,6 +1023,11 @@ impl ApplicationHandler for OraApp {
 
                             // Tab focus change can alter visible focus indicators — mark layout dirty.
                             self.needs_layout = true;
+                            // Tab key navigation touches all regions (sidebar, editor, etc.)
+                            self.dirty_flags.editor_content = true;
+                            self.dirty_flags.tab_bar = true;
+                            self.dirty_flags.status_bar = true;
+                            self.dirty_flags.sidebar = true;
                             // Request redraw to show new focus state
                             if let Some(gpu_state) = &self.gpu_state {
                                 gpu_state.window.request_redraw();
@@ -1005,6 +1049,10 @@ impl ApplicationHandler for OraApp {
 
                                 // Theme change alters all element colors — full layout required.
                                 self.needs_layout = true;
+                                self.dirty_flags.editor_content = true;
+                                self.dirty_flags.tab_bar = true;
+                                self.dirty_flags.status_bar = true;
+                                self.dirty_flags.sidebar = true;
                                 // Request redraw to show new theme
                                 if let Some(gpu_state) = &self.gpu_state {
                                     gpu_state.window.request_redraw();
@@ -1023,6 +1071,11 @@ impl ApplicationHandler for OraApp {
                                 if action_matched {
                                     // Actions (tab switch, file ops, command palette) change layout.
                                     self.needs_layout = true;
+                                    // Actions may affect all regions (tab switch, file open, etc.)
+                                    self.dirty_flags.editor_content = true;
+                                    self.dirty_flags.tab_bar = true;
+                                    self.dirty_flags.status_bar = true;
+                                    self.dirty_flags.sidebar = true;
                                     if let Some(gpu_state) = &self.gpu_state {
                                         gpu_state.window.request_redraw();
                                     }
@@ -1041,6 +1094,8 @@ impl ApplicationHandler for OraApp {
                                         log::debug!("Editor command dispatched via adapter");
                                         // Keyboard input modifies buffer content — layout required.
                                         self.needs_layout = true;
+                                        self.dirty_flags.editor_content = true;
+                                        self.dirty_flags.status_bar = true;
                                         if let Some(gpu_state) = &self.gpu_state {
                                             gpu_state.window.request_redraw();
                                         }
@@ -1062,6 +1117,11 @@ impl ApplicationHandler for OraApp {
                             if action_matched {
                                 // Actions (tab switch, file ops, command palette) change layout.
                                 self.needs_layout = true;
+                                // Actions may affect all regions (tab switch, file open, etc.)
+                                self.dirty_flags.editor_content = true;
+                                self.dirty_flags.tab_bar = true;
+                                self.dirty_flags.status_bar = true;
+                                self.dirty_flags.sidebar = true;
                                 if let Some(gpu_state) = &self.gpu_state {
                                     gpu_state.window.request_redraw();
                                 }
@@ -1080,6 +1140,8 @@ impl ApplicationHandler for OraApp {
                                     log::debug!("Editor command dispatched via adapter");
                                     // Keyboard input modifies buffer content — layout required.
                                     self.needs_layout = true;
+                                    self.dirty_flags.editor_content = true;
+                                    self.dirty_flags.status_bar = true;
                                     if let Some(gpu_state) = &self.gpu_state {
                                         gpu_state.window.request_redraw();
                                     }
@@ -1101,6 +1163,7 @@ impl ApplicationHandler for OraApp {
                 }
                 // Focus change affects selection dimming style — mark layout dirty.
                 self.needs_layout = true;
+                self.dirty_flags.editor_content = true;
                 // Redraw to update selection dimming
                 if let Some(gpu_state) = &self.gpu_state {
                     gpu_state.window.request_redraw();
@@ -1108,6 +1171,9 @@ impl ApplicationHandler for OraApp {
             }
             WindowEvent::RedrawRequested => {
                 if let Some(gpu_state) = &mut self.gpu_state {
+                    // Reset per-frame dirty flags at the start of each frame.
+                    self.dirty_flags = FrameDirtyFlags::default();
+
                     // Determine whether to run full layout or reuse cached layout_outputs.
                     // Conservative rule: when in doubt, mark needs_layout = true.
                     // A false cache hit produces visual bugs; a missed cache is just a normal frame.
@@ -1157,6 +1223,18 @@ impl ApplicationHandler for OraApp {
                         // return Rect::zero and elements become invisible.
                         let run_full_layout = run_full_layout
                             || new_layout_count > self.cached_layout_outputs.len();
+
+                        // Safety guard: on a paint-only frame, the element tree must not
+                        // have grown. If it did, run_full_layout already caught it above.
+                        // This assertion fires only if the grow-check logic is bypassed.
+                        if !run_full_layout {
+                            debug_assert!(
+                                new_layout_count <= self.cached_layout_outputs.len(),
+                                "Layout cache miss: element tree grew from {} to {} on a paint-only frame.",
+                                self.cached_layout_outputs.len(),
+                                new_layout_count,
+                            );
+                        }
 
                         if run_full_layout {
                             // Full pipeline: compute_flexbox on top of request_layout
@@ -1312,6 +1390,11 @@ impl ApplicationHandler for OraApp {
         // that require full layout recomputation — not just a paint.
         if self.app_context.has_dirty_entities() {
             self.needs_layout = true;
+            // Dirty entities can touch any region — mark all dirty.
+            self.dirty_flags.editor_content = true;
+            self.dirty_flags.tab_bar = true;
+            self.dirty_flags.status_bar = true;
+            self.dirty_flags.sidebar = true;
             if let Some(gpu_state) = &self.gpu_state {
                 gpu_state.window.request_redraw();
             }
@@ -1334,6 +1417,9 @@ impl ApplicationHandler for OraApp {
                 adapter.borrow_mut().handle_external_file_changes();
             }
             self.needs_layout = true;
+            // Watcher events refresh sidebar tree and may update open tab state.
+            self.dirty_flags.sidebar = true;
+            self.dirty_flags.tab_bar = true;
             if let Some(gpu_state) = &self.gpu_state {
                 gpu_state.window.request_redraw();
             }
