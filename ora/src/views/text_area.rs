@@ -27,6 +27,7 @@
 use crate::context::ViewContext;
 use crate::element::AnyElement;
 use crate::elements::{paint_offset, stack, CaretElement, Div, TextElement};
+use crate::rendering::TextRun;
 use crate::style::{pct, px, Color};
 use crate::editor_adapter::{CaretPresentation, LinePresentation, RenderModel, TextStyle};
 use crate::theme::{ColorToken, Theme};
@@ -281,37 +282,37 @@ impl TextAreaView {
             .collect()
     }
 
-    /// Renders a single line with syntax-highlighted spans.
+    /// Renders a single line as ONE rich `TextElement` carrying all syntax
+    /// spans as colored runs.
     ///
-    /// All spans (including TextStyle::Selection) are rendered as text —
-    /// selection visibility comes from the selection_bg Stack layer below,
-    /// not from filtering here. The line div has no background (transparent),
-    /// so lower Stack layers show through.
+    /// Before: `flex_row` Div containing N `TextElement`s — one per syntax
+    /// span. N varied per line, breaking the cached-layout invariant and
+    /// causing text to flicker/disappear during scroll when LayoutIds
+    /// shifted. After: exactly one `TextElement` per visible line
+    /// (regardless of span count), shaped with glyphon `set_rich_text`
+    /// so per-glyph color is baked into the shaped Buffer. This is the
+    /// Zed GPUI pattern.
+    ///
+    /// All spans — including `TextStyle::Selection` — contribute their
+    /// text; the selection background is still painted by
+    /// `render_selection_bg_layer` underneath.
     fn render_line(&self, line: &LinePresentation, cx: &mut ViewContext) -> AnyElement {
         let theme = cx.theme();
 
-        // Render ALL spans — including Selection-styled ones — as colored text.
-        // The selection background is handled by render_selection_bg_layer below text.
-        let span_elements: Vec<AnyElement> = line
+        let runs: Vec<TextRun> = line
             .spans
             .iter()
-            .map(|span| {
-                let color = self.map_style_to_color(span.style, theme);
-                TextElement::new(&span.text)
-                    .size(TEXT_FONT_SIZE)
-                    .color(color)
-                    .into()
-            })
+            .map(|span| TextRun::new(span.text.clone(), self.map_style_to_color(span.style, theme)))
             .collect();
 
-        // Line container: transparent background so selection/current-line layers
-        // from lower Stack layers show through.
+        // Wrap the TextElement in a fixed-height Div so row metrics stay
+        // stable even for runs that happen to measure shorter than the
+        // declared line_height (e.g. empty spans).
         Div::new()
-            .flex_row()
             .w(pct(100.0))
             .h(px(LINE_HEIGHT))
             .shrink(0.0)
-            .children(span_elements)
+            .child(TextElement::rich(runs).size(TEXT_FONT_SIZE).line_height(LINE_HEIGHT))
             .into()
     }
 
