@@ -1222,20 +1222,25 @@ impl ApplicationHandler for OraApp {
                         element_tree.request_layout(&mut layout_cx);
                         let new_layout_count = layout_cx.next_layout_id();
 
-                        // If the element tree grew beyond the cached outputs,
-                        // force full layout — otherwise out-of-range LayoutIds
-                        // return Rect::zero and elements become invisible.
-                        let tree_grew = new_layout_count > self.cached_layout_outputs.len();
-                        let tree_shrank = new_layout_count < self.cached_layout_outputs.len();
-                        let run_full_layout = run_full_layout || tree_grew;
+                        // Force full layout whenever the element tree's LayoutId
+                        // count differs from the cached outputs. Both directions
+                        // are unsafe for paint-only reuse:
+                        //   - grew  → new LayoutIds have no cached bounds → Rect::zero → invisible text
+                        //   - shrank → same LayoutIds may index into DIFFERENT elements
+                        //     than last frame (structure shifted), so cached bounds
+                        //     paint the wrong element's geometry. This is the
+                        //     mechanism behind the "text overlaps / disappears
+                        //     during scroll" symptom: LayoutId N on frame T+1
+                        //     refers to a different text line than on frame T.
+                        let tree_size_changed =
+                            new_layout_count != self.cached_layout_outputs.len();
+                        let run_full_layout = run_full_layout || tree_size_changed;
 
-                        if !run_full_layout && (tree_grew || tree_shrank) {
-                            log::warn!(
-                                "Layout cache risk: new_layout_count={} cached_len={} (grew={} shrank={}) — paint-only frame, bounds may be stale",
+                        if tree_size_changed && !self.needs_layout {
+                            log::debug!(
+                                "Element tree size changed: new={} cached={} — forcing full layout",
                                 new_layout_count,
                                 self.cached_layout_outputs.len(),
-                                tree_grew,
-                                tree_shrank,
                             );
                         }
 
