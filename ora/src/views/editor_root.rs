@@ -177,6 +177,16 @@ impl View for EditorRootView {
         model.scroll_y_offset_px = scroll_top_px % LINE_HEIGHT;
         model.editor_focused = self.focus_state.get();
 
+        log::debug!(
+            "EditorRootView.render: scroll_top_px={:.2} scroll_y={} offset_px={:.2} visible_lines.len={} first_line_text={:?} first_line_number={:?}",
+            scroll_top_px,
+            model.scroll_y,
+            model.scroll_y_offset_px,
+            model.visible_lines.len(),
+            model.visible_lines.first().map(|l| l.spans.iter().map(|s| s.text.as_str()).collect::<String>().chars().take(40).collect::<String>()),
+            model.visible_lines.first().map(|l| l.line_number),
+        );
+
         // Construct the AppLayout from fresh data and render it
         let layout = self.build_layout(&model);
         layout.render(_cx)

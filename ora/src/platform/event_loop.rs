@@ -942,12 +942,16 @@ impl ApplicationHandler for OraApp {
                 };
                 let hit = hit_test(&self.hitboxes, self.cursor_position);
                 let consumed = if let Some(hit_id) = hit {
-                    let path = crate::events::dispatch::build_dispatch_path(&self.event_handlers.parent_map, hit_id);
-                    log::info!("Scroll: hit={}, path={:?}, scroll_handler_count={}", hit_id.0, path.iter().map(|h| h.0).collect::<Vec<_>>(), self.event_handlers.has_scroll_handlers());
                     dispatch_mouse_scroll(&mut self.event_handlers, &scroll_event, hit_id)
                 } else {
                     false
                 };
+                log::info!(
+                    "ScrollEvent: consumed={} delta_px={:.1} scroll_top_px_before={:.2}",
+                    consumed,
+                    delta_px,
+                    self.scroll_top_px,
+                );
 
                 // If no scroll handler consumed it, fall back to editor scroll
                 if !consumed {
@@ -979,6 +983,13 @@ impl ApplicationHandler for OraApp {
                     if let Some(ref offset) = self.shared_scroll_offset {
                         offset.set(self.scroll_top_px);
                     }
+                    log::info!(
+                        "EditorScroll applied: scroll_top_px={:.2} line_delta={} actual_scroll_y={} offset_px={:.2}",
+                        self.scroll_top_px,
+                        line_delta,
+                        actual_scroll_y,
+                        self.scroll_top_px - (actual_scroll_y as f32 * LINE_HEIGHT),
+                    );
                 }
                 } // end if !consumed
 
