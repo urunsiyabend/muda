@@ -29,6 +29,11 @@ static SHOW_FPS: AtomicBool = AtomicBool::new(false);
 /// Set by parsing --no-glyph-cache from CLI args at startup.
 static NO_GLYPH_CACHE: AtomicBool = AtomicBool::new(false);
 
+/// One-shot flag: when set, the next RedrawRequested frame dumps all paint
+/// commands to the log. Triggered by pressing F12 during a run so you can
+/// capture exactly one representative frame during scroll.
+static DUMP_PAINT_CMDS: AtomicBool = AtomicBool::new(false);
+
 /// Global flag to disable the layout dirty-flag cache (for A/B comparison).
 /// Set by parsing --no-layout-cache from CLI args at startup.
 static NO_LAYOUT_CACHE: AtomicBool = AtomicBool::new(false);
@@ -1020,6 +1025,15 @@ impl ApplicationHandler for OraApp {
                 if let Some(keyboard_event) = translate_key_event(&key_event, self.modifiers) {
                     // Handle Tab navigation first (before action matching)
                     if key_event.state.is_pressed() {
+                        // F12 → dump paint commands on next frame (diagnostic).
+                        if let Key::Named(NamedKey::F12) = keyboard_event.keystroke.key {
+                            DUMP_PAINT_CMDS.store(true, Ordering::Relaxed);
+                            log::info!("F12 pressed — paint command dump armed for next frame");
+                            if let Some(gpu_state) = &self.gpu_state {
+                                gpu_state.window.request_redraw();
+                            }
+                            return;
+                        }
                         if let Key::Named(NamedKey::Tab) = keyboard_event.keystroke.key {
                             let prev_focused = self.app_context.focus_state.focused_id();
                             if self.modifiers.shift {
@@ -1322,6 +1336,38 @@ impl ApplicationHandler for OraApp {
                         // Extract paint commands and render
                         let commands = paint_cx.take_commands();
                         let cmd_count = commands.len();
+
+                        // One-shot paint command dump on demand: press F12 to
+                        // set a static flag, and the next frame dumps every
+                        // command to the log. Helps pin down unexpected rect
+                        // draws (scissor/offset/bg) during scroll flicker.
+                        if DUMP_PAINT_CMDS.swap(false, Ordering::Relaxed) {
+                            use crate::element::PaintCommand;
+                            log::info!("=== PAINT COMMAND DUMP ({} commands, scroll_top_px={:.2}) ===", cmd_count, self.scroll_top_px);
+                            for (i, cmd) in commands.iter().enumerate() {
+                                let s = match cmd {
+                                    PaintCommand::Rect { x, y, width, height, color } => format!("Rect x={:.1} y={:.1} w={:.1} h={:.1} a={:.2}", x, y, width, height, color[3]),
+                                    PaintCommand::StyledRect { bounds, style } => {
+                                        let bg = match &style.background {
+                                            crate::style::Background::Solid(c) => format!("rgba({:.2},{:.2},{:.2},{:.2})", c.r, c.g, c.b, c.a),
+                                            _ => "transparent".to_string(),
+                                        };
+                                        format!("StyledRect x={:.1} y={:.1} w={:.1} h={:.1} bg={}", bounds.origin.x, bounds.origin.y, bounds.size.width, bounds.size.height, bg)
+                                    }
+                                    PaintCommand::Text { left, top, bounds, color, cache_key, .. } => {
+                                        format!("Text left={:.1} top={:.1} bounds=(x={:.1},y={:.1},w={:.1},h={:.1}) a={:.2} key={}", left, top, bounds.origin.x, bounds.origin.y, bounds.size.width, bounds.size.height, color.a, cache_key.is_some())
+                                    }
+                                    PaintCommand::SetScissor { x, y, width, height } => format!("SetScissor x={} y={} w={} h={}", x, y, width, height),
+                                    PaintCommand::ResetScissor => "ResetScissor".to_string(),
+                                    PaintCommand::PushOffset { dx, dy } => format!("PushOffset dx={:.2} dy={:.2}", dx, dy),
+                                    PaintCommand::PopOffset => "PopOffset".to_string(),
+                                    PaintCommand::LayerBoundary => "LayerBoundary".to_string(),
+                                };
+                                log::info!("  [{}] {}", i, s);
+                            }
+                            log::info!("=== END DUMP ===");
+                        }
+
                         match gpu_state.render_frame(&commands) {
                             Ok(_) => {
                                 // Return shaped buffers to the glyph LRU cache for next frame reuse.
