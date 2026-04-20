@@ -9,13 +9,17 @@ use std::num::NonZeroUsize;
 use wgpu::{Device, MultisampleState, Queue, RenderPass};
 
 /// Cache key for a shaped glyph buffer.
-/// Encodes text content (as a hash), font size, and line height.
-/// Two lines with identical text/size/height share the same shaped Buffer.
+/// Encodes text content hash, font size, line height, and (for rich text)
+/// a per-run color hash so two rich-text buffers with identical text but
+/// different coloring are distinct cache entries.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct GlyphCacheKey {
     pub text_hash: u64,
     pub font_size_bits: u32,
     pub line_height_bits: u32,
+    /// 0 for plain single-color text; non-zero hash of the run colors/ranges
+    /// for multi-color rich text produced via `measure_rich_text_cached`.
+    pub runs_hash: u64,
 }
 
 impl GlyphCacheKey {
@@ -27,7 +31,45 @@ impl GlyphCacheKey {
             text_hash,
             font_size_bits: font_size.to_bits(),
             line_height_bits: line_height.to_bits(),
+            runs_hash: 0,
         }
+    }
+
+    /// Cache key for a rich-text (multi-color) shaped buffer.
+    ///
+    /// The concatenated text + font metrics determine the glyph layout;
+    /// `runs_hash` distinguishes different color partitions of the same text.
+    pub fn rich(text: &str, font_size: f32, line_height: f32, runs_hash: u64) -> Self {
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        text.hash(&mut hasher);
+        let text_hash = hasher.finish();
+        Self {
+            text_hash,
+            font_size_bits: font_size.to_bits(),
+            line_height_bits: line_height.to_bits(),
+            runs_hash,
+        }
+    }
+}
+
+/// A colored run of text used by `measure_rich_text_cached` to shape a
+/// single multi-color line into one glyphon `Buffer`.
+///
+/// Mirrors Zed GPUI's `TextRun` / cosmic-text's `Attrs` model: one element
+/// per visual line, with color applied at the glyph level via glyphon's
+/// per-span `Attrs::color`. This keeps the UI element count per line
+/// constant regardless of how many syntax-highlight spans the line has —
+/// the prerequisite for stable LayoutIds during scroll without re-running
+/// flexbox.
+#[derive(Clone, Debug)]
+pub struct TextRun {
+    pub text: String,
+    pub color: Color,
+}
+
+impl TextRun {
+    pub fn new(text: impl Into<String>, color: Color) -> Self {
+        Self { text: text.into(), color }
     }
 }
 
@@ -172,6 +214,113 @@ impl TextSystem {
         };
 
         (buffer, Size::new(max_width, height))
+    }
+
+    /// Shape a multi-color line into a single `Buffer` via glyphon's
+    /// `set_rich_text`. Each `TextRun` contributes its text + color; the
+    /// resulting buffer carries per-glyph color via cosmic-text `Attrs`,
+    /// overriding the `TextArea.default_color` at render time.
+    ///
+    /// Used by `TextAreaView` to render one element per display line (Zed
+    /// GPUI pattern) instead of one element per syntax span, keeping the
+    /// element tree structurally stable across scroll frames.
+    pub fn measure_rich_text(
+        &mut self,
+        runs: &[TextRun],
+        font_size: f32,
+        line_height: f32,
+        max_width: Option<f32>,
+    ) -> (Buffer, Size<f32>) {
+        let metrics = Metrics::new(font_size, line_height);
+        let mut buffer = Buffer::new(&mut self.font_system, metrics);
+        buffer.set_size(&mut self.font_system, max_width, None);
+
+        let default_attrs = Attrs::new().family(Family::Monospace);
+        let spans: Vec<(&str, Attrs)> = runs
+            .iter()
+            .map(|run| {
+                let gc = GlyphonColor::rgba(
+                    (run.color.r * 255.0) as u8,
+                    (run.color.g * 255.0) as u8,
+                    (run.color.b * 255.0) as u8,
+                    (run.color.a * 255.0) as u8,
+                );
+                (run.text.as_str(), Attrs::new().family(Family::Monospace).color(gc))
+            })
+            .collect();
+
+        buffer.set_rich_text(
+            &mut self.font_system,
+            spans,
+            default_attrs,
+            Shaping::Advanced,
+        );
+        buffer.shape_until_scroll(&mut self.font_system, false);
+
+        let mut measured_width = 0.0f32;
+        let mut total_lines = 0;
+        for run in buffer.layout_runs() {
+            measured_width = measured_width.max(run.line_w);
+            total_lines += 1;
+        }
+        let height = if total_lines > 0 {
+            total_lines as f32 * line_height
+        } else {
+            line_height
+        };
+
+        (buffer, Size::new(measured_width, height))
+    }
+
+    /// Cache-aware rich-text measurement.
+    ///
+    /// Hashes the concatenated text + per-run colors + font metrics into a
+    /// `GlyphCacheKey::rich`. LRU semantics match `measure_text_cached`.
+    pub fn measure_rich_text_cached(
+        &mut self,
+        runs: &[TextRun],
+        font_size: f32,
+        line_height: f32,
+        max_width: Option<f32>,
+    ) -> (GlyphCacheKey, Buffer, Size<f32>) {
+        let mut text_buf = String::new();
+        let mut color_hasher = std::collections::hash_map::DefaultHasher::new();
+        for run in runs {
+            text_buf.push_str(&run.text);
+            run.text.len().hash(&mut color_hasher);
+            run.color.r.to_bits().hash(&mut color_hasher);
+            run.color.g.to_bits().hash(&mut color_hasher);
+            run.color.b.to_bits().hash(&mut color_hasher);
+            run.color.a.to_bits().hash(&mut color_hasher);
+        }
+        let runs_hash = color_hasher.finish();
+        let key = GlyphCacheKey::rich(&text_buf, font_size, line_height, runs_hash);
+
+        if self.cache_enabled {
+            if let Some(buffer) = self.glyph_cache.peek(&key) {
+                let cloned = buffer.clone();
+                let mut measured_width = 0.0f32;
+                let mut total_lines = 0;
+                for run in cloned.layout_runs() {
+                    measured_width = measured_width.max(run.line_w);
+                    total_lines += 1;
+                }
+                let height = if total_lines > 0 {
+                    total_lines as f32 * line_height
+                } else {
+                    line_height
+                };
+                self.cache_hits += 1;
+                return (key, cloned, Size::new(measured_width, height));
+            }
+        }
+
+        let (buffer, size) = self.measure_rich_text(runs, font_size, line_height, max_width);
+        if self.cache_enabled {
+            self.glyph_cache.put(key, buffer.clone());
+        }
+        self.cache_misses += 1;
+        (key, buffer, size)
     }
 
     /// Cache-aware text measurement.
