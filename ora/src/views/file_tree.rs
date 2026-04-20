@@ -207,14 +207,17 @@ impl View for FileTreeView {
             .grow(1.0)
             .bg(bg);
 
-        // Top spacer: takes up vertical space for rows above the visible window
-        if top_spacer_h > 0.0 {
-            container = container.child(
-                Div::new()
-                    .h(px(top_spacer_h))
-                    .shrink(0.0)
-            );
-        }
+        // Top spacer ALWAYS present (even at zero height) so the child count
+        // stays constant across scroll frames. A missing spacer would shrink
+        // the element tree by one LayoutId and invalidate the layout cache
+        // indexing on paint-only frames, producing stale bounds on every
+        // subsequent sibling / descendant — the mechanism behind the
+        // text-area scroll visual glitch.
+        container = container.child(
+            Div::new()
+                .h(px(top_spacer_h))
+                .shrink(0.0)
+        );
 
         // Render only the visible slice (start..end)
         for (slice_i, (depth, node)) in rows[start..end].iter().enumerate() {
@@ -265,14 +268,12 @@ impl View for FileTreeView {
             container = container.child(item);
         }
 
-        // Bottom spacer: takes up vertical space for rows below the visible window
-        if bottom_spacer_h > 0.0 {
-            container = container.child(
-                Div::new()
-                    .h(px(bottom_spacer_h))
-                    .shrink(0.0)
-            );
-        }
+        // Bottom spacer ALWAYS present (same rationale as top spacer above).
+        container = container.child(
+            Div::new()
+                .h(px(bottom_spacer_h))
+                .shrink(0.0)
+        );
 
         container.into()
     }
