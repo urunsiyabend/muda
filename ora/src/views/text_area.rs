@@ -362,13 +362,16 @@ impl TextAreaView {
             .map(|i| match self.visible_lines.get(i) {
                 Some(line) => self.render_line(line, cx),
                 None => Div::new()
+                    .flex_row()
                     .w(pct(100.0))
                     .h(px(LINE_HEIGHT))
                     .shrink(0.0)
                     .child(
-                        TextElement::rich(vec![TextRun::new("", Color::transparent())])
+                        TextElement::new("")
                             .size(TEXT_FONT_SIZE)
-                            .line_height(LINE_HEIGHT),
+                            .line_height(LINE_HEIGHT)
+                            .color(Color::transparent())
+                            .grow(1.0),
                     )
                     .into(),
             })
@@ -378,17 +381,18 @@ impl TextAreaView {
     /// Renders a single line as ONE rich `TextElement` carrying all syntax
     /// spans as colored runs.
     ///
-    /// Before: `flex_row` Div containing N `TextElement`s — one per syntax
-    /// span. N varied per line, breaking the cached-layout invariant and
-    /// causing text to flicker/disappear during scroll when LayoutIds
-    /// shifted. After: exactly one `TextElement` per visible line
-    /// (regardless of span count), shaped with glyphon `set_rich_text`
-    /// so per-glyph color is baked into the shaped Buffer. This is the
-    /// Zed GPUI pattern.
-    ///
-    /// All spans — including `TextStyle::Selection` — contribute their
-    /// text; the selection background is still painted by
-    /// `render_selection_bg_layer` underneath.
+    /// The row Div is flex_row and the TextElement grows to fill the full
+    /// row width. Fixing the row width (not the text's own intrinsic
+    /// width) is critical: on paint-only scroll frames, cached layout
+    /// outputs are reused and the bounds for each LayoutId carry last
+    /// frame's measured width. If the previous occupant of this row was
+    /// empty (measured width = 0), and the new line has content, the
+    /// text renders with a w=0 glyphon clip region and is invisible —
+    /// producing the "text disappears, background shows through"
+    /// flicker at line-boundary crossings. Forcing the text element to
+    /// grow(1.0) gives it the full row width every frame, independent
+    /// of measured text width, so the cached bounds are always wide
+    /// enough to show whatever text currently lives in that slot.
     fn render_line(&self, line: &LinePresentation, cx: &mut ViewContext) -> AnyElement {
         let theme = cx.theme();
 
@@ -398,14 +402,17 @@ impl TextAreaView {
             .map(|span| TextRun::new(span.text.clone(), self.map_style_to_color(span.style, theme)))
             .collect();
 
-        // Wrap the TextElement in a fixed-height Div so row metrics stay
-        // stable even for runs that happen to measure shorter than the
-        // declared line_height (e.g. empty spans).
         Div::new()
+            .flex_row()
             .w(pct(100.0))
             .h(px(LINE_HEIGHT))
             .shrink(0.0)
-            .child(TextElement::rich(runs).size(TEXT_FONT_SIZE).line_height(LINE_HEIGHT))
+            .child(
+                TextElement::rich(runs)
+                    .size(TEXT_FONT_SIZE)
+                    .line_height(LINE_HEIGHT)
+                    .grow(1.0),
+            )
             .into()
     }
 
