@@ -156,6 +156,29 @@ impl<'a> LayoutContext<'a> {
         }
     }
 
+    /// Cache-aware rich-text measurement. Shapes a single multi-color line
+    /// via glyphon `set_rich_text` and returns the shaped Buffer plus a
+    /// GlyphCacheKey that distinguishes run-color partitions.
+    pub fn measure_rich_text_cached(
+        &mut self,
+        runs: &[crate::rendering::TextRun],
+        font_size: f32,
+        line_height: f32,
+        max_width: Option<f32>,
+    ) -> (GlyphCacheKey, glyphon::Buffer, Size<f32>) {
+        if let Some(text_system_ptr) = self.text_system {
+            unsafe {
+                (*text_system_ptr).measure_rich_text_cached(runs, font_size, line_height, max_width)
+            }
+        } else {
+            // Fallback: concatenate and fall back to plain shaping.
+            let text: String = runs.iter().map(|r| r.text.as_str()).collect();
+            let (buffer, size) = self.measure_text(&text, font_size, line_height, max_width);
+            let key = GlyphCacheKey::new(&text, font_size, line_height);
+            (key, buffer, size)
+        }
+    }
+
     /// Request layout for an element with its style.
     /// Returns a LayoutId that can be used to retrieve computed bounds later.
     pub fn request_layout(&mut self, style: &Style) -> LayoutId {

@@ -1,11 +1,26 @@
 use crate::element::{Element, LayoutContext, LayoutId, PaintContext, PrepaintContext};
 use crate::events::mouse::HitboxId;
 use crate::rendering::text::GlyphCacheKey;
+use crate::rendering::TextRun;
 use crate::style::*;
 
 /// Text rendering element with glyphon-based measurement and rendering.
+///
+/// Two modes:
+///   - Plain: single-color text set via `TextElement::new` + `.color`. Uses
+///     `measure_text_cached` (one `Attrs` covers everything).
+///   - Rich: multi-color text set via `TextElement::rich(runs)`. Uses
+///     `measure_rich_text_cached`; each `TextRun` contributes its own color
+///     via cosmic-text per-span `Attrs`. Produces a single shaped `Buffer`,
+///     so one `TextElement` per visible line is enough regardless of how
+///     many syntax spans the line has — the structural guarantee the layout
+///     cache needs to stay valid across scroll frames.
 pub struct TextElement {
     content: String,
+    /// Rich-text runs. `Some` means use `measure_rich_text_cached`; the
+    /// `color` field is then ignored (fallback-only for glyphs without
+    /// explicit Attrs color, which won't happen here).
+    runs: Option<Vec<TextRun>>,
     font_size: f32,
     line_height: f32,
     color: Color,
@@ -17,6 +32,25 @@ impl TextElement {
     pub fn new(content: impl Into<String>) -> Self {
         TextElement {
             content: content.into(),
+            runs: None,
+            font_size: 14.0,
+            line_height: 16.8,
+            color: Color::white(),
+            style: Style::default(),
+            wrap: false,
+        }
+    }
+
+    /// Build a multi-color rich-text element from a list of colored runs.
+    ///
+    /// Measurement concatenates run text into one shaped `Buffer` with
+    /// per-glyph color. Exactly one `TextElement` / `LayoutId` per line
+    /// is produced, regardless of run count.
+    pub fn rich(runs: Vec<TextRun>) -> Self {
+        let content: String = runs.iter().map(|r| r.text.as_str()).collect();
+        TextElement {
+            content,
+            runs: Some(runs),
             font_size: 14.0,
             line_height: 16.8,
             color: Color::white(),
@@ -95,7 +129,11 @@ impl Element for TextElement {
             Length::Px(w) => Some(w),
             _ => None,
         };
-        let (cache_key, buffer, measured) = cx.measure_text_cached(&self.content, self.font_size, self.line_height, max_width);
+        let (cache_key, buffer, measured) = if let Some(runs) = &self.runs {
+            cx.measure_rich_text_cached(runs, self.font_size, self.line_height, max_width)
+        } else {
+            cx.measure_text_cached(&self.content, self.font_size, self.line_height, max_width)
+        };
         cx.set_intrinsic_size(id, measured);
         (
             id,
