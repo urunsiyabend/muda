@@ -25,13 +25,80 @@
 //! - etc.
 
 use crate::context::ViewContext;
-use crate::element::AnyElement;
+use crate::element::{AnyElement, Element, LayoutContext, LayoutId, PaintContext, PrepaintContext};
+use crate::Style;
 use crate::elements::{paint_offset, stack, CaretElement, Div, TextElement};
 use crate::rendering::TextRun;
 use crate::style::{pct, px, Color};
 use crate::editor_adapter::{CaretPresentation, LinePresentation, RenderModel, TextStyle};
 use crate::theme::{ColorToken, Theme};
 use crate::view::View;
+
+/// One selection rectangle extracted from visible_lines, positioned relative
+/// to the selection-overlay's local origin.
+#[derive(Clone, Copy, Debug)]
+struct SelectionRect {
+    /// 0-based row inside viewport_rows.
+    row: usize,
+    /// Starting column (characters from start of line).
+    start_col: usize,
+    /// Ending column (exclusive).
+    end_col: usize,
+    /// When the selection reaches the end of the line, grow to the right
+    /// edge of the layer so the highlight looks "line-terminated".
+    grow_to_edge: bool,
+}
+
+/// Custom element that paints selection highlight rects in one shot.
+///
+/// Has a single `LayoutId` of its own and no children, so its presence
+/// does not change any sibling/descendant LayoutId assignment regardless
+/// of how many rects it holds this frame. This is the architectural
+/// lever that keeps the layout cache valid under a changing selection.
+struct SelectionOverlay {
+    rects: Vec<SelectionRect>,
+    color: Color,
+    char_width: f32,
+    line_height: f32,
+}
+
+struct SelectionOverlayState {
+    layout_id: LayoutId,
+}
+
+impl Element for SelectionOverlay {
+    type RequestLayoutState = SelectionOverlayState;
+
+    fn request_layout(&mut self, cx: &mut LayoutContext) -> (LayoutId, SelectionOverlayState) {
+        let mut style = Style::default();
+        style.width = crate::style::Length::Percent(100.0);
+        style.height = crate::style::Length::Percent(100.0);
+        let id = cx.request_layout(&style);
+        (id, SelectionOverlayState { layout_id: id })
+    }
+
+    fn prepaint(&mut self, _state: &mut SelectionOverlayState, _cx: &mut PrepaintContext) {
+        // No hitbox — selection rects are visual only, not interactive.
+    }
+
+    fn paint(&mut self, state: &mut SelectionOverlayState, cx: &mut PaintContext) {
+        let bounds = cx.bounds(state.layout_id);
+        let color_arr = [self.color.r, self.color.g, self.color.b, self.color.a];
+        for rect in &self.rects {
+            let x = bounds.origin.x + (rect.start_col as f32) * self.char_width;
+            let y = bounds.origin.y + (rect.row as f32) * self.line_height;
+            let w = if rect.grow_to_edge {
+                (bounds.origin.x + bounds.size.width) - x
+            } else {
+                ((rect.end_col - rect.start_col) as f32) * self.char_width
+            };
+            if w > 0.0 {
+                cx.paint_rect(x, y, w, self.line_height, color_arr);
+            }
+        }
+    }
+}
+
 
 /// Font size for editor text.
 const TEXT_FONT_SIZE: f32 = 14.0;
@@ -85,11 +152,19 @@ pub struct TextAreaView {
     /// Whether the editor window has OS-level focus.
     /// When false, selection backgrounds use a dimmed color.
     editor_focused: bool,
+    /// Target number of rows to emit — the viewport's fixed line capacity.
+    /// We always emit exactly this many rows in every layer (text,
+    /// current-line-bg, selection-bg), padding with empty placeholders
+    /// if `visible_lines.len()` is smaller (near EOF). Keeps the element
+    /// tree and LayoutId assignment stable across scroll frames so the
+    /// cached layout outputs stay valid on paint-only scrolls.
+    viewport_rows: usize,
 }
 
 impl TextAreaView {
     /// Creates a new text area view from render model data.
     pub fn new(model: &RenderModel) -> Self {
+        let viewport_rows = model.visible_lines.len();
         Self {
             visible_lines: model.visible_lines.clone(),
             caret: model.caret.clone(),
@@ -98,6 +173,24 @@ impl TextAreaView {
             char_width: crate::rendering::measured_char_width(),
             scroll_y_offset_px: model.scroll_y_offset_px,
             editor_focused: model.editor_focused,
+            viewport_rows,
+        }
+    }
+
+    /// Creates a new text area view with an explicit row capacity. When
+    /// `visible_lines.len() < viewport_rows` (near EOF) the extra rows are
+    /// emitted as empty placeholders so the element tree row count stays
+    /// constant across scroll frames.
+    pub fn with_viewport(model: &RenderModel, viewport_rows: usize) -> Self {
+        Self {
+            visible_lines: model.visible_lines.clone(),
+            caret: model.caret.clone(),
+            scroll_x: model.scroll_x,
+            scroll_y: model.scroll_y,
+            char_width: crate::rendering::measured_char_width(),
+            scroll_y_offset_px: model.scroll_y_offset_px,
+            editor_focused: model.editor_focused,
+            viewport_rows,
         }
     }
 
@@ -111,6 +204,7 @@ impl TextAreaView {
             char_width: crate::rendering::measured_char_width(),
             scroll_y_offset_px: 0.0,
             editor_focused: true,
+            viewport_rows: 0,
         }
     }
 
@@ -153,25 +247,26 @@ impl TextAreaView {
         }
     }
 
-    /// Renders a column of current-line background highlights (one per visible line).
+    /// Renders a column of current-line background highlights.
     ///
-    /// Produces a flex-col of line-height divs, where the current line has
-    /// CurrentLineBg and all others are transparent. This layer sits below
-    /// both selection_bg and text in the Stack z-order.
+    /// Always emits exactly `viewport_rows` rows. Rows beyond `visible_lines`
+    /// (near EOF) are transparent placeholders so the element tree count
+    /// stays constant across scroll frames — a prerequisite for the cached
+    /// layout outputs to index correctly on paint-only scrolls.
     fn render_current_line_bg_layer(&self, cx: &mut ViewContext) -> AnyElement {
         let theme = cx.theme();
         let current_line_color = theme.color(ColorToken::CurrentLineBg);
 
-        let rows: Vec<AnyElement> = self
-            .visible_lines
-            .iter()
-            .map(|line| {
+        let rows: Vec<AnyElement> = (0..self.viewport_rows)
+            .map(|i| {
                 let mut row = Div::new()
                     .w(pct(100.0))
                     .h(px(LINE_HEIGHT))
                     .shrink(0.0);
-                if line.is_current_line {
-                    row = row.bg(current_line_color);
+                if let Some(line) = self.visible_lines.get(i) {
+                    if line.is_current_line {
+                        row = row.bg(current_line_color);
+                    }
                 }
                 row.into()
             })
@@ -187,9 +282,12 @@ impl TextAreaView {
 
     /// Renders selection background rectangles from selection_ranges.
     ///
-    /// Produces a flex-col of line-height rows. Each row uses a flex-row of
-    /// [spacer, selection-rect] to position the highlight at the correct column.
-    /// Lines with no selection get an empty transparent row.
+    /// Emits exactly `viewport_rows` rows; each row is a plain transparent
+    /// placeholder Div. Selection highlights themselves are painted as
+    /// absolute-positioned rects via `paint_rect` in the custom
+    /// `SelectionOverlay` element below, so the row structure stays fixed
+    /// regardless of where/how many selection ranges exist. This keeps
+    /// LayoutIds stable during scroll.
     fn render_selection_bg_layer(&self, cx: &mut ViewContext) -> AnyElement {
         let theme = cx.theme();
         let selection_color = if self.editor_focused {
@@ -198,87 +296,82 @@ impl TextAreaView {
             theme.color(ColorToken::SelectionInactive)
         };
 
-        let rows: Vec<AnyElement> = self
-            .visible_lines
-            .iter()
-            .map(|line| {
-                if line.selection_ranges.is_empty() {
-                    // No selection on this line — transparent placeholder row.
-                    return Div::new()
-                        .w(pct(100.0))
-                        .h(px(LINE_HEIGHT))
-                        .shrink(0.0)
-                        .into();
-                }
+        // Build the flat list of (row_index, start_col, end_col, grow_to_edge)
+        // selection rects. Painted directly via a custom overlay element.
+        let mut rects: Vec<SelectionRect> = Vec::new();
+        for (i, line) in self.visible_lines.iter().enumerate() {
+            if i >= self.viewport_rows {
+                break;
+            }
+            let total_chars: usize = line.spans.iter().map(|s| s.text.chars().count()).sum();
+            for &(start_col, end_col) in &line.selection_ranges {
+                rects.push(SelectionRect {
+                    row: i,
+                    start_col,
+                    end_col,
+                    grow_to_edge: end_col >= total_chars && total_chars > 0,
+                });
+            }
+        }
 
-                // Build one rect per selection range on this line.
-                // Ranges are non-overlapping, emitted in column order by the adapter.
-                let mut children: Vec<AnyElement> = Vec::new();
-                let mut prev_end: usize = 0;
+        let overlay = SelectionOverlay {
+            rects,
+            color: selection_color,
+            char_width: self.char_width,
+            line_height: LINE_HEIGHT,
+        };
 
-                // Total character count on this line (for edge-to-edge detection).
-                let total_chars: usize = line.spans.iter()
-                    .map(|s| s.text.chars().count())
-                    .sum();
-
-                for &(start_col, end_col) in &line.selection_ranges {
-                    // Spacer before this selection range.
-                    if start_col > prev_end {
-                        let spacer_w = (start_col - prev_end) as f32 * self.char_width;
-                        children.push(
-                            Div::new().w(px(spacer_w)).h(px(LINE_HEIGHT)).shrink(0.0).into(),
-                        );
-                    }
-                    // Selection highlight rect.
-                    // If the selection extends to or past end of line text,
-                    // use grow(1.0) to fill remaining width (edge-to-edge).
-                    if end_col >= total_chars && total_chars > 0 {
-                        children.push(
-                            Div::new()
-                                .h(px(LINE_HEIGHT))
-                                .shrink(0.0)
-                                .grow(1.0)
-                                .bg(selection_color)
-                                .into(),
-                        );
-                    } else {
-                        let sel_w = (end_col - start_col) as f32 * self.char_width;
-                        children.push(
-                            Div::new()
-                                .w(px(sel_w))
-                                .h(px(LINE_HEIGHT))
-                                .shrink(0.0)
-                                .bg(selection_color)
-                                .into(),
-                        );
-                    }
-                    prev_end = end_col;
-                }
-
+        // Empty per-row spacer column, so the layer has the same intrinsic
+        // layout shape as current_line_bg / text. The overlay sits on top
+        // and paints absolute-positioned rects from `rects`.
+        let spacer_rows: Vec<AnyElement> = (0..self.viewport_rows)
+            .map(|_| {
                 Div::new()
-                    .flex_row()
                     .w(pct(100.0))
                     .h(px(LINE_HEIGHT))
                     .shrink(0.0)
-                    .children(children)
                     .into()
             })
             .collect();
 
-        let inner: AnyElement = Div::new()
+        let spacer_col: AnyElement = Div::new()
             .flex_col()
             .w(pct(100.0))
-            .children(rows)
+            .children(spacer_rows)
             .into();
+
+        let overlay_any: AnyElement = overlay.into();
+        let inner: AnyElement = crate::elements::stack()
+            .w(pct(100.0))
+            .h(pct(100.0))
+            .child(spacer_col)
+            .child(overlay_any)
+            .into();
+
         paint_offset(-self.scroll_y_offset_px, inner).into()
     }
 
-    /// Renders all text lines with syntax highlighting.
+    /// Renders exactly `viewport_rows` row elements with a structurally
+    /// identical shape: each row is a `Div` wrapping one `TextElement::rich`.
+    /// Rows beyond `visible_lines.len()` use a single-empty-run
+    /// TextElement so the `(Div + TextElement)` LayoutId pair is allocated
+    /// for every row regardless of EOF position. Constant LayoutIds means
+    /// the cached layout outputs stay valid on paint-only scroll frames.
     fn render_text_lines(&self, cx: &mut ViewContext) -> Vec<AnyElement> {
-        // Build line elements first to release mutable borrow of cx
-        self.visible_lines
-            .iter()
-            .map(|line| self.render_line(line, cx))
+        (0..self.viewport_rows)
+            .map(|i| match self.visible_lines.get(i) {
+                Some(line) => self.render_line(line, cx),
+                None => Div::new()
+                    .w(pct(100.0))
+                    .h(px(LINE_HEIGHT))
+                    .shrink(0.0)
+                    .child(
+                        TextElement::rich(vec![TextRun::new("", Color::transparent())])
+                            .size(TEXT_FONT_SIZE)
+                            .line_height(LINE_HEIGHT),
+                    )
+                    .into(),
+            })
             .collect()
     }
 

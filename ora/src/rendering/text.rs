@@ -193,6 +193,7 @@ impl TextSystem {
             text,
             &Attrs::new().family(Family::Monospace), // Use monospace for code editor
             Shaping::Advanced,
+            None, // alignment
         );
 
         // Shape the text

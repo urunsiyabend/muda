@@ -1181,12 +1181,16 @@ impl ApplicationHandler for OraApp {
                         || !self.layout_cache_enabled
                         || self.cached_layout_outputs.is_empty();
 
-                    log::trace!(
-                        "Redraw: dirty={}, needs_layout={}, cache_enabled={}, run_full={}",
+                    log::debug!(
+                        "Redraw: dirty={}, needs_layout={}, cache_enabled={}, run_full={}, dirty_flags={{editor:{},tabs:{},status:{},sidebar:{}}}",
                         self.app_context.has_dirty_entities(),
                         self.needs_layout,
                         self.layout_cache_enabled,
-                        run_full_layout
+                        run_full_layout,
+                        self.dirty_flags.editor_content,
+                        self.dirty_flags.tab_bar,
+                        self.dirty_flags.status_bar,
+                        self.dirty_flags.sidebar,
                     );
 
                     // Reset needs_layout for next frame — any event that requires layout
@@ -1221,8 +1225,19 @@ impl ApplicationHandler for OraApp {
                         // If the element tree grew beyond the cached outputs,
                         // force full layout — otherwise out-of-range LayoutIds
                         // return Rect::zero and elements become invisible.
-                        let run_full_layout = run_full_layout
-                            || new_layout_count > self.cached_layout_outputs.len();
+                        let tree_grew = new_layout_count > self.cached_layout_outputs.len();
+                        let tree_shrank = new_layout_count < self.cached_layout_outputs.len();
+                        let run_full_layout = run_full_layout || tree_grew;
+
+                        if !run_full_layout && (tree_grew || tree_shrank) {
+                            log::warn!(
+                                "Layout cache risk: new_layout_count={} cached_len={} (grew={} shrank={}) — paint-only frame, bounds may be stale",
+                                new_layout_count,
+                                self.cached_layout_outputs.len(),
+                                tree_grew,
+                                tree_shrank,
+                            );
+                        }
 
                         // Safety guard: on a paint-only frame, the element tree must not
                         // have grown. If it did, run_full_layout already caught it above.

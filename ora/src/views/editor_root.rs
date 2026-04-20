@@ -110,7 +110,12 @@ impl EditorRootView {
             model.visible_lines.clone(),
             model.scroll_y_offset_px,
         );
-        let text_area = TextAreaView::new(model);
+        // Always hand TextAreaView the fixed viewport row count so the
+        // element tree shape stays constant across scroll frames — the
+        // invariant the cached layout depends on. `viewport_lines` from
+        // the adapter is driven by the window height, not by scroll
+        // position, so it is stable frame-to-frame.
+        let text_area = TextAreaView::with_viewport(model, viewport_lines);
         let status_bar = StatusBarView::new(model.status.clone());
         let panel_manager = PanelManagerView::new();
         let command_palette = CommandPaletteView::new(

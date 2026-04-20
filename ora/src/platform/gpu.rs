@@ -48,6 +48,7 @@ impl GpuState {
                 required_features: wgpu::Features::empty(),
                 required_limits: wgpu::Limits::default(),
                 memory_hints: Default::default(),
+                experimental_features: wgpu::ExperimentalFeatures::disabled(),
                 trace: wgpu::Trace::Off,
             })
             .await
@@ -303,6 +304,7 @@ impl GpuState {
                     color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                         view: &view,
                         resolve_target: None,
+                        depth_slice: None,
                         ops: wgpu::Operations {
                             load: load_op,
                             store: wgpu::StoreOp::Store,
@@ -311,6 +313,7 @@ impl GpuState {
                     depth_stencil_attachment: None,
                     timestamp_writes: None,
                     occlusion_query_set: None,
+                    multiview_mask: None,
                 });
 
                 for (group_idx, group) in layer_groups.iter().enumerate() {
