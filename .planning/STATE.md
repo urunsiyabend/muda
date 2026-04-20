@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-03-26)
 
 **Core value:** A functional, performant code editor built on ora's GPU-accelerated UI framework.
-**Current focus:** v2.0 Functional Editor — Phase 14.1 in progress (scroll performance fix).
+**Current focus:** v2.0 Functional Editor — Phase 14.1 complete, Phase 15 (Find/Replace) next.
 
 ## Current Position
 
-Phase: 14.1 — View-Level Dirty Checking (In Progress)
-Plan: 02 of 3 (complete)
-Status: In progress — Plan 14.1-02 done
-Last activity: 2026-04-20 — Completed 14.1-02-PLAN.md (Conditional needs_layout on scroll)
+Phase: 14.1 — View-Level Dirty Checking (Complete)
+Plan: 03 of 3 (complete)
+Status: Phase complete — verifier passed 5/5 must-haves
+Last activity: 2026-04-20 — Completed 14.1-03-PLAN.md (benchmark + human verify, user-approved)
 
-Progress: [█████████████████████████░░░░░░░░░░░] v2.0 Phase 14.1 in progress (24/~28 plans)
+Progress: [██████████████████████████░░░░░░░░░░] v2.0 Phase 14.1 complete (25/~28 plans)
 
 ## Performance Metrics
 
@@ -75,6 +75,21 @@ Progress: [███████████████████████
 - Sidebar scroll (consumed=true) still sets needs_layout=true — FileTreeView virtual_slice() changes element count per frame
 - FrameDirtyFlags is informational only for now — documents what changed per frame, does not gate rendering; enables future per-region paint caching
 - debug_assert guard on paint-only frames: fires when run_full_layout=false AND element tree grew — catches scroll regression bugs
+
+### Phase 14.1 Plan 03 Decisions
+
+- Task 1 (benchmark) + Task 2 (human visual verify) folded together — direct editor.log analysis over a live 2310-frame session gave stronger evidence than manual --show-fps transcription
+- Approved despite ambiguous release/debug build: cool-frame CPU 0.75ms is well under 2ms target even under pessimistic debug assumption
+- FrameDegradation 4ms threshold is display-refresh-rate-dependent: fires falsely on 144Hz monitors (6.9ms cycle). Deferred as cosmetic follow-up, not a regression
+
+### Phase 14.1 Off-Plan Work
+
+- Pre-existing text-area scroll flicker fixed (commit ce5a2ac) — TextElement grow(1.0) so cached bounds stay full-width across paint-only frames
+- glyphon 0.7 → 0.10 + wgpu 23 → 28 upgrade, Rust toolchain pinned to 1.92
+- Rich-text infrastructure: TextRun struct, TextSystem::measure/paint_rich_text_cached, TextElement::rich(Vec<TextRun>)
+- Shrink guard: force full layout when new_layout_count != cached_layout_outputs.len() in either direction
+- FileTreeView always emits top + bottom virtualization spacers (even at h=0) for stable child count
+- F12 diagnostic: one-shot paint command dump on keypress (intentional, zero per-frame cost)
 
 ## Accumulated Context
 
@@ -149,18 +164,20 @@ Plan 02: Open Folder dialog via Ctrl+Shift+O + rfd pick_folder, sidebar header s
 Plan 03: notify-debouncer-full 0.7 watcher in CoreEditorAdapter, poll_watcher_events/start_watcher/stop_watcher on FileOpDataSource trait, 300ms debounce, polling in about_to_wait, live sidebar refresh
 Plan 04: External file deletion (deleted_paths HashSet → TabPresentation.is_deleted → muted tab indicator), clean-buffer auto-reload, dirty-buffer ExternalModificationPrompt dialog, workspace switch closes tabs; 5 rendering bug fixes (scissor clamping, scroll hitbox offset, hitbox viewport clip, needs_layout on scroll, layout cache growth guard), Phase 14 all 6 SC verified
 
-## Phase 14.1 Summary (in progress)
+## Phase 14.1 Summary (complete)
 
 Plan 01: PaintOffsetElement (push_offset/pop_offset wrapper, zero layout cost), TextAreaView 4-site mt() removal, GutterView 1-site mt() removal; element tree layout-stable across scroll frames
 Plan 02: Conditional needs_layout on scroll (editor=paint-only, sidebar=full layout), FrameDirtyFlags struct wired at all event sites, debug_assert growth guard on paint-only frames; editor scroll layout cache hit rate rises to 90%+
+Plan 03: Benchmark + human-verify checkpoint — user-approved after 2310-frame editor.log analysis: paint-only CPU 0.75ms (target <2ms), layout hit 88-89% cumulative / 90%+ during scroll, 0 debug_assert panics, 0 cache-shrank warnings. Verifier passed 5/5 must-haves.
+Off-plan: scroll-flicker fix (TextElement grow(1.0)), glyphon 0.10 / wgpu 28 upgrade, rich-text infrastructure, shrink guard, sidebar spacer stability, F12 paint dump diagnostic.
 
 ## Session Continuity
 
 Last session: 2026-04-20
-Stopped at: Completed 14.1-02-PLAN.md (conditional needs_layout on scroll)
+Stopped at: Phase 14.1 complete — verifier passed 5/5 must-haves
 Resume file: None
-Next: Phase 14.1 Plan 03 — Benchmark + human verification (--show-fps layout hit rate 90%+)
+Next: Phase 15 (Find / Replace) — inline find bar, match highlighting, next/prev, replace one/all, Go to line
 
 ---
 *State initialized: 2026-01-28*
-*Last updated: 2026-03-28 after Phase 14.1 Plan 01 completion*
+*Last updated: 2026-04-20 after Phase 14.1 completion*

@@ -35,7 +35,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 13: Selection + Clipboard** - Click-to-position, drag selection, Shift+arrow, Ctrl+A, Ctrl+C/X/V
 - [x] **Phase 13.1: Rendering Performance Optimization** - Element/layout caching, viewport virtualization, glyphon cache (INSERTED)
 - [x] **Phase 14: File Browser** - Real directory tree, click to open, expand/collapse state, file watcher
-- [ ] **Phase 14.1: View-Level Dirty Checking** - Paint-phase scroll offset, conditional layout on scroll, FrameDirtyFlags (INSERTED)
+- [x] **Phase 14.1: View-Level Dirty Checking** - Paint-phase scroll offset, conditional layout on scroll, FrameDirtyFlags (INSERTED)
 - [ ] **Phase 15: Find / Replace** - Inline find bar, match highlighting, next/prev, replace one/all, Go to line
 - [ ] **Phase 16: Performance Refinement** - Incremental tree-sitter parsing, glyphon buffer caching, background parse thread
 
@@ -369,9 +369,9 @@ Plans:
 **Research**: Zed GPUI source code — view-level caching (reuse_prepaint/reuse_paint), dirty_views set, paint-phase scroll offset, arena allocation, UniformList virtual scrolling
 
 Plans:
-- [ ] 14.1-01-PLAN.md -- Paint-phase scroll offset: replace mt(scroll_shift) with push_offset in TextAreaView + GutterView (Wave 1)
-- [ ] 14.1-02-PLAN.md -- Conditional needs_layout on scroll + FrameDirtyFlags (Wave 2)
-- [ ] 14.1-03-PLAN.md -- Benchmark + human verification checkpoint (Wave 3)
+- [x] 14.1-01-PLAN.md -- Paint-phase scroll offset: replace mt(scroll_shift) with push_offset in TextAreaView + GutterView (Wave 1)
+- [x] 14.1-02-PLAN.md -- Conditional needs_layout on scroll + FrameDirtyFlags (Wave 2)
+- [x] 14.1-03-PLAN.md -- Benchmark + human verification checkpoint (Wave 3)
 
 ### Phase 15: Find / Replace
 **Goal**: Users can search for text within the active buffer, navigate matches, and replace occurrences — all without leaving the editor
